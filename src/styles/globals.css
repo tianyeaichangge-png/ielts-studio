@@ -149,3 +149,13 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #B0ACA0;
 }
+
+/* Hide third-party guest drop watermarks (e.g., unclaimed Netlify Drop badge) */
+a[href*="netlify.com?utm_source=drop"],
+a[href*="netlify.com"][style*="fixed"],
+div[style*="z-index: 2147483647"] > a[href*="netlify"] {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
