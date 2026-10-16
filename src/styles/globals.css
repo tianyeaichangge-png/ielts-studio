@@ -1,0 +1,151 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #E6E4DD;
+    color: #262523;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* 3D Card Flip Utilities */
+.perspective-1000 {
+  perspective: 1400px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+/* Braun & Smartisan Tactile Skeuomorphic Surfaces */
+.skeuo-groove {
+  background-color: #D8D5CC;
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.12),
+    inset 0 1px 1px rgba(0, 0, 0, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.skeuo-paper {
+  background-color: #FAF8F2;
+  border: 1px solid #DCD8CE;
+  box-shadow:
+    0 12px 28px -6px rgba(38, 37, 35, 0.10),
+    0 4px 10px -2px rgba(38, 37, 35, 0.06),
+    0 1px 2px rgba(38, 37, 35, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.skeuo-recessed-board {
+  background-color: #DFDDD5;
+  border: 1px solid #CFCBC0;
+  box-shadow:
+    inset 0 2px 6px rgba(38, 37, 35, 0.07),
+    0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* Physical Mechanical Keys */
+.skeuo-btn-light {
+  background: linear-gradient(180deg, #FDFCF8 0%, #EFECE4 100%);
+  border: 1px solid #C8C4B8;
+  color: #262523;
+  box-shadow:
+    0 3px 6px rgba(38, 37, 35, 0.10),
+    0 1px 2px rgba(38, 37, 35, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  transition: all 0.08s ease;
+}
+
+.skeuo-btn-light:hover {
+  background: linear-gradient(180deg, #FFFFFF 0%, #F4F1EA 100%);
+}
+
+.skeuo-btn-light:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 1px 2px rgba(38, 37, 35, 0.12),
+    inset 0 1px 2px rgba(38, 37, 35, 0.1);
+}
+
+.skeuo-btn-dark {
+  background: linear-gradient(180deg, #33322F 0%, #262523 100%);
+  border: 1px solid #171615;
+  color: #FAF8F2;
+  box-shadow:
+    0 3px 6px rgba(38, 37, 35, 0.22),
+    0 1px 2px rgba(38, 37, 35, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  transition: all 0.08s ease;
+}
+
+.skeuo-btn-dark:hover {
+  background: linear-gradient(180deg, #3B3A37 0%, #2B2A27 100%);
+}
+
+.skeuo-btn-dark:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 1px 2px rgba(38, 37, 35, 0.25),
+    inset 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.skeuo-btn-orange {
+  background: linear-gradient(180deg, #F0642E 0%, #EA5B25 100%);
+  border: 1px solid #C84312;
+  color: #FAF8F2;
+  box-shadow:
+    0 3px 7px rgba(234, 91, 37, 0.28),
+    0 1px 2px rgba(38, 37, 35, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  transition: all 0.08s ease;
+}
+
+.skeuo-btn-orange:hover {
+  background: linear-gradient(180deg, #F46D38 0%, #EE602A 100%);
+}
+
+.skeuo-btn-orange:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 1px 2px rgba(234, 91, 37, 0.25),
+    inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.skeuo-switch-thumb {
+  background: linear-gradient(180deg, #FDFCF9 0%, #F2EFE7 100%);
+  border: 1px solid #C5C1B5;
+  box-shadow:
+    0 2px 4px rgba(38, 37, 35, 0.12),
+    0 1px 1px rgba(38, 37, 35, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+/* Subtle warm scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C9C5B9;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B0ACA0;
+}
