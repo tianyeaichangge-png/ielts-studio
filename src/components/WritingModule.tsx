@@ -3,7 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  Dices,
+  BookOpen,
   ArrowLeft,
   Plus,
   Tag,
@@ -23,7 +23,10 @@ import {
   evaluateIeltsWriting,
   generateOfflineDiagnosticReport,
 } from '../lib/geminiEvaluator';
-import { MASTER_WRITING_PROMPTS } from '../lib/samplePrompts';
+import {
+  MASTER_WRITING_PROMPTS,
+  MasterWritingPrompt,
+} from '../lib/samplePrompts';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
 interface WritingModuleProps {
@@ -35,6 +38,24 @@ interface WritingModuleProps {
 type ViewMode = 'draft' | 'history';
 
 const DEFAULT_TASK2_PROMPT = MASTER_WRITING_PROMPTS[0];
+
+const TASK2_CATEGORY_FILTERS = [
+  { key: 'all', label: '全部' },
+  { key: '教育', label: '教育' },
+  { key: '科技', label: '科技' },
+  { key: '环保', label: '环境' },
+  { key: '政府', label: '政府' },
+  { key: '犯罪与社会', label: '社会' },
+  { key: '传统文化', label: '文化' },
+] as const;
+
+const TASK1_CATEGORY_FILTERS = [
+  { key: 'all', label: '全部' },
+  { key: '折线图', label: '折线图' },
+  { key: '柱状图', label: '柱状图' },
+  { key: '流程图', label: '流程图' },
+  { key: '地图', label: '地图' },
+] as const;
 
 export const WritingModule: React.FC<WritingModuleProps> = ({
   aiConfig,
@@ -58,10 +79,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>('draft');
   const [historyIndex, setHistoryIndex] = useState<number>(0);
 
-  // Anti-accidental-loss confirmation state
-  const [confirmAction, setConfirmAction] = useState<
-    null | 'random-prompt' | 'new-sheet'
-  >(null);
+  // 3. Topic Index Sheet (题目目录) State
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [pendingPromptSelection, setPendingPromptSelection] =
+    useState<MasterWritingPrompt | null>(null);
+
+  // Anti-accidental-loss confirmation state for "写篇新的"
+  const [confirmNewSheet, setConfirmNewSheet] = useState(false);
 
   // Lightbox Zoom Modal for Task 1 Chart inspection
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -109,6 +134,23 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     ? activeHistoryReport?.wordCount ?? countWords(displayedEssay)
     : draftWordCount;
 
+  // Prompts for the current taskType
+  const taskPrompts = useMemo(
+    () =>
+      MASTER_WRITING_PROMPTS.filter((p) => p.taskType === draft.taskType),
+    [draft.taskType]
+  );
+
+  const filteredCatalogPrompts = useMemo(() => {
+    if (selectedCategory === 'all') return taskPrompts;
+    return taskPrompts.filter((p) => p.topicTag.includes(selectedCategory));
+  }, [taskPrompts, selectedCategory]);
+
+  const categoryFilters =
+    draft.taskType === 'task1'
+      ? TASK1_CATEGORY_FILTERS
+      : TASK2_CATEGORY_FILTERS;
+
   // Handle saving an image File/Blob to draft state
   const handleAttachChartBlob = useCallback(
     async (blob: File | Blob) => {
@@ -128,7 +170,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   // Global Ctrl + V / Cmd + V listener for clipboard screenshot paste when in Task 1 Draft mode
   useEffect(() => {
-    if (isHistoryMode || draft.taskType !== 'task1') return;
+    if (isHistoryMode || draft.taskType !== 'task1' || isCatalogOpen) return;
 
     const handleGlobalPaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -149,19 +191,23 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
     window.addEventListener('paste', handleGlobalPaste);
     return () => window.removeEventListener('paste', handleGlobalPaste);
-  }, [isHistoryMode, draft.taskType, handleAttachChartBlob]);
+  }, [isHistoryMode, draft.taskType, isCatalogOpen, handleAttachChartBlob]);
 
-  // Close Lightbox on Escape key
+  // Close Lightbox or Topic Index Sheet on Escape key
   useEffect(() => {
-    if (!isLightboxOpen) return;
+    if (!isLightboxOpen && !isCatalogOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setIsLightboxOpen(false);
+        if (isLightboxOpen) setIsLightboxOpen(false);
+        if (isCatalogOpen) {
+          setIsCatalogOpen(false);
+          setPendingPromptSelection(null);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLightboxOpen]);
+  }, [isLightboxOpen, isCatalogOpen]);
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -180,39 +226,49 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     }));
   };
 
-  // Pick a random prompt for the given taskType (avoiding current prompt)
-  const applyRandomPrompt = (targetTaskType: WritingTaskType) => {
-    const pool = MASTER_WRITING_PROMPTS.filter(
-      (p) => p.taskType === targetTaskType && p.prompt !== draft.prompt
-    );
-    const chosen =
-      pool[Math.floor(Math.random() * pool.length)] ||
-      MASTER_WRITING_PROMPTS.find((p) => p.taskType === targetTaskType) ||
-      DEFAULT_TASK2_PROMPT;
-
+  // Apply a selected prompt from the Topic Index Sheet
+  const applyPromptItem = (item: MasterWritingPrompt) => {
     setDraft({
-      taskType: targetTaskType,
-      topicTag: chosen.topicTag,
-      prompt: chosen.prompt,
+      taskType: item.taskType,
+      topicTag: item.topicTag,
+      prompt: item.prompt,
       chartImageDataUrl: null,
       essay: '',
       gradedReportId: null,
     });
-    setConfirmAction(null);
+    setPendingPromptSelection(null);
+    setIsCatalogOpen(false);
+    setConfirmNewSheet(false);
     setErrorMsg(null);
   };
 
-  const handleRequestRandomPrompt = () => {
-    if (isHistoryMode) return;
-    if (draftWordCount > 10) {
-      setConfirmAction('random-prompt');
-    } else {
-      applyRandomPrompt(draft.taskType);
+  const handleSelectFromCatalog = (item: MasterWritingPrompt) => {
+    // If clicking the exact prompt already loaded in draft, just close catalog
+    if (item.prompt.trim() === draft.prompt.trim()) {
+      setPendingPromptSelection(null);
+      setIsCatalogOpen(false);
+      return;
     }
+
+    // Anti-accidental-loss protection when current essay has >10 words
+    if (draftWordCount > 10) {
+      setPendingPromptSelection(item);
+      return;
+    }
+
+    applyPromptItem(item);
+  };
+
+  const handleOpenCatalog = () => {
+    if (isHistoryMode) return;
+    setSelectedCategory('all');
+    setPendingPromptSelection(null);
+    setIsCatalogOpen(true);
   };
 
   const handleTaskTypeSwitch = (nextType: WritingTaskType) => {
     if (isHistoryMode || nextType === draft.taskType) return;
+    setSelectedCategory('all');
     const isPresetPrompt = MASTER_WRITING_PROMPTS.some(
       (p) => p.prompt === draft.prompt
     );
@@ -259,7 +315,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const handleStartNewSheet = (force = false) => {
     if (!force && viewMode === 'draft' && draftWordCount > 10 && !draftReport) {
-      setConfirmAction('new-sheet');
+      setConfirmNewSheet(true);
       return;
     }
     setViewMode('draft');
@@ -275,7 +331,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       essay: '',
       gradedReportId: null,
     });
-    setConfirmAction(null);
+    setConfirmNewSheet(false);
     setErrorMsg(null);
   };
 
@@ -333,13 +389,13 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     if (reports.length === 0) return;
     setHistoryIndex(0);
     setViewMode('history');
-    setConfirmAction(null);
+    setConfirmNewSheet(false);
     setErrorMsg(null);
   };
 
   const handleReturnToDraft = () => {
     setViewMode('draft');
-    setConfirmAction(null);
+    setConfirmNewSheet(false);
     setErrorMsg(null);
   };
 
@@ -356,7 +412,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
           </div>
 
-          {/* Top Bar: Mechanical Toggle (Task 1 / Task 2) + Topic Stamp + Right Micro-Switch */}
+          {/* Top Bar: Mechanical Toggle (Task 1 / Task 2) + Topic Stamp + Right [ 📑 题目目录 ] Button */}
           <div className="flex flex-wrap items-center justify-between gap-2 px-7 pt-5 pb-3">
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Task 1 / Task 2 Mechanical Switch */}
@@ -394,7 +450,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               </span>
             </div>
 
-            {/* Top-Right of Prompt: Random Prompt Micro-Switch (Draft) or Read-Only Badge (History) */}
+            {/* Top-Right of Prompt: [ 📑 题目目录 ] Button (Draft) or Read-Only Badge (History) */}
             {isHistoryMode ? (
               <span className="rounded border border-[#D5D1C6] bg-[#EFECE4] px-2.5 py-1 font-mono text-[11px] text-[#7A7873]">
                 历史原卷 · 只读复盘
@@ -402,35 +458,34 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             ) : (
               <button
                 type="button"
-                onClick={handleRequestRandomPrompt}
+                onClick={handleOpenCatalog}
                 className="skeuo-btn-light inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-[#262523]"
-                title="从内置雅思母题库随机切换一道真题"
+                title="打开分类母题目录自主挑选题目"
               >
-                <Dices className="h-3.5 w-3.5 text-[#EA5B25]" />
-                <span>随机换题</span>
+                <BookOpen className="h-3.5 w-3.5 text-[#EA5B25]" />
+                <span>题目目录</span>
+                <span className="ml-0.5 rounded bg-[#E6E3DA] px-1.5 py-0.2 font-mono text-[10px] font-semibold text-[#7A7873]">
+                  {taskPrompts.length}
+                </span>
               </button>
             )}
           </div>
 
-          {/* Anti-Accidental-Loss Lightweight Confirmation Bar */}
-          {confirmAction && !isHistoryMode && (
+          {/* Anti-Accidental-Loss Lightweight Confirmation Bar (for New Sheet) */}
+          {confirmNewSheet && !isHistoryMode && (
             <div className="mx-7 mb-2 flex items-center justify-between gap-3 rounded-xl border border-[#DFC5B8] bg-[#F9EFEA] px-4 py-2.5 text-xs text-[#262523] shadow-sm">
-              <span>当前正文已有内容，换题将清空，是否继续？</span>
+              <span>当前正文已有内容，更换题目将开启新篇，是否继续？</span>
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setConfirmAction(null)}
+                  onClick={() => setConfirmNewSheet(false)}
                   className="skeuo-btn-light rounded-lg px-2.5 py-1 text-[11px] font-medium"
                 >
                   取消
                 </button>
                 <button
                   type="button"
-                  onClick={() =>
-                    confirmAction === 'random-prompt'
-                      ? applyRandomPrompt(draft.taskType)
-                      : handleStartNewSheet(true)
-                  }
+                  onClick={() => handleStartNewSheet(true)}
                   className="skeuo-btn-orange rounded-lg px-2.5 py-1 text-[11px] font-semibold"
                 >
                   继续
@@ -507,7 +562,9 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   >
                     <ImagePlus className="h-4 w-4 text-[#EA5B25]" />
                     <span>
-                      直接按 <kbd className="font-mono font-semibold">Ctrl + V</kbd> 粘贴图表截图，或点击上传本地图片
+                      直接按{' '}
+                      <kbd className="font-mono font-semibold">Ctrl + V</kbd>{' '}
+                      粘贴图表截图，或点击上传本地图片
                     </span>
                   </button>
                 )
@@ -826,6 +883,170 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
           </section>
         )}
       </div>
+
+      {/* TOPIC INDEX SHEET MODAL (拟物风格题目目录活页卡片) */}
+      {isCatalogOpen && (
+        <div
+          onClick={() => {
+            setIsCatalogOpen(false);
+            setPendingPromptSelection(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#262523]/35 p-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="topic-catalog-title"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="skeuo-paper flex max-h-[84vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl"
+          >
+            {/* Smartisan Vintage Double Crimson Header Rule */}
+            <div className="pt-3.5">
+              <div className="h-[2px] w-full bg-[#C97A63]/35" />
+              <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
+            </div>
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#E2DFD5] px-6 py-4">
+              <div className="flex items-center gap-2.5">
+                <span className="h-2 w-2 rounded-full bg-[#EA5B25]" />
+                <h2
+                  id="topic-catalog-title"
+                  className="text-sm font-semibold tracking-tight text-[#262523]"
+                >
+                  {draft.taskType === 'task1'
+                    ? 'Task 1 图表作文题库目录'
+                    : 'Task 2 核心母题目录'}
+                </h2>
+                <span className="rounded bg-[#EAE7DE] px-2 py-0.5 font-mono text-[11px] text-[#7A7873]">
+                  {filteredCatalogPrompts.length} / {taskPrompts.length}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCatalogOpen(false);
+                  setPendingPromptSelection(null);
+                }}
+                className="skeuo-btn-light flex h-7 w-7 items-center justify-center rounded-lg text-[#7A7873] hover:text-[#262523]"
+                aria-label="关闭题目目录"
+                title="关闭 (Esc)"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* Top Category Filter Pills */}
+            <div className="border-b border-[#ECE9E0] bg-[#F5F2EA]/80 px-6 py-3">
+              <div className="skeuo-groove flex flex-wrap items-center gap-1 rounded-xl p-1">
+                {categoryFilters.map((cat) => {
+                  const isActive = selectedCategory === cat.key;
+                  return (
+                    <button
+                      key={cat.key}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategory(cat.key);
+                        setPendingPromptSelection(null);
+                      }}
+                      className={`rounded-lg px-3 py-1 text-xs font-medium transition-all ${
+                        isActive
+                          ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                          : 'text-[#7A7873] hover:text-[#262523]'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Anti-Accidental-Loss Confirmation Banner inside Topic Index Sheet */}
+            {pendingPromptSelection && (
+              <div className="mx-6 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#DFC5B8] bg-[#F9EFEA] px-4 py-3 text-xs text-[#262523] shadow-sm">
+                <span>当前正文已有内容，更换题目将开启新篇，是否继续？</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPendingPromptSelection(null)}
+                    className="skeuo-btn-light rounded-lg px-3 py-1 text-[11px] font-medium"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPromptItem(pendingPromptSelection)}
+                    className="skeuo-btn-orange rounded-lg px-3 py-1 text-[11px] font-semibold"
+                  >
+                    继续
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Scrollable Prompt List Cards */}
+            <div className="flex-1 space-y-2.5 overflow-y-auto px-6 py-4">
+              {filteredCatalogPrompts.map((item) => {
+                const globalIdx =
+                  taskPrompts.findIndex((p) => p.id === item.id) + 1;
+                const formattedNo = String(globalIdx).padStart(2, '0');
+                const isCurrentActive =
+                  item.prompt.trim() === draft.prompt.trim();
+                const isPendingConfirm =
+                  pendingPromptSelection?.id === item.id;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectFromCatalog(item)}
+                    className={`group w-full rounded-xl border p-4 text-left transition-all ${
+                      isCurrentActive
+                        ? 'border-[#C8C3B4] bg-[#EFECE3] shadow-[inset_0_2px_4px_rgba(38,37,35,0.07)]'
+                        : isPendingConfirm
+                        ? 'border-[#EA5B25]/60 bg-[#F9EFEA]'
+                        : 'border-[#E2DFD5] bg-[#FAF8F2] hover:border-[#C8C3B4] hover:bg-[#F5F2EA]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        {/* Question Number */}
+                        <span className="font-mono text-xs font-semibold tracking-wider text-[#7A7873]">
+                          NO. {formattedNo}
+                        </span>
+
+                        {/* Topic Tag Pill */}
+                        <span className="inline-flex items-center gap-1 rounded border border-[#D8D4C8] bg-[#F3F0E6] px-2 py-0.5 font-mono text-[10px] text-[#7A7873]">
+                          {item.topicTag}
+                        </span>
+                      </div>
+
+                      {/* Braun Signal Orange Active Indicator Dot */}
+                      {isCurrentActive ? (
+                        <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold text-[#262523]">
+                          <span className="h-2 w-2 rounded-full bg-[#EA5B25]" />
+                          <span>当前题目</span>
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[11px] text-[#7A7873] opacity-0 transition-opacity group-hover:opacity-100">
+                          点击选用 →
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Full English Prompt Text in Serif */}
+                    <p className="mt-2.5 font-serif text-sm leading-relaxed text-[#262523]">
+                      {item.prompt}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox Zoom Modal for Task 1 Chart Image */}
       {isLightboxOpen && displayedChartImage && (
