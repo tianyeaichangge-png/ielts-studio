@@ -11,8 +11,6 @@ import {
   Check,
   Lock,
   PenLine,
-  Play,
-  Pause,
   RotateCcw,
 } from 'lucide-react';
 import {
@@ -853,13 +851,13 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
             {/* Symmetrical 3-Column Light-Skeuomorphic Header Bar */}
             <div className="grid grid-cols-3 items-center gap-2 px-8 pt-5 pb-3.5 select-none">
-              {/* Left Column: Tactile Raised Cream Button [ ← 重选题目 ] */}
+              {/* Left Column: Unified 1:1 Tactile White Button [ ← 重选题目 ] */}
               <div className="flex items-center justify-start">
                 {!isHistoryMode && displayedTaskType === 'task2' && (
                   <button
                     type="button"
                     onClick={handleRequestBackToCatalog}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2DDD5] bg-[#FAF8F5] px-3 py-1.5 text-xs font-medium leading-none text-[#262523] shadow-sm transition-all hover:border-[#D5CFC4] hover:bg-white active:translate-y-[1px]"
+                    className="skeuo-switch-thumb inline-flex h-7 items-center gap-1 rounded-lg px-3 text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
                   >
                     <span className="leading-none">← 重选题目</span>
                   </button>
@@ -875,67 +873,61 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 </span>
               </div>
 
-              {/* Right Column: Braun Recessed Window + Tactile Micro-Buttons Timer Capsule */}
+              {/* Right Column: Integrated Single-Piece Tactile Timer Key [ ● 40:00 ] */}
               <div className="flex items-center justify-end">
                 {!isHistoryMode && (
-                  <div className="inline-flex items-center gap-1 rounded-xl border border-[#E2DDD5] bg-[#EFECE4] p-1 shadow-[0_1px_2px_rgba(38,37,35,0.04),inset_0_1px_0_rgba(255,255,255,0.75)]">
-                    {/* Recessed Digital Readout Window */}
-                    <button
-                      type="button"
-                      onClick={handleToggleTimer}
-                      title="点击开始/暂停倒计时"
-                      className={`inline-flex items-center gap-1.5 rounded-lg border border-[#D8D3C8] bg-[#E5E1D8] px-2.5 py-1 font-mono text-xs font-bold leading-none tracking-wider shadow-inner transition-colors ${
+                  <button
+                    type="button"
+                    onClick={handleToggleTimer}
+                    title={isTimerRunning ? '点击暂停倒计时' : '点击开始倒计时'}
+                    className="skeuo-switch-thumb inline-flex h-7 items-center gap-2 rounded-lg px-3 font-mono text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
+                  >
+                    {/* 6px Status Dot: Light Gray when idle/paused, Braun Signal Orange pulsing when running */}
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${
+                        isTimerRunning
+                          ? 'bg-[#EA5B25] animate-pulse shadow-[0_0_4px_rgba(234,91,37,0.65)]'
+                          : isTimeUpLocked
+                          ? 'bg-[#EA5B25]'
+                          : 'bg-[#B8B4A9]'
+                      }`}
+                    />
+
+                    {/* Monospace Bold Countdown Digits */}
+                    <span
+                      className={`leading-none tracking-wider ${
                         isTimeUpLocked || isFinalFiveMinutes
                           ? 'text-[#EA5B25]'
-                          : isTimerRunning
-                          ? 'text-[#262523]'
-                          : 'text-[#5C5A55] hover:text-[#262523]'
-                      }`}
+                          : 'text-[#262523]'
+                      } ${isFinalFiveMinutes ? 'animate-pulse' : ''}`}
                     >
+                      {formatTimerDisplay(secondsLeft)}
+                    </span>
+
+                    {/* On-Demand Borderless Reset Icon (Only shown when timer has moved and is paused) */}
+                    {!isTimerRunning && secondsLeft < defaultSecondsForTask && (
                       <span
-                        className={`h-1.5 w-1.5 rounded-full transition-colors ${
-                          isTimerRunning
-                            ? 'bg-[#EA5B25] animate-pulse shadow-[0_0_4px_rgba(234,91,37,0.65)]'
-                            : isTimeUpLocked
-                            ? 'bg-[#EA5B25]'
-                            : 'bg-[#C4BFB4]'
-                        }`}
-                      />
-                      <span
-                        className={`leading-none translate-y-[0.5px] ${
-                          isFinalFiveMinutes ? 'animate-pulse' : ''
-                        }`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleResetTimer();
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleResetTimer();
+                          }
+                        }}
+                        title="重置回初始时间"
+                        aria-label="重置回初始时间"
+                        className="ml-0.5 inline-flex items-center justify-center text-[#7A7873] transition-colors hover:text-[#EA5B25]"
                       >
-                        {formatTimerDisplay(secondsLeft)}
+                        <RotateCcw className="h-3 w-3" />
                       </span>
-                    </button>
-
-                    {/* Tactile Raised Play/Pause Micro-Button */}
-                    <button
-                      type="button"
-                      onClick={handleToggleTimer}
-                      title={isTimerRunning ? '暂停计时' : '开始计时'}
-                      aria-label={isTimerRunning ? '暂停计时' : '开始计时'}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-[#E2DDD5] bg-[#FAF8F5] text-[#262523] shadow-sm transition-all hover:bg-white hover:text-[#EA5B25] active:translate-y-[1px]"
-                    >
-                      {isTimerRunning ? (
-                        <Pause className="h-3 w-3 fill-current" />
-                      ) : (
-                        <Play className="h-3 w-3 translate-x-[0.5px] fill-current" />
-                      )}
-                    </button>
-
-                    {/* Tactile Raised Reset Micro-Button */}
-                    <button
-                      type="button"
-                      onClick={handleResetTimer}
-                      title="重置倒计时"
-                      aria-label="重置倒计时"
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-[#E2DDD5] bg-[#FAF8F5] text-[#7A7873] shadow-sm transition-all hover:bg-white hover:text-[#262523] active:translate-y-[1px]"
-                    >
-                      <RotateCcw className="h-3 w-3" />
-                    </button>
-                  </div>
+                    )}
+                  </button>
                 )}
               </div>
             </div>

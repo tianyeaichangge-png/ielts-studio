@@ -55,27 +55,27 @@
     0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
-/* Physical Mechanical Keys */
+/* Physical Mechanical Keys (Unified 1:1 Injection-Molded Warm Ivory Surface) */
 .skeuo-btn-light {
-  background: linear-gradient(180deg, #FDFCF8 0%, #EFECE4 100%);
-  border: 1px solid #C8C4B8;
+  background: linear-gradient(180deg, #FDFCF9 0%, #F2EFE7 100%);
+  border: 1px solid #C5C1B5;
   color: #262523;
   box-shadow:
-    0 3px 6px rgba(38, 37, 35, 0.10),
-    0 1px 2px rgba(38, 37, 35, 0.12),
+    0 2px 4px rgba(38, 37, 35, 0.12),
+    0 1px 1px rgba(38, 37, 35, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.95);
   transition: all 0.08s ease;
 }
 
 .skeuo-btn-light:hover {
-  background: linear-gradient(180deg, #FFFFFF 0%, #F4F1EA 100%);
+  background: linear-gradient(180deg, #FFFFFF 0%, #F5F2EA 100%);
 }
 
 .skeuo-btn-light:active {
   transform: translateY(1px);
   box-shadow:
-    0 1px 2px rgba(38, 37, 35, 0.12),
-    inset 0 1px 2px rgba(38, 37, 35, 0.1);
+    0 1px 2px rgba(38, 37, 35, 0.10),
+    inset 0 1px 2px rgba(38, 37, 35, 0.08);
 }
 
 .skeuo-btn-dark {
@@ -131,6 +131,17 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.95);
 }
 
+.skeuo-switch-thumb:hover {
+  background: linear-gradient(180deg, #FFFFFF 0%, #F5F2EA 100%);
+}
+
+.skeuo-switch-thumb:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 1px 2px rgba(38, 37, 35, 0.10),
+    inset 0 1px 2px rgba(38, 37, 35, 0.08);
+}
+
 /* Subtle warm scrollbar */
 ::-webkit-scrollbar {
   width: 5px;
@@ -158,4 +169,3 @@ div[style*="z-index: 2147483647"] > a[href*="netlify"] {
   opacity: 0 !important;
   pointer-events: none !important;
 }
-
