@@ -69,6 +69,8 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
 
   if (!activeCard) return null;
 
+  const isLongPhrase = activeCard.word.length > 16;
+
   return (
     <div className="flex min-h-[calc(100vh-120px)] flex-col items-center justify-center px-4 pb-10 select-none">
       {/* Tiny Braun Mechanical Counter */}
@@ -92,14 +94,25 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
           {/* FRONT: Serif Word + Phonetic + Speaker Icon + Quoted Exam Sentence */}
           <div className="backface-hidden skeuo-paper absolute inset-0 flex flex-col items-center justify-between rounded-2xl px-10 py-10 text-center">
             <div className="w-full flex items-center justify-between text-[11px] font-mono tracking-wider text-[#7A7873]">
-              <span>{activeCard.partOfSpeech}</span>
+              <div className="flex items-center gap-2">
+                <span>{activeCard.partOfSpeech}</span>
+                {activeCard.fromWriting && (
+                  <span className="rounded border border-[#D8D4C8] bg-[#F3F0E6] px-2 py-0.5 font-mono text-[10px] tracking-normal text-[#7A7873] shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
+                    [ 来自写作批改 ]
+                  </span>
+                )}
+              </div>
               {activeCard.status === 'mastered' && (
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#262523]" />
               )}
             </div>
 
             <div className="my-auto flex flex-col items-center">
-              <h1 className="font-serif text-5xl font-normal tracking-tight text-[#262523]">
+              <h1
+                className={`font-serif font-normal tracking-tight text-[#262523] ${
+                  isLongPhrase ? 'text-3xl sm:text-4xl leading-snug' : 'text-5xl'
+                }`}
+              >
                 {activeCard.word}
               </h1>
 
@@ -117,7 +130,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
               </div>
             </div>
 
-            <p className="max-w-md font-serif text-sm italic leading-relaxed text-[#7A7873]">
+            <p className="max-w-md font-serif text-sm italic leading-relaxed text-[#7A7873] line-clamp-3">
               “{activeCard.exampleSentence}”
             </p>
           </div>
@@ -125,7 +138,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
           {/* BACK: Chinese Meaning + Fine-line Paraphrasing Box */}
           <div className="backface-hidden rotate-y-180 skeuo-paper absolute inset-0 flex flex-col items-center justify-between rounded-2xl px-10 py-10 text-center">
             <div className="w-full flex items-center justify-between border-b border-[#E2DFD5] pb-3">
-              <span className="font-serif text-lg text-[#262523]">
+              <span className="font-serif text-lg text-[#262523] truncate max-w-[320px]">
                 {activeCard.word}
               </span>
               <span className="font-mono text-xs text-[#7A7873]">
@@ -138,7 +151,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                 <p className="text-xl font-medium tracking-tight text-[#262523]">
                   {activeCard.chineseMeaning}
                 </p>
-                <p className="mt-1.5 font-serif text-xs text-[#7A7873]">
+                <p className="mt-1.5 font-serif text-xs text-[#7A7873] line-clamp-2">
                   {activeCard.englishDefinition}
                 </p>
               </div>
@@ -164,7 +177,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
               </div>
             </div>
 
-            <p className="text-xs text-[#7A7873]">
+            <p className="text-xs text-[#7A7873] line-clamp-2">
               {activeCard.exampleTranslation}
             </p>
           </div>

@@ -17,9 +17,12 @@ export interface VocabularyCard {
   reviewCount: number;
   lastReviewedAt?: string;
   isCustom?: boolean;
+  fromWriting?: boolean;
 }
 
 export type WritingTaskType = 'task1' | 'task2';
+
+export type TimerMode = 'task2-40m' | 'task1-20m' | 'free';
 
 export interface CriterionEvaluation {
   band: number;
@@ -31,12 +34,15 @@ export interface CriterionEvaluation {
 export interface LexicalUpgradeItem {
   original: string;
   upgraded: string;
+  chineseMeaning?: string;
   contextExplanation: string;
 }
 
 export interface GrammarCorrectionItem {
   original: string;
   corrected: string;
+  keyExpression?: string;
+  chineseMeaning?: string;
   errorType: string;
   explanation: string;
 }

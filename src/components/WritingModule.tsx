@@ -10,9 +10,19 @@ import {
   ImagePlus,
   X,
   ZoomIn,
+  Play,
+  Pause,
+  RotateCcw,
+  Clock,
+  Check,
+  Lock,
 } from 'lucide-react';
 import {
   DeepSeekConfig,
+  GrammarCorrectionItem,
+  LexicalUpgradeItem,
+  TimerMode,
+  VocabularyCard,
   WritingDraftState,
   WritingEvaluationReport,
   WritingTaskType,
@@ -33,6 +43,10 @@ interface WritingModuleProps {
   aiConfig: DeepSeekConfig;
   reports: WritingEvaluationReport[];
   onSaveReport: (report: WritingEvaluationReport) => void;
+  vocabCards: VocabularyCard[];
+  onIngestVocab: (
+    newCard: Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'>
+  ) => void;
 }
 
 type ViewMode = 'draft' | 'history';
@@ -57,12 +71,70 @@ const TASK1_CATEGORY_FILTERS = [
   { key: '地图', label: '地图' },
 ] as const;
 
+const TIMER_MODE_SECONDS: Record<TimerMode, number> = {
+  'task2-40m': 40 * 60,
+  'task1-20m': 20 * 60,
+  free: 0,
+};
+
+function formatTimerDisplay(totalSeconds: number): string {
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+/**
+ * Extracts the primary vocabulary headword/phrase and synonyms from an upgraded string
+ * such as "indispensable / paramount"
+ */
+function parseUpgradedParts(upgradedRaw: string): {
+  headword: string;
+  extraSynonyms: string[];
+} {
+  const parts = upgradedRaw
+    .split(/\s*[/|;，,]\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const headword = parts[0] || upgradedRaw.trim();
+  const extraSynonyms = parts.slice(1);
+  return { headword, extraSynonyms };
+}
+
+/**
+ * Finds the best matching sentence from the user's essay containing the target snippet
+ */
+function findMatchingSentenceInEssay(
+  essayText: string,
+  snippet: string
+): string {
+  const sentences = essayText
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (sentences.length === 0) {
+    return snippet || 'Mastering this expression elevates lexical resource in IELTS Writing.';
+  }
+  const cleanSnippet = snippet
+    .split(/\s*[/|]\s*/)[0]
+    .trim()
+    .toLowerCase();
+  if (cleanSnippet && cleanSnippet.length >= 3) {
+    const matched = sentences.find((s) =>
+      s.toLowerCase().includes(cleanSnippet)
+    );
+    if (matched) return matched;
+  }
+  return sentences[0];
+}
+
 export const WritingModule: React.FC<WritingModuleProps> = ({
   aiConfig,
   reports,
   onSaveReport,
+  vocabCards,
+  onIngestVocab,
 }) => {
-  // 1. Silent Real-Time Persistent Draft in localStorage (including Task 1 chartImageDataUrl)
+  // 1. Silent Real-Time Persistent Draft in localStorage
   const [draft, setDraft] = useLocalStorage<WritingDraftState>(
     'ielts_studio_writing_draft_v2',
     {
@@ -79,7 +151,22 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>('draft');
   const [historyIndex, setHistoryIndex] = useState<number>(0);
 
-  // 3. Topic Index Sheet (题目目录) State
+  // 3. Braun Mechanical Timer State
+  const [timerMode, setTimerMode] = useState<TimerMode>(
+    draft.taskType === 'task1' ? 'task1-20m' : 'task2-40m'
+  );
+  const [secondsLeft, setSecondsLeft] = useState<number>(
+    draft.taskType === 'task1'
+      ? TIMER_MODE_SECONDS['task1-20m']
+      : TIMER_MODE_SECONDS['task2-40m']
+  );
+  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
+  const [isTimeUpLocked, setIsTimeUpLocked] = useState<boolean>(false);
+  const [timedCompletedWords, setTimedCompletedWords] = useState<number | null>(
+    null
+  );
+
+  // 4. Topic Index Sheet (题目目录) State
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [pendingPromptSelection, setPendingPromptSelection] =
@@ -133,6 +220,47 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const displayedWordCount = isHistoryMode
     ? activeHistoryReport?.wordCount ?? countWords(displayedEssay)
     : draftWordCount;
+
+  // Set of normalized words already in vocabCards for instant [ ✓ 已收录 ] state
+  const existingVocabSet = useMemo(() => {
+    return new Set(vocabCards.map((c) => c.word.trim().toLowerCase()));
+  }, [vocabCards]);
+
+  // Braun Mechanical Timer Tick Effect
+  useEffect(() => {
+    if (!isTimerRunning || timerMode === 'free' || isHistoryMode) return;
+
+    const interval = window.setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(interval);
+          setIsTimerRunning(false);
+          setIsTimeUpLocked(true);
+          setTimedCompletedWords(countWords(draft.essay));
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [isTimerRunning, timerMode, isHistoryMode, draft.essay]);
+
+  const handleSelectTimerMode = (nextMode: TimerMode) => {
+    setTimerMode(nextMode);
+    setIsTimerRunning(false);
+    setIsTimeUpLocked(false);
+    setTimedCompletedWords(null);
+    setSecondsLeft(TIMER_MODE_SECONDS[nextMode]);
+  };
+
+  const handleResetTimer = () => {
+    if (timerMode === 'free') return;
+    setIsTimerRunning(false);
+    setIsTimeUpLocked(false);
+    setTimedCompletedWords(null);
+    setSecondsLeft(TIMER_MODE_SECONDS[timerMode]);
+  };
 
   // Prompts for the current taskType
   const taskPrompts = useMemo(
@@ -236,6 +364,15 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       essay: '',
       gradedReportId: null,
     });
+    const nextTimerMode: TimerMode =
+      item.taskType === 'task1' ? 'task1-20m' : 'task2-40m';
+    if (timerMode !== 'free') {
+      setTimerMode(nextTimerMode);
+      setSecondsLeft(TIMER_MODE_SECONDS[nextTimerMode]);
+      setIsTimerRunning(false);
+    }
+    setIsTimeUpLocked(false);
+    setTimedCompletedWords(null);
     setPendingPromptSelection(null);
     setIsCatalogOpen(false);
     setConfirmNewSheet(false);
@@ -243,14 +380,12 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   };
 
   const handleSelectFromCatalog = (item: MasterWritingPrompt) => {
-    // If clicking the exact prompt already loaded in draft, just close catalog
     if (item.prompt.trim() === draft.prompt.trim()) {
       setPendingPromptSelection(null);
       setIsCatalogOpen(false);
       return;
     }
 
-    // Anti-accidental-loss protection when current essay has >10 words
     if (draftWordCount > 10) {
       setPendingPromptSelection(item);
       return;
@@ -269,6 +404,17 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const handleTaskTypeSwitch = (nextType: WritingTaskType) => {
     if (isHistoryMode || nextType === draft.taskType) return;
     setSelectedCategory('all');
+
+    // Sync timer mode if timer hasn't started ticking
+    if (!isTimerRunning && timerMode !== 'free') {
+      const targetMode: TimerMode =
+        nextType === 'task1' ? 'task1-20m' : 'task2-40m';
+      setTimerMode(targetMode);
+      setSecondsLeft(TIMER_MODE_SECONDS[targetMode]);
+      setIsTimeUpLocked(false);
+      setTimedCompletedWords(null);
+    }
+
     const isPresetPrompt = MASTER_WRITING_PROMPTS.some(
       (p) => p.prompt === draft.prompt
     );
@@ -306,7 +452,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   };
 
   const handleEssayChange = (newEssayText: string) => {
-    if (isHistoryMode) return;
+    if (isHistoryMode || isTimeUpLocked) return;
     setDraft((prev) => ({
       ...prev,
       essay: newEssayText,
@@ -331,6 +477,12 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       essay: '',
       gradedReportId: null,
     });
+    if (timerMode !== 'free') {
+      setSecondsLeft(TIMER_MODE_SECONDS[timerMode]);
+      setIsTimerRunning(false);
+    }
+    setIsTimeUpLocked(false);
+    setTimedCompletedWords(null);
     setConfirmNewSheet(false);
     setErrorMsg(null);
   };
@@ -343,6 +495,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       return;
     }
 
+    setIsTimerRunning(false);
     setIsEvaluating(true);
     try {
       let newReport: WritingEvaluationReport;
@@ -387,6 +540,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const handleEnterHistoryMode = () => {
     if (reports.length === 0) return;
+    setIsTimerRunning(false);
     setHistoryIndex(0);
     setViewMode('history');
     setConfirmNewSheet(false);
@@ -401,27 +555,100 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const activeRightReport = isHistoryMode ? activeHistoryReport : draftReport;
 
+  // Vocabulary Ingestion from LR Paraphrasing Upgrade Item
+  const handleIngestLexicalItem = (
+    item: LexicalUpgradeItem,
+    report: WritingEvaluationReport
+  ) => {
+    const { headword, extraSynonyms } = parseUpgradedParts(item.upgraded);
+    const originalTerms = item.original
+      .split(/\s*[/|]\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const paraphrasingList = Array.from(
+      new Set([...extraSynonyms, ...originalTerms])
+    ).filter((s) => s.toLowerCase() !== headword.toLowerCase());
+
+    const userSentence = findMatchingSentenceInEssay(
+      report.essay,
+      item.original
+    );
+
+    onIngestVocab({
+      word: headword,
+      phonetic: headword.includes(' ') ? '/phrase/' : '/academic/',
+      partOfSpeech: headword.includes(' ') ? 'phrase' : 'acad.',
+      chineseMeaning:
+        item.chineseMeaning ||
+        `高分替换：${item.original}（${item.contextExplanation.slice(0, 26)}）`,
+      englishDefinition: item.contextExplanation,
+      paraphrasing:
+        paraphrasingList.length > 0 ? paraphrasingList : [item.original],
+      exampleSentence: userSentence,
+      exampleTranslation: `原句语境替换：建议将 “${item.original}” 升级为 “${item.upgraded}”。`,
+      topicTag: report.topicTag || '来自写作批改',
+      isCustom: true,
+      fromWriting: true,
+    });
+  };
+
+  // Vocabulary Ingestion from GRA Sentence Correction Item
+  const handleIngestCorrectionItem = (
+    corr: GrammarCorrectionItem,
+    report: WritingEvaluationReport
+  ) => {
+    const targetPhrase = (
+      corr.keyExpression ||
+      corr.corrected.split(',')[0] ||
+      corr.corrected
+    ).trim();
+
+    onIngestVocab({
+      word: targetPhrase,
+      phonetic: '/collocation/',
+      partOfSpeech: 'expr.',
+      chineseMeaning: corr.chineseMeaning || corr.errorType,
+      englishDefinition: corr.explanation,
+      paraphrasing: [corr.original.slice(0, 48)],
+      exampleSentence: corr.corrected,
+      exampleTranslation: `原句对比：${corr.original}`,
+      topicTag: report.topicTag || '来自写作批改',
+      isCustom: true,
+      fromWriting: true,
+    });
+  };
+
+  // Warning state when <= 5 minutes left (300s) and > 0
+  const isFinalFiveMinutes =
+    timerMode !== 'free' && secondsLeft > 0 && secondsLeft <= 300;
+
   return (
     <div className="mx-auto max-w-6xl px-4 pb-12 pt-2">
       <div className="grid grid-cols-1 gap-7 lg:grid-cols-2">
         {/* LEFT SHEET: Smartisan Cream Writing Pad (Draft Mode or History Read-Only Manuscript) */}
-        <section className="skeuo-paper relative flex min-h-[680px] flex-col overflow-hidden rounded-2xl">
+        <section
+          className={`skeuo-paper relative flex min-h-[680px] flex-col overflow-hidden rounded-2xl transition-shadow ${
+            isTimeUpLocked && !isHistoryMode
+              ? 'ring-2 ring-[#EA5B25]/45'
+              : ''
+          }`}
+        >
           {/* Smartisan Vintage Double Crimson Header Rule */}
           <div className="pt-4">
             <div className="h-[2px] w-full bg-[#C97A63]/35" />
             <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
           </div>
 
-          {/* Top Bar: Mechanical Toggle (Task 1 / Task 2) + Topic Stamp + Right [ 📑 题目目录 ] Button */}
-          <div className="flex flex-wrap items-center justify-between gap-2 px-7 pt-5 pb-3">
-            <div className="flex flex-wrap items-center gap-2.5">
+          {/* Top Bar: Mechanical Toggle (Task 1 / Task 2) + Braun Mechanical Timer + Right [ 📑 题目目录 ] */}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-7 pt-4 pb-3">
+            <div className="flex flex-wrap items-center gap-2">
               {/* Task 1 / Task 2 Mechanical Switch */}
               <div className="skeuo-groove inline-flex items-center rounded-lg p-0.5">
                 <button
                   type="button"
                   disabled={isHistoryMode}
                   onClick={() => handleTaskTypeSwitch('task1')}
-                  className={`rounded-md px-3 py-1 font-mono text-xs transition-all ${
+                  className={`rounded-md px-2.5 py-1 font-mono text-xs transition-all ${
                     displayedTaskType === 'task1'
                       ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                       : 'text-[#7A7873] hover:text-[#262523]'
@@ -433,7 +660,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   type="button"
                   disabled={isHistoryMode}
                   onClick={() => handleTaskTypeSwitch('task2')}
-                  className={`rounded-md px-3 py-1 font-mono text-xs transition-all ${
+                  className={`rounded-md px-2.5 py-1 font-mono text-xs transition-all ${
                     displayedTaskType === 'task2'
                       ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                       : 'text-[#7A7873] hover:text-[#262523]'
@@ -443,33 +670,125 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 </button>
               </div>
 
-              {/* Topic Classification Stamp */}
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-[#D8D4C8] bg-[#F3F0E6] px-2.5 py-1 font-mono text-[11px] text-[#7A7873] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
-                <Tag className="h-3 w-3 text-[#EA5B25]" />
-                <span>{displayedTopicTag}</span>
-              </span>
+              {/* BRAUN MECHANICAL TIMER MODULE */}
+              {!isHistoryMode && (
+                <div className="skeuo-groove inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5">
+                  <Clock className="h-3 w-3 text-[#7A7873]" />
+                  <select
+                    aria-label="考场计时模式"
+                    value={timerMode}
+                    onChange={(e) =>
+                      handleSelectTimerMode(e.target.value as TimerMode)
+                    }
+                    className="bg-transparent font-mono text-[11px] font-medium text-[#262523] focus:outline-none cursor-pointer"
+                  >
+                    <option value="task2-40m">40m (Task 2)</option>
+                    <option value="task1-20m">20m (Task 1)</option>
+                    <option value="free">自由书写</option>
+                  </select>
+
+                  {timerMode !== 'free' && (
+                    <>
+                      <div className="h-3.5 w-[1px] bg-[#C5C1B5]" />
+                      <span
+                        className={`font-mono text-xs font-bold tracking-wider px-1 ${
+                          isTimeUpLocked
+                            ? 'text-[#EA5B25]'
+                            : isFinalFiveMinutes
+                            ? 'text-[#EA5B25] animate-pulse'
+                            : 'text-[#262523]'
+                        }`}
+                        title={
+                          isFinalFiveMinutes
+                            ? '剩余不足 5 分钟，建议收尾总结段并检查拼写'
+                            : '考场倒计时'
+                        }
+                      >
+                        {formatTimerDisplay(secondsLeft)}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isTimeUpLocked) {
+                            handleResetTimer();
+                            setIsTimerRunning(true);
+                          } else {
+                            setIsTimerRunning((prev) => !prev);
+                          }
+                        }}
+                        className="skeuo-btn-light flex h-5 w-5 items-center justify-center rounded text-[#262523] hover:text-[#EA5B25]"
+                        title={isTimerRunning ? '暂停计时' : '启动考场倒计时'}
+                        aria-label={isTimerRunning ? '暂停计时' : '启动计时'}
+                      >
+                        {isTimerRunning ? (
+                          <Pause className="h-2.5 w-2.5" />
+                        ) : (
+                          <Play className="h-2.5 w-2.5 ml-0.5" />
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleResetTimer}
+                        className="skeuo-btn-light flex h-5 w-5 items-center justify-center rounded text-[#7A7873] hover:text-[#262523]"
+                        title="重置计时器"
+                        aria-label="重置计时器"
+                      >
+                        <RotateCcw className="h-2.5 w-2.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Top-Right of Prompt: [ 📑 题目目录 ] Button (Draft) or Read-Only Badge (History) */}
-            {isHistoryMode ? (
-              <span className="rounded border border-[#D5D1C6] bg-[#EFECE4] px-2.5 py-1 font-mono text-[11px] text-[#7A7873]">
-                历史原卷 · 只读复盘
+            {/* Right: Topic Stamp + [ 📑 题目目录 ] Button */}
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-flex items-center gap-1 rounded-md border border-[#D8D4C8] bg-[#F3F0E6] px-2 py-1 font-mono text-[10px] text-[#7A7873] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+                <Tag className="h-2.5 w-2.5 text-[#EA5B25]" />
+                <span>{displayedTopicTag}</span>
               </span>
-            ) : (
+
+              {isHistoryMode ? (
+                <span className="rounded border border-[#D5D1C6] bg-[#EFECE4] px-2.5 py-1 font-mono text-[11px] text-[#7A7873]">
+                  历史原卷 · 只读复盘
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleOpenCatalog}
+                  className="skeuo-btn-light inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-[#262523]"
+                  title="打开分类母题目录自主挑选题目"
+                >
+                  <BookOpen className="h-3.5 w-3.5 text-[#EA5B25]" />
+                  <span>题目目录</span>
+                  <span className="ml-0.5 rounded bg-[#E6E3DA] px-1.5 py-0.2 font-mono text-[10px] font-semibold text-[#7A7873]">
+                    {taskPrompts.length}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Time-Up Exam Lock Notice Banner */}
+          {isTimeUpLocked && !isHistoryMode && (
+            <div className="mx-7 mb-2 flex items-center justify-between gap-3 rounded-xl border border-[#EA5B25]/40 bg-[#F9EFEA] px-4 py-2 text-xs text-[#262523] shadow-sm">
+              <div className="flex items-center gap-2">
+                <Lock className="h-3.5 w-3.5 text-[#EA5B25]" />
+                <span>
+                  考场倒计时结束（00:00），正文已锁定，请点击右下角「交卷批改」。
+                </span>
+              </div>
               <button
                 type="button"
-                onClick={handleOpenCatalog}
-                className="skeuo-btn-light inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-[#262523]"
-                title="打开分类母题目录自主挑选题目"
+                onClick={() => setIsTimeUpLocked(false)}
+                className="skeuo-btn-light shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-medium text-[#7A7873] hover:text-[#262523]"
               >
-                <BookOpen className="h-3.5 w-3.5 text-[#EA5B25]" />
-                <span>题目目录</span>
-                <span className="ml-0.5 rounded bg-[#E6E3DA] px-1.5 py-0.2 font-mono text-[10px] font-semibold text-[#7A7873]">
-                  {taskPrompts.length}
-                </span>
+                解锁继续写
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Anti-Accidental-Loss Lightweight Confirmation Bar (for New Sheet) */}
           {confirmNewSheet && !isHistoryMode && (
@@ -578,13 +897,15 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
           {/* Main Essay Writing Pad */}
           <div className="flex flex-1 flex-col px-7 pt-5 pb-4">
             <textarea
-              readOnly={isHistoryMode}
+              readOnly={isHistoryMode || isTimeUpLocked}
               value={displayedEssay}
               onChange={(e) => handleEssayChange(e.target.value)}
               placeholder="在此开始书写正文..."
               aria-label="作文正文"
               className={`w-full flex-1 resize-none bg-transparent font-serif text-[15px] leading-[1.85] text-[#262523] placeholder-[#B5B1A6] focus:outline-none ${
-                isHistoryMode ? 'cursor-default select-text opacity-90' : ''
+                isHistoryMode || isTimeUpLocked
+                  ? 'cursor-default select-text opacity-85'
+                  : ''
               }`}
             />
           </div>
@@ -596,9 +917,15 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             </div>
 
             <div className="flex items-center gap-4">
-              <span className="font-mono text-xs tracking-wide text-[#7A7873]">
-                {displayedWordCount} words
-              </span>
+              {timedCompletedWords !== null && !isHistoryMode ? (
+                <span className="rounded-md border border-[#DFC5B8] bg-[#F9EFEA] px-2.5 py-1 font-mono text-xs font-semibold text-[#EA5B25]">
+                  考场限时完成：{timedCompletedWords} words
+                </span>
+              ) : (
+                <span className="font-mono text-xs tracking-wide text-[#7A7873]">
+                  {displayedWordCount} words
+                </span>
+              )}
 
               {!isHistoryMode && (
                 <button
@@ -775,6 +1102,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   </p>
                 </div>
 
+                {/* 03 · LR with One-Click [ + 入库 ] Vocabulary Ingestion */}
                 <div>
                   <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#7A7873]">
                     03 · LR{' '}
@@ -787,19 +1115,68 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     {activeRightReport.lr.summary}
                   </p>
                   {activeRightReport.lr.paraphrasingUpgrades.length > 0 && (
-                    <div className="mt-2 space-y-1.5 rounded-lg border border-[#E2DFD5] bg-[#F5F2EA]/70 p-3">
+                    <div className="mt-2.5 space-y-2 rounded-lg border border-[#E2DFD5] bg-[#F5F2EA]/70 p-3">
                       {activeRightReport.lr.paraphrasingUpgrades.map(
-                        (item, i) => (
-                          <div key={i} className="font-serif text-xs">
-                            <span className="text-[#7A7873] line-through">
-                              {item.original}
-                            </span>
-                            <span className="mx-2 text-[#7A7873]">→</span>
-                            <span className="font-semibold text-[#262523]">
-                              {item.upgraded}
-                            </span>
-                          </div>
-                        )
+                        (item, i) => {
+                          const { headword } = parseUpgradedParts(
+                            item.upgraded
+                          );
+                          const isCollected = existingVocabSet.has(
+                            headword.trim().toLowerCase()
+                          );
+
+                          return (
+                            <div
+                              key={i}
+                              className="flex items-center justify-between gap-2 border-b border-[#E7E4DA] pb-2 last:border-b-0 last:pb-0"
+                            >
+                              <div className="min-w-0 flex-1 font-serif text-xs">
+                                <span className="text-[#7A7873] line-through">
+                                  {item.original}
+                                </span>
+                                <span className="mx-2 text-[#7A7873]">→</span>
+                                <span className="font-semibold text-[#262523]">
+                                  {item.upgraded}
+                                </span>
+                                {item.chineseMeaning && (
+                                  <span className="ml-2 font-sans text-[11px] text-[#7A7873]">
+                                    ({item.chineseMeaning})
+                                  </span>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                disabled={isCollected}
+                                onClick={() =>
+                                  handleIngestLexicalItem(
+                                    item,
+                                    activeRightReport
+                                  )
+                                }
+                                className={`shrink-0 rounded-md px-2 py-0.5 font-mono text-[10px] font-medium transition-all ${
+                                  isCollected
+                                    ? 'border border-[#D5D1C6] bg-[#EAE7DE] text-[#7A7873] cursor-default'
+                                    : 'skeuo-btn-light text-[#262523] hover:text-[#EA5B25]'
+                                }`}
+                                title={
+                                  isCollected
+                                    ? '已收录至背单词卡片库'
+                                    : '一键加入背单词生词库'
+                                }
+                              >
+                                {isCollected ? (
+                                  <span className="inline-flex items-center gap-0.5">
+                                    <Check className="h-2.5 w-2.5 text-[#EA5B25]" />
+                                    <span>已收录</span>
+                                  </span>
+                                ) : (
+                                  <span>+ 入库</span>
+                                )}
+                              </button>
+                            </div>
+                          );
+                        }
                       )}
                     </div>
                   )}
@@ -815,28 +1192,72 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 </div>
               </div>
 
-              {/* Sentence Corrections Comparison */}
+              {/* Sentence Corrections Comparison with One-Click [ + 入库 ] */}
               {activeRightReport.gra.errorCorrections.length > 0 && (
                 <div className="space-y-3 border-t border-dashed border-[#D5D1C6] pt-4">
                   <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#7A7873]">
                     SENTENCE CORRECTIONS · 句子修改对照
                   </div>
-                  {activeRightReport.gra.errorCorrections.map((corr, idx) => (
-                    <div
-                      key={idx}
-                      className="space-y-1.5 rounded-lg border border-[#E2DFD5] bg-[#F5F2EA]/60 p-3.5"
-                    >
-                      <p className="font-serif text-xs text-[#EA5B25] line-through">
-                        {corr.original}
-                      </p>
-                      <p className="font-serif text-xs font-medium text-[#262523]">
-                        {corr.corrected}
-                      </p>
-                      <p className="text-[11px] text-[#7A7873]">
-                        {corr.explanation}
-                      </p>
-                    </div>
-                  ))}
+                  {activeRightReport.gra.errorCorrections.map((corr, idx) => {
+                    const targetPhrase = (
+                      corr.keyExpression ||
+                      corr.corrected.split(',')[0] ||
+                      corr.corrected
+                    ).trim();
+                    const isCollected = existingVocabSet.has(
+                      targetPhrase.toLowerCase()
+                    );
+
+                    return (
+                      <div
+                        key={idx}
+                        className="space-y-1.5 rounded-lg border border-[#E2DFD5] bg-[#F5F2EA]/60 p-3.5"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-serif text-xs text-[#EA5B25] line-through">
+                            {corr.original}
+                          </p>
+
+                          <button
+                            type="button"
+                            disabled={isCollected}
+                            onClick={() =>
+                              handleIngestCorrectionItem(
+                                corr,
+                                activeRightReport
+                              )
+                            }
+                            className={`shrink-0 rounded-md px-2 py-0.5 font-mono text-[10px] font-medium transition-all ${
+                              isCollected
+                                ? 'border border-[#D5D1C6] bg-[#EAE7DE] text-[#7A7873] cursor-default'
+                                : 'skeuo-btn-light text-[#262523] hover:text-[#EA5B25]'
+                            }`}
+                            title={
+                              isCollected
+                                ? '已收录至背单词卡片库'
+                                : `将核心高分表达 "${targetPhrase}" 加入生词库`
+                            }
+                          >
+                            {isCollected ? (
+                              <span className="inline-flex items-center gap-0.5">
+                                <Check className="h-2.5 w-2.5 text-[#EA5B25]" />
+                                <span>已收录</span>
+                              </span>
+                            ) : (
+                              <span>+ 入库</span>
+                            )}
+                          </button>
+                        </div>
+
+                        <p className="font-serif text-xs font-medium text-[#262523]">
+                          {corr.corrected}
+                        </p>
+                        <p className="text-[11px] text-[#7A7873]">
+                          {corr.explanation}
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

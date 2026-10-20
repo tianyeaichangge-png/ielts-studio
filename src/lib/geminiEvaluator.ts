@@ -128,7 +128,8 @@ ${taskSpecificGuidelines}
     "paraphrasingUpgrades": [
       {
         "original": "摘自考生原文的普通/重复词汇或数据表达",
-        "upgraded": "地道雅思7.5+高分同义替换表达（可给1-2个）",
+        "upgraded": "地道雅思7.5+高分同义替换词或短语（如 indispensable / paramount）",
+        "chineseMeaning": "该高分替换词的简明中文释义（如：不可或缺的；至关重要的）",
         "contextExplanation": "为什么这样替换更地道、更符合雅思学术语境"
       }
     ]
@@ -142,6 +143,8 @@ ${taskSpecificGuidelines}
       {
         "original": "摘自考生原文含有语法瑕疵、介词误用或句式单薄的原句片段",
         "corrected": "修正并升级后的地道雅思学术句式",
+        "keyExpression": "该修正句中最值得背诵的核心高分学术词伙或短语（如 warrant closer scrutiny）",
+        "chineseMeaning": "该核心高分词伙的简明中文释义（如：值得更严密的审视）",
         "errorType": "修正类型（如：趋势介词修正 / 静态对比句式升级 / 分词伴随结构）",
         "explanation": "具体的语法修正解析与提分点说明"
       }
@@ -379,17 +382,20 @@ export function generateOfflineDiagnosticReport(
         paraphrasingUpgrades: [
           {
             original: 'increased a lot / went up quickly',
-            upgraded: 'experienced a pronounced upward trajectory / surged dramatically',
+            upgraded: 'surged dramatically / experienced a pronounced upward trajectory',
+            chineseMeaning: '急剧飙升；经历了显著的上升轨迹',
             contextExplanation: '动态图表描述大幅上升时，名词化短语或 surge dramatically 能显著拉开词汇档次。',
           },
           {
             original: 'had the largest percentage',
             upgraded: "accounted for the lion's share / commanded the highest proportion",
+            chineseMeaning: '占据最大份额；拥有最高占比',
             contextExplanation: '静态对比最大占比时，account for 与 command the highest proportion 是考官高频地道搭配。',
           },
           {
             original: 'stayed the same',
-            upgraded: 'remained relatively stable / reached a plateau at...',
+            upgraded: 'reached a plateau / remained relatively stable',
+            chineseMeaning: '进入平稳期（高原期）；保持相对稳定',
             contextExplanation: '描述数据平稳或高位企稳时，plateau 比 stay the same 更加精准地道。',
           },
         ],
@@ -410,6 +416,8 @@ export function generateOfflineDiagnosticReport(
             original: firstSentence,
             corrected:
               'The provided chart illustrates the trajectory and relative proportions of the surveyed categories over the specified period.',
+            keyExpression: 'illustrate the trajectory and relative proportions',
+            chineseMeaning: '展示……的变化轨迹与相对占比',
             errorType: '首段题干改写升级 (Opening Paraphrase)',
             explanation: '使用 illustrate the trajectory and relative proportions 替代简单的 show the changes，学术感更强。',
           },
@@ -417,6 +425,8 @@ export function generateOfflineDiagnosticReport(
             original: secondSentence,
             corrected:
               'The figure witnessed a nearly threefold surge between 2000 and 2020, peaking at 68% at the end of the period.',
+            keyExpression: 'witness a threefold surge, peaking at...',
+            chineseMeaning: '经历了近三倍的激增，并在……达到峰值',
             errorType: '动态趋势 + 分词伴随数据句式 (Trend & Participle)',
             explanation: '结合 witnessed a threefold surge 与 peaking at... 分词结构，在一句话内同时完成趋势定性与极值定量报告。',
           },
@@ -424,6 +434,8 @@ export function generateOfflineDiagnosticReport(
             original: 'Category A was 40%, and Category B was 20%.',
             corrected:
               'Category A stood at 40%, which was twice as high as the figure for Category B (20%).',
+            keyExpression: 'twice as high as the figure for...',
+            chineseMeaning: '是……数值的两倍之高（静态倍差比较）',
             errorType: '静态倍差对比句式 (Static Comparison)',
             explanation: '切忌孤立报数，使用 twice as high as the figure for... 建立数据之间的横向比较关系。',
           },
@@ -485,16 +497,19 @@ export function generateOfflineDiagnosticReport(
         {
           original: 'important / very necessary',
           upgraded: 'indispensable / paramount',
+          chineseMeaning: '不可或缺的；至关重要的',
           contextExplanation: '在强调核心地位或政策必要性时，用 indispensable 替代 important 可直接体现 C1 级词汇量。',
         },
         {
           original: 'make the problem worse',
           upgraded: 'exacerbate / aggravate the predicament',
+          chineseMeaning: '加剧；使困境恶化',
           contextExplanation: '议论文探讨负面效应时，exacerbate（加剧）与 mitigate（缓解）是考官最青睐的高分学术动词。',
         },
         {
           original: 'have a bad effect on',
           upgraded: 'exert a detrimental impact on',
+          chineseMeaning: '对……产生不利/有害的影响',
           contextExplanation: '使用 exert a detrimental impact on 显著提升学术语体正式感。',
         },
       ],
@@ -513,12 +528,16 @@ export function generateOfflineDiagnosticReport(
         {
           original: firstSentence,
           corrected: `Not only does this phenomenon reshape contemporary society, but it also warrants closer scrutiny regarding its long-term ramifications.`,
+          keyExpression: 'warrant closer scrutiny',
+          chineseMeaning: '值得更严密的审视与考量',
           errorType: '句式多样性升级 (Syntactic Elevation)',
           explanation: '结合高级动词 warrant scrutiny（值得审视）与倒装结构提升考官第一印象。',
         },
         {
           original: secondSentence,
           corrected: `Compounded by rapid socioeconomic shifts, this issue requires pragmatic state intervention rather than superficial remedies.`,
+          keyExpression: 'pragmatic state intervention',
+          chineseMeaning: '务实的国家干预措施（而非表面补救）',
           errorType: '过去分词前置状语优化 (Participle Clause)',
           explanation: '利用 Compounded by... 过去分词短语作状语，有效消除 there be 句型的松散感。',
         },

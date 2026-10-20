@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   ActiveTab,
   DeepSeekConfig,
@@ -55,6 +55,30 @@ export function App() {
     );
   };
 
+  const handleIngestVocabFromWriting = useCallback(
+    (newCardData: Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'>) => {
+      setVocabCards((prev) => {
+        const normalizedWord = newCardData.word.trim().toLowerCase();
+        const alreadyExists = prev.some(
+          (c) => c.word.trim().toLowerCase() === normalizedWord
+        );
+        if (alreadyExists) return prev;
+
+        const newCard: VocabularyCard = {
+          ...newCardData,
+          id: `writing-vocab-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 6)}`,
+          status: 'unlearned',
+          reviewCount: 0,
+          fromWriting: true,
+        };
+        return [newCard, ...prev];
+      });
+    },
+    [setVocabCards]
+  );
+
   const handleSaveWritingReport = (report: WritingEvaluationReport) => {
     setWritingReports((prev) => [report, ...prev]);
   };
@@ -82,6 +106,8 @@ export function App() {
             aiConfig={aiConfig}
             reports={writingReports}
             onSaveReport={handleSaveWritingReport}
+            vocabCards={vocabCards}
+            onIngestVocab={handleIngestVocabFromWriting}
           />
         )}
       </main>
