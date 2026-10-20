@@ -17,8 +17,9 @@ import {
   DeepSeekConfig,
   GrammarCorrectionItem,
   LexicalUpgradeItem,
+  Task1DraftState,
+  Task2DraftState,
   VocabularyCard,
-  WritingDraftState,
   WritingEvaluationReport,
   WritingTaskType,
 } from '../types/ielts';
@@ -127,17 +128,33 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   vocabCards,
   onIngestVocab,
 }) => {
-  // 1. Silent Real-Time Persistent Draft in localStorage
-  const [draft, setDraft] = useLocalStorage<WritingDraftState>(
-    'ielts_studio_writing_draft_v3',
+  // 1. Strictly Isolated Dual-Track LocalStorage States (Task 1 vs Task 2)
+  const [activeTaskType, setActiveTaskType] = useLocalStorage<WritingTaskType>(
+    'ielts_active_task_type',
+    'task2'
+  );
+
+  // Task 1 Independent Draft ('ielts_draft_task1')
+  const [task1Draft, setTask1Draft] = useLocalStorage<Task1DraftState>(
+    'ielts_draft_task1',
     {
-      taskType: 'task2',
-      step: 'catalog',
-      isCustomPrompt: false,
-      topicTag: '科技与未来 · Technology',
       prompt: '',
-      chartImageDataUrl: null,
-      essay: '',
+      image: null,
+      content: '',
+      timer: 1200,
+      gradedReportId: null,
+    }
+  );
+
+  // Task 2 Independent Draft ('ielts_draft_task2')
+  const [task2Draft, setTask2Draft] = useLocalStorage<Task2DraftState>(
+    'ielts_draft_task2',
+    {
+      selectedTopicId: 't2-tech-ai-jobs',
+      customPrompt: '',
+      content: '',
+      timer: 2400,
+      viewStep: 'catalog',
       gradedReportId: null,
     }
   );
@@ -149,18 +166,17 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   // 3. Topic Catalog Filter State
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // 4. Anti-Accidental-Loss Confirmation State when returning to catalog or starting new sheet
+  // 4. Anti-Accidental-Loss Confirmation State when returning to catalog
   const [confirmBackToCatalog, setConfirmBackToCatalog] = useState(false);
 
-  // 5. Ultra-Minimalist Countdown Timer State (40:00 for Task 2, 20:00 for Task 1)
-  const defaultSecondsForTask =
-    draft.taskType === 'task1' ? 20 * 60 : 40 * 60;
-  const [secondsLeft, setSecondsLeft] = useState<number>(defaultSecondsForTask);
+  // 5. Countdown Timer Runtime Flags (Remaining seconds are stored inside task1Draft.timer / task2Draft.timer)
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
-  const [isTimeUpLocked, setIsTimeUpLocked] = useState<boolean>(false);
-  const [timedCompletedWords, setTimedCompletedWords] = useState<number | null>(
-    null
-  );
+  const [isTask1TimeUpLocked, setIsTask1TimeUpLocked] =
+    useState<boolean>(false);
+  const [isTask2TimeUpLocked, setIsTask2TimeUpLocked] =
+    useState<boolean>(false);
+  const [task1TimedWords, setTask1TimedWords] = useState<number | null>(null);
+  const [task2TimedWords, setTask2TimedWords] = useState<number | null>(null);
 
   // Lightbox Zoom Modal for Task 1 Chart inspection
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -170,67 +186,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const customPromptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  const isHistoryMode = viewMode === 'history';
-  const currentStep =
-    draft.taskType === 'task1' ? 'writing' : draft.step || 'catalog';
-
-  const safeHistoryIndex =
-    reports.length > 0 ? Math.min(historyIndex, reports.length - 1) : 0;
-  const activeHistoryReport = isHistoryMode
-    ? reports[safeHistoryIndex] || null
-    : null;
-
-  // Report corresponding to the current draft (if already graded)
-  const draftReport = useMemo(() => {
-    if (!draft.gradedReportId) return null;
-    return reports.find((r) => r.id === draft.gradedReportId) || null;
-  }, [draft.gradedReportId, reports]);
-
-  const activeRightReport = isHistoryMode ? activeHistoryReport : draftReport;
-
-  // Displayed values on the Left Sheet
-  const displayedTaskType = isHistoryMode
-    ? activeHistoryReport?.taskType || 'task2'
-    : draft.taskType;
-  const displayedTopicTag = isHistoryMode
-    ? activeHistoryReport?.topicTag || '历史存档 · Archive'
-    : draft.topicTag;
-  const displayedPrompt = isHistoryMode
-    ? activeHistoryReport?.prompt || ''
-    : draft.prompt;
-  const displayedChartImage = isHistoryMode
-    ? activeHistoryReport?.chartImageDataUrl || null
-    : draft.chartImageDataUrl || null;
-  const displayedEssay = isHistoryMode
-    ? activeHistoryReport?.essay || ''
-    : draft.essay;
-
-  const draftWordCount = useMemo(
-    () => countWords(draft.essay),
-    [draft.essay]
-  );
-  const displayedWordCount = isHistoryMode
-    ? activeHistoryReport?.wordCount ?? countWords(displayedEssay)
-    : draftWordCount;
-
-  // Auto-resize custom prompt textarea height smoothly
-  useEffect(() => {
-    const el = customPromptTextareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.max(68, el.scrollHeight)}px`;
-  }, [displayedPrompt, currentStep, draft.isCustomPrompt, displayedTaskType]);
-
-  // Set of normalized words already in vocabCards for instant [ ✓ 已收录 ] state
-  const existingVocabSet = useMemo(() => {
-    return new Set(vocabCards.map((c) => c.word.trim().toLowerCase()));
-  }, [vocabCards]);
-
-  // Set of practiced prompts from historical reports for the [ ✓ 已练 ] stamp
-  const practicedPromptSet = useMemo(() => {
-    return new Set(reports.map((r) => r.prompt.trim()));
-  }, [reports]);
 
   // Task 2 Master Prompts filtered by category
   const task2Prompts = useMemo(
@@ -249,37 +204,204 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     return task2Prompts.filter((p) => p.topicTag.includes(selectedCategory));
   }, [task2Prompts, selectedCategory]);
 
-  // Countdown Timer Tick Effect
+  // Resolve Task 2 selected topic metadata
+  const isTask2CustomPrompt = task2Draft.selectedTopicId === 'custom';
+  const selectedTask2MasterPrompt = useMemo(
+    () =>
+      isTask2CustomPrompt
+        ? null
+        : task2Prompts.find((p) => p.id === task2Draft.selectedTopicId) ||
+          task2Prompts[0] ||
+          null,
+    [isTask2CustomPrompt, task2Prompts, task2Draft.selectedTopicId]
+  );
+
+  const task2ResolvedPrompt = isTask2CustomPrompt
+    ? task2Draft.customPrompt
+    : selectedTask2MasterPrompt?.prompt || '';
+
+  const task2ResolvedTopicTag = isTask2CustomPrompt
+    ? '自由命题 · Custom Prompt'
+    : selectedTask2MasterPrompt?.topicTag || '科技与未来 · Technology';
+
+  const isHistoryMode = viewMode === 'history';
+  const currentStep =
+    activeTaskType === 'task1' ? 'writing' : task2Draft.viewStep || 'catalog';
+
+  const safeHistoryIndex =
+    reports.length > 0 ? Math.min(historyIndex, reports.length - 1) : 0;
+  const activeHistoryReport = isHistoryMode
+    ? reports[safeHistoryIndex] || null
+    : null;
+
+  // Reports corresponding to Task 1 or Task 2 draft (if already graded)
+  const task1Report = useMemo(() => {
+    if (!task1Draft.gradedReportId) return null;
+    return reports.find((r) => r.id === task1Draft.gradedReportId) || null;
+  }, [task1Draft.gradedReportId, reports]);
+
+  const task2Report = useMemo(() => {
+    if (!task2Draft.gradedReportId) return null;
+    return reports.find((r) => r.id === task2Draft.gradedReportId) || null;
+  }, [task2Draft.gradedReportId, reports]);
+
+  const draftReport = activeTaskType === 'task1' ? task1Report : task2Report;
+  const activeRightReport = isHistoryMode ? activeHistoryReport : draftReport;
+
+  // Displayed values on the Left Sheet (Strictly isolated by activeTaskType)
+  const displayedTaskType: WritingTaskType = isHistoryMode
+    ? activeHistoryReport?.taskType || 'task2'
+    : activeTaskType;
+
+  const displayedTopicTag = isHistoryMode
+    ? activeHistoryReport?.topicTag || '历史存档 · Archive'
+    : activeTaskType === 'task1'
+    ? '图表小作文 · Academic Task 1'
+    : task2ResolvedTopicTag;
+
+  const displayedPrompt = isHistoryMode
+    ? activeHistoryReport?.prompt || ''
+    : activeTaskType === 'task1'
+    ? task1Draft.prompt
+    : task2ResolvedPrompt;
+
+  const displayedChartImage = isHistoryMode
+    ? activeHistoryReport?.chartImageDataUrl || null
+    : activeTaskType === 'task1'
+    ? task1Draft.image || null
+    : null;
+
+  const displayedEssay = isHistoryMode
+    ? activeHistoryReport?.essay || ''
+    : activeTaskType === 'task1'
+    ? task1Draft.content
+    : task2Draft.content;
+
+  const task1WordCount = useMemo(
+    () => countWords(task1Draft.content),
+    [task1Draft.content]
+  );
+  const task2WordCount = useMemo(
+    () => countWords(task2Draft.content),
+    [task2Draft.content]
+  );
+  const draftWordCount =
+    activeTaskType === 'task1' ? task1WordCount : task2WordCount;
+
+  const displayedWordCount = isHistoryMode
+    ? activeHistoryReport?.wordCount ?? countWords(displayedEssay)
+    : draftWordCount;
+
+  // Active task timer values
+  const defaultSecondsForTask = activeTaskType === 'task1' ? 1200 : 2400;
+  const secondsLeft =
+    activeTaskType === 'task1'
+      ? typeof task1Draft.timer === 'number'
+        ? task1Draft.timer
+        : 1200
+      : typeof task2Draft.timer === 'number'
+      ? task2Draft.timer
+      : 2400;
+
+  const isTimeUpLocked =
+    activeTaskType === 'task1' ? isTask1TimeUpLocked : isTask2TimeUpLocked;
+  const timedCompletedWords =
+    activeTaskType === 'task1' ? task1TimedWords : task2TimedWords;
+
+  const setIsTimeUpLocked = (locked: boolean) => {
+    if (activeTaskType === 'task1') {
+      setIsTask1TimeUpLocked(locked);
+    } else {
+      setIsTask2TimeUpLocked(locked);
+    }
+  };
+
+  // Auto-resize custom prompt textarea height smoothly
+  useEffect(() => {
+    const el = customPromptTextareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.max(68, el.scrollHeight)}px`;
+  }, [
+    displayedPrompt,
+    currentStep,
+    isTask2CustomPrompt,
+    displayedTaskType,
+    activeTaskType,
+  ]);
+
+  // Set of normalized words already in vocabCards for instant [ ✓ 已收录 ] state
+  const existingVocabSet = useMemo(() => {
+    return new Set(vocabCards.map((c) => c.word.trim().toLowerCase()));
+  }, [vocabCards]);
+
+  // Set of practiced prompts from historical reports for the [ ✓ 已练 ] stamp
+  const practicedPromptSet = useMemo(() => {
+    return new Set(reports.map((r) => r.prompt.trim()));
+  }, [reports]);
+
+  // Countdown Timer Tick Effect (Persists remaining seconds directly into task1Draft.timer or task2Draft.timer)
   useEffect(() => {
     if (!isTimerRunning || isHistoryMode || currentStep === 'catalog') return;
 
     const interval = window.setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          window.clearInterval(interval);
-          setIsTimerRunning(false);
-          setIsTimeUpLocked(true);
-          setTimedCompletedWords(countWords(draft.essay));
-          return 0;
-        }
-        return prev - 1;
-      });
+      if (activeTaskType === 'task1') {
+        setTask1Draft((prev) => {
+          const currentSec = typeof prev.timer === 'number' ? prev.timer : 1200;
+          if (currentSec <= 1) {
+            window.clearInterval(interval);
+            setIsTimerRunning(false);
+            setIsTask1TimeUpLocked(true);
+            setTask1TimedWords(countWords(prev.content));
+            return { ...prev, timer: 0 };
+          }
+          return { ...prev, timer: currentSec - 1 };
+        });
+      } else {
+        setTask2Draft((prev) => {
+          const currentSec = typeof prev.timer === 'number' ? prev.timer : 2400;
+          if (currentSec <= 1) {
+            window.clearInterval(interval);
+            setIsTimerRunning(false);
+            setIsTask2TimeUpLocked(true);
+            setTask2TimedWords(countWords(prev.content));
+            return { ...prev, timer: 0 };
+          }
+          return { ...prev, timer: currentSec - 1 };
+        });
+      }
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [isTimerRunning, isHistoryMode, currentStep, draft.essay]);
+  }, [
+    isTimerRunning,
+    isHistoryMode,
+    currentStep,
+    activeTaskType,
+    setTask1Draft,
+    setTask2Draft,
+  ]);
 
-  const resetTimerForTask = useCallback((type: WritingTaskType) => {
-    setIsTimerRunning(false);
-    setIsTimeUpLocked(false);
-    setTimedCompletedWords(null);
-    setSecondsLeft(type === 'task1' ? 20 * 60 : 40 * 60);
-  }, []);
+  const resetTimerForTask = useCallback(
+    (type: WritingTaskType) => {
+      setIsTimerRunning(false);
+      if (type === 'task1') {
+        setIsTask1TimeUpLocked(false);
+        setTask1TimedWords(null);
+        setTask1Draft((prev) => ({ ...prev, timer: 1200 }));
+      } else {
+        setIsTask2TimeUpLocked(false);
+        setTask2TimedWords(null);
+        setTask2Draft((prev) => ({ ...prev, timer: 2400 }));
+      }
+    },
+    [setTask1Draft, setTask2Draft]
+  );
 
   const handleToggleTimer = () => {
     if (isHistoryMode) return;
     if (isTimeUpLocked || secondsLeft === 0) {
-      resetTimerForTask(draft.taskType);
+      resetTimerForTask(activeTaskType);
       setIsTimerRunning(true);
     } else {
       setIsTimerRunning((prev) => !prev);
@@ -288,29 +410,29 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const handleResetTimer = () => {
     if (isHistoryMode) return;
-    resetTimerForTask(draft.taskType);
+    resetTimerForTask(activeTaskType);
   };
 
-  // Handle saving an image File/Blob to draft state (Task 1)
+  // Handle saving an image File/Blob to Task 1 draft state ('ielts_draft_task1')
   const handleAttachChartBlob = useCallback(
     async (blob: File | Blob) => {
       try {
         const dataUrl = await convertImageFileToDataUrl(blob);
-        setDraft((prev) => ({
+        setTask1Draft((prev) => ({
           ...prev,
-          chartImageDataUrl: dataUrl,
+          image: dataUrl,
         }));
         setErrorMsg(null);
       } catch {
         setErrorMsg('图表图片解析失败，请重试');
       }
     },
-    [setDraft]
+    [setTask1Draft]
   );
 
   // Global Ctrl + V / Cmd + V listener for clipboard screenshot paste when in Task 1 Draft mode
   useEffect(() => {
-    if (isHistoryMode || draft.taskType !== 'task1') return;
+    if (isHistoryMode || activeTaskType !== 'task1') return;
 
     const handleGlobalPaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -331,7 +453,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
     window.addEventListener('paste', handleGlobalPaste);
     return () => window.removeEventListener('paste', handleGlobalPaste);
-  }, [isHistoryMode, draft.taskType, handleAttachChartBlob]);
+  }, [isHistoryMode, activeTaskType, handleAttachChartBlob]);
 
   // Close Lightbox on Escape key
   useEffect(() => {
@@ -356,157 +478,155 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const handleRemoveChartImage = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isHistoryMode) return;
-    setDraft((prev) => ({
+    setTask1Draft((prev) => ({
       ...prev,
-      chartImageDataUrl: null,
+      image: null,
     }));
   };
 
-  // Top Switch: [ Task 1 | Task 2 ]
+  // Top Switch: [ Task 1 | Task 2 ] — ZERO DATA LOSS! Never clears either draft or timer
   const handleTopTaskTypeSwitch = (nextType: WritingTaskType) => {
     if (isHistoryMode) {
       setViewMode('draft');
     }
+    setIsTimerRunning(false);
     setConfirmBackToCatalog(false);
     setErrorMsg(null);
-
-    if (nextType === 'task1') {
-      resetTimerForTask('task1');
-      setDraft((prev) => ({
-        ...prev,
-        taskType: 'task1',
-        step: 'writing',
-        isCustomPrompt: true,
-        topicTag: '图表小作文 · Academic Task 1',
-        prompt: prev.taskType === 'task1' ? prev.prompt : '',
-        essay: prev.taskType === 'task1' ? prev.essay : '',
-        gradedReportId: prev.taskType === 'task1' ? prev.gradedReportId : null,
-      }));
-    } else {
-      resetTimerForTask('task2');
-      setDraft((prev) => ({
-        ...prev,
-        taskType: 'task2',
-        step: 'catalog',
-      }));
-    }
+    setActiveTaskType(nextType);
   };
 
   // Select "✍️ 自由命题 (Custom Prompt)" from Task 2 Catalog
   const handleSelectCustomPromptMode = () => {
-    resetTimerForTask('task2');
-    const keepExistingCustomDraft =
-      draft.taskType === 'task2' && draft.isCustomPrompt;
-    setDraft((prev) => ({
-      ...prev,
-      taskType: 'task2',
-      step: 'writing',
-      isCustomPrompt: true,
-      topicTag: '自由命题 · Custom Prompt',
-      prompt: keepExistingCustomDraft ? prev.prompt : '',
-      chartImageDataUrl: null,
-      essay: keepExistingCustomDraft ? prev.essay : '',
-      gradedReportId: keepExistingCustomDraft ? prev.gradedReportId : null,
-    }));
+    setIsTimerRunning(false);
+    setTask2Draft((prev) => {
+      const isAlreadyCustom = prev.selectedTopicId === 'custom';
+      return {
+        ...prev,
+        selectedTopicId: 'custom',
+        viewStep: 'writing',
+        content: isAlreadyCustom ? prev.content : '',
+        timer: isAlreadyCustom ? prev.timer : 2400,
+        gradedReportId: isAlreadyCustom ? prev.gradedReportId : null,
+      };
+    });
     setConfirmBackToCatalog(false);
     setErrorMsg(null);
   };
 
   // Select a built-in Master Prompt from Task 2 Catalog
   const handleSelectBuiltInPrompt = (item: MasterWritingPrompt) => {
-    resetTimerForTask('task2');
-    const isSamePromptInProgress =
-      draft.taskType === 'task2' &&
-      !draft.isCustomPrompt &&
-      draft.prompt.trim() === item.prompt.trim();
-
-    setDraft((prev) => ({
-      ...prev,
-      taskType: 'task2',
-      step: 'writing',
-      isCustomPrompt: false,
-      topicTag: item.topicTag,
-      prompt: item.prompt,
-      chartImageDataUrl: null,
-      essay: isSamePromptInProgress ? prev.essay : '',
-      gradedReportId: isSamePromptInProgress ? prev.gradedReportId : null,
-    }));
+    setIsTimerRunning(false);
+    setTask2Draft((prev) => {
+      const isSameTopic = prev.selectedTopicId === item.id;
+      return {
+        ...prev,
+        selectedTopicId: item.id,
+        viewStep: 'writing',
+        content: isSameTopic ? prev.content : '',
+        timer: isSameTopic ? prev.timer : 2400,
+        gradedReportId: isSameTopic ? prev.gradedReportId : null,
+      };
+    });
     setConfirmBackToCatalog(false);
     setErrorMsg(null);
   };
 
-  // Click [ ← 重选题目 ] from the immersive writing pad
+  // Click [ ← 重选题目 ] from the Task 2 immersive writing pad
   const handleRequestBackToCatalog = () => {
     if (isHistoryMode) {
       setViewMode('draft');
       return;
     }
-    if (draftWordCount > 10 && !draftReport) {
+    if (task2WordCount > 10 && !task2Report) {
       setConfirmBackToCatalog(true);
       return;
     }
     setIsTimerRunning(false);
     setConfirmBackToCatalog(false);
     setErrorMsg(null);
-    setDraft((prev) => ({
+    setTask2Draft((prev) => ({
       ...prev,
-      step: 'catalog',
+      viewStep: 'catalog',
     }));
   };
 
+  // Confirmed clearing of Task 2 draft when clicking [ ← 重选题目 ] -> [ 继续 ]
   const handleConfirmReturnAndClear = () => {
-    resetTimerForTask('task2');
+    setIsTimerRunning(false);
+    setIsTask2TimeUpLocked(false);
+    setTask2TimedWords(null);
     setConfirmBackToCatalog(false);
     setErrorMsg(null);
-    setDraft((prev) => ({
+    setTask2Draft((prev) => ({
       ...prev,
-      step: 'catalog',
-      essay: '',
+      viewStep: 'catalog',
+      customPrompt: prev.selectedTopicId === 'custom' ? '' : prev.customPrompt,
+      content: '',
+      timer: 2400,
       gradedReportId: null,
     }));
   };
 
+  // Strictly isolated prompt text change handler
   const handlePromptChange = (newPromptText: string) => {
     if (isHistoryMode) return;
-    setDraft((prev) => ({
-      ...prev,
-      prompt: newPromptText,
-    }));
+    if (activeTaskType === 'task1') {
+      setTask1Draft((prev) => ({
+        ...prev,
+        prompt: newPromptText,
+      }));
+    } else {
+      setTask2Draft((prev) => ({
+        ...prev,
+        customPrompt: newPromptText,
+      }));
+    }
     if (errorMsg) setErrorMsg(null);
   };
 
+  // Strictly isolated essay content change handler
   const handleEssayChange = (newEssayText: string) => {
     if (isHistoryMode || isTimeUpLocked) return;
-    setDraft((prev) => ({
-      ...prev,
-      essay: newEssayText,
-    }));
+    if (activeTaskType === 'task1') {
+      setTask1Draft((prev) => ({
+        ...prev,
+        content: newEssayText,
+      }));
+    } else {
+      setTask2Draft((prev) => ({
+        ...prev,
+        content: newEssayText,
+      }));
+    }
     if (errorMsg) setErrorMsg(null);
   };
 
+  // Explicit [ ＋ 写篇新的 ] button after grading: clears ONLY the active task's draft
   const handleStartNewSheet = () => {
     setViewMode('draft');
+    setIsTimerRunning(false);
     setConfirmBackToCatalog(false);
     setErrorMsg(null);
-    if (draft.taskType === 'task1') {
-      resetTimerForTask('task1');
-      setDraft({
-        taskType: 'task1',
-        step: 'writing',
-        isCustomPrompt: true,
-        topicTag: '图表小作文 · Academic Task 1',
+    if (activeTaskType === 'task1') {
+      setIsTask1TimeUpLocked(false);
+      setTask1TimedWords(null);
+      setTask1Draft({
         prompt: '',
-        chartImageDataUrl: null,
-        essay: '',
+        image: null,
+        content: '',
+        timer: 1200,
         gradedReportId: null,
       });
     } else {
-      resetTimerForTask('task2');
-      setDraft((prev) => ({
+      setIsTask2TimeUpLocked(false);
+      setTask2TimedWords(null);
+      setTask2Draft((prev) => ({
         ...prev,
-        taskType: 'task2',
-        step: 'catalog',
-        essay: '',
+        viewStep: 'catalog',
+        customPrompt:
+          prev.selectedTopicId === 'custom' ? '' : prev.customPrompt,
+        content: '',
+        timer: 2400,
         gradedReportId: null,
       }));
     }
@@ -516,7 +636,16 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     if (isHistoryMode) return;
     setErrorMsg(null);
 
-    if (!draft.prompt.trim()) {
+    const activePrompt =
+      activeTaskType === 'task1' ? task1Draft.prompt : task2ResolvedPrompt;
+    const activeEssay =
+      activeTaskType === 'task1' ? task1Draft.content : task2Draft.content;
+    const activeTopicTag =
+      activeTaskType === 'task1'
+        ? '图表小作文 · Academic Task 1'
+        : task2ResolvedTopicTag;
+
+    if (!activePrompt.trim()) {
       setErrorMsg('请先输入或粘贴作文题目，以便考官精准判分');
       customPromptTextareaRef.current?.focus();
       return;
@@ -532,9 +661,9 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       let newReport: WritingEvaluationReport;
       if (aiConfig.apiKey.trim()) {
         newReport = await evaluateIeltsWriting({
-          taskType: draft.taskType,
-          prompt: draft.prompt.trim(),
-          essay: draft.essay.trim(),
+          taskType: activeTaskType,
+          prompt: activePrompt.trim(),
+          essay: activeEssay.trim(),
           apiKey: aiConfig.apiKey,
           endpoint: aiConfig.endpoint,
           model: aiConfig.model,
@@ -542,24 +671,31 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       } else {
         await new Promise((r) => setTimeout(r, 500));
         newReport = generateOfflineDiagnosticReport(
-          draft.taskType,
-          draft.prompt.trim(),
-          draft.essay.trim()
+          activeTaskType,
+          activePrompt.trim(),
+          activeEssay.trim()
         );
       }
 
       const enrichedReport: WritingEvaluationReport = {
         ...newReport,
-        topicTag: draft.topicTag,
+        topicTag: activeTopicTag,
         chartImageDataUrl:
-          draft.taskType === 'task1' ? draft.chartImageDataUrl || null : null,
+          activeTaskType === 'task1' ? task1Draft.image || null : null,
       };
 
       onSaveReport(enrichedReport);
-      setDraft((prev) => ({
-        ...prev,
-        gradedReportId: enrichedReport.id,
-      }));
+      if (activeTaskType === 'task1') {
+        setTask1Draft((prev) => ({
+          ...prev,
+          gradedReportId: enrichedReport.id,
+        }));
+      } else {
+        setTask2Draft((prev) => ({
+          ...prev,
+          gradedReportId: enrichedReport.id,
+        }));
+      }
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : '批改失败，请检查 DeepSeek Key';
@@ -684,7 +820,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
           STEP 1: TASK 2 TOPIC DIRECTORY INDEX VIEW (大作文题目目录索引页)
          ===================================================================== */}
       {!isHistoryMode &&
-      draft.taskType === 'task2' &&
+      activeTaskType === 'task2' &&
       currentStep === 'catalog' ? (
         <div className="mx-auto max-w-3xl">
           <section className="skeuo-paper overflow-hidden rounded-2xl">
@@ -748,10 +884,11 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     </span>
                   </div>
 
-                  {draft.isCustomPrompt && draftWordCount > 0 ? (
+                  {isTask2CustomPrompt &&
+                  (task2WordCount > 0 || task2Draft.customPrompt.trim()) ? (
                     <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium text-[#262523]">
                       <span className="h-2 w-2 rounded-full bg-[#EA5B25]" />
-                      <span>继续草稿 ({draftWordCount} words)</span>
+                      <span>继续草稿 ({task2WordCount} words)</span>
                     </span>
                   ) : (
                     <span className="font-mono text-xs text-[#7A7873] transition-transform group-hover:translate-x-0.5 group-hover:text-[#262523]">
@@ -775,9 +912,9 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     item.prompt.trim()
                   );
                   const hasActiveDraftHere =
-                    !draft.isCustomPrompt &&
-                    draft.prompt.trim() === item.prompt.trim() &&
-                    draftWordCount > 0;
+                    !isTask2CustomPrompt &&
+                    task2Draft.selectedTopicId === item.id &&
+                    task2WordCount > 0;
 
                   return (
                     <button
@@ -800,7 +937,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                           {hasActiveDraftHere && (
                             <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium text-[#262523]">
                               <span className="h-2 w-2 rounded-full bg-[#EA5B25]" />
-                              <span>草稿 ({draftWordCount}w)</span>
+                              <span>草稿 ({task2WordCount}w)</span>
                             </span>
                           )}
 
@@ -977,7 +1114,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             {/* PROMPT PRESENTATION AREA */}
             <div className="px-8 pb-4 pt-1">
               {!isHistoryMode &&
-              (draft.isCustomPrompt || displayedTaskType === 'task1') ? (
+              (displayedTaskType === 'task1' || isTask2CustomPrompt) ? (
                 /* Custom Prompt or Task 1: Clean borderless auto-growing textarea */
                 <textarea
                   ref={customPromptTextareaRef}

@@ -69,14 +69,20 @@ export interface WritingEvaluationReport {
   sourceMode: 'deepseek' | 'gemini' | 'demo-engine';
 }
 
-export interface WritingDraftState {
-  taskType: WritingTaskType;
-  step?: 'catalog' | 'writing';
-  isCustomPrompt?: boolean;
-  topicTag: string;
+export interface Task1DraftState {
   prompt: string;
-  chartImageDataUrl?: string | null;
-  essay: string;
+  image: string | null;
+  content: string;
+  timer: number;
+  gradedReportId?: string | null;
+}
+
+export interface Task2DraftState {
+  selectedTopicId: string | 'custom';
+  customPrompt: string;
+  content: string;
+  timer: number;
+  viewStep: 'catalog' | 'writing';
   gradedReportId?: string | null;
 }
 
