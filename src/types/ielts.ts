@@ -33,6 +33,7 @@ export interface LexicalUpgradeItem {
   original: string;
   upgraded: string;
   chineseMeaning?: string;
+   upgradedSentence?: string;
   contextExplanation: string;
 }
 

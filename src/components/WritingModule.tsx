@@ -27,7 +27,6 @@ import {
   convertImageFileToDataUrl,
   countWords,
   evaluateIeltsWriting,
-  generateOfflineDiagnosticReport,
 } from '../lib/geminiEvaluator';
 import {
   MASTER_WRITING_PROMPTS,
@@ -43,6 +42,7 @@ interface WritingModuleProps {
   onIngestVocab: (
     newCard: Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'>
   ) => void;
+  onOpenApiKeyModal?: () => void;
 }
 
 type ViewMode = 'draft' | 'history';
@@ -127,6 +127,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   onSaveReport,
   vocabCards,
   onIngestVocab,
+  onOpenApiKeyModal,
 }) => {
   // 1. Strictly Isolated Dual-Track LocalStorage States (Task 1 vs Task 2)
   const [activeTaskType, setActiveTaskType] = useLocalStorage<WritingTaskType>(
@@ -183,6 +184,11 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [apiAlertModal, setApiAlertModal] = useState<{
+    title: string;
+    message: string;
+    showConfigBtn?: boolean;
+  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const customPromptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -635,6 +641,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const handleEvaluateDraft = async () => {
     if (isHistoryMode) return;
     setErrorMsg(null);
+    setApiAlertModal(null);
 
     const activePrompt =
       activeTaskType === 'task1' ? task1Draft.prompt : task2ResolvedPrompt;
@@ -650,32 +657,34 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       customPromptTextareaRef.current?.focus();
       return;
     }
-    if (draftWordCount < 10) {
-      setErrorMsg('请先输入至少 10 个词的作文正文');
+    if (draftWordCount < 1) {
+      setErrorMsg('请先输入作文正文后再交卷批改');
+      return;
+    }
+
+    if (!aiConfig.apiKey.trim()) {
+      const missingKeyMsg =
+        '尚未配置 DeepSeek API Key。请点击右上角齿轮图标填写您的 DeepSeek API Key（sk-...），系统将真实调用 DeepSeek 考官为您批改！';
+      setErrorMsg(missingKeyMsg);
+      setApiAlertModal({
+        title: '未配置 DeepSeek API Key',
+        message: missingKeyMsg,
+        showConfigBtn: true,
+      });
       return;
     }
 
     setIsTimerRunning(false);
     setIsEvaluating(true);
     try {
-      let newReport: WritingEvaluationReport;
-      if (aiConfig.apiKey.trim()) {
-        newReport = await evaluateIeltsWriting({
-          taskType: activeTaskType,
-          prompt: activePrompt.trim(),
-          essay: activeEssay.trim(),
-          apiKey: aiConfig.apiKey,
-          endpoint: aiConfig.endpoint,
-          model: aiConfig.model,
-        });
-      } else {
-        await new Promise((r) => setTimeout(r, 500));
-        newReport = generateOfflineDiagnosticReport(
-          activeTaskType,
-          activePrompt.trim(),
-          activeEssay.trim()
-        );
-      }
+      const newReport = await evaluateIeltsWriting({
+        taskType: activeTaskType,
+        prompt: activePrompt.trim(),
+        essay: activeEssay.trim(),
+        apiKey: aiConfig.apiKey,
+        endpoint: aiConfig.endpoint,
+        model: aiConfig.model || 'deepseek-chat',
+      });
 
       const enrichedReport: WritingEvaluationReport = {
         ...newReport,
@@ -698,8 +707,15 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       }
     } catch (err) {
       const msg =
-        err instanceof Error ? err.message : '批改失败，请检查 DeepSeek Key';
+        err instanceof Error
+          ? err.message
+          : 'DeepSeek API 请求失败，请检查 API Key 与网络连接。';
       setErrorMsg(msg);
+      setApiAlertModal({
+        title: 'DeepSeek 批改请求失败',
+        message: msg,
+        showConfigBtn: true,
+      });
     } finally {
       setIsEvaluating(false);
     }
@@ -738,6 +754,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       report.essay,
       item.original
     );
+    const modifiedSentence =
+      item.upgradedSentence?.trim() || userSentence;
 
     onIngestVocab({
       word: headword,
@@ -749,8 +767,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       englishDefinition: item.contextExplanation,
       paraphrasing:
         paraphrasingList.length > 0 ? paraphrasingList : [item.original],
-      exampleSentence: userSentence,
-      exampleTranslation: `原句语境替换：建议将 “${item.original}” 升级为 “${item.upgraded}”。`,
+      exampleSentence: modifiedSentence,
+      exampleTranslation: `原句对比：${userSentence}（将 “${item.original}” 升级为 “${item.upgraded}”）`,
       topicTag: report.topicTag || '来自写作批改',
       isCustom: true,
       fromWriting: true,
@@ -1617,6 +1635,68 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               </div>
             </section>
           )}
+        </div>
+      )}
+
+      {/* DeepSeek API Missing / Error Alert Modal */}
+      {apiAlertModal && (
+        <div
+          onClick={() => setApiAlertModal(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#262523]/40 p-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="api-alert-modal-title"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="skeuo-paper w-full max-w-md rounded-2xl p-6"
+          >
+            <div className="flex items-center justify-between border-b border-[#E2DFD5] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-[#EA5B25]" />
+                <h3
+                  id="api-alert-modal-title"
+                  className="text-sm font-semibold text-[#262523]"
+                >
+                  {apiAlertModal.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setApiAlertModal(null)}
+                className="text-[#7A7873] hover:text-[#262523]"
+                aria-label="关闭提醒"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="mt-4 text-xs leading-relaxed text-[#262523]">
+              {apiAlertModal.message}
+            </p>
+
+            <div className="mt-6 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setApiAlertModal(null)}
+                className="skeuo-btn-light rounded-xl px-4 py-2 text-xs font-medium"
+              >
+                知道了
+              </button>
+              {apiAlertModal.showConfigBtn && onOpenApiKeyModal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setApiAlertModal(null);
+                    onOpenApiKeyModal();
+                  }}
+                  className="skeuo-btn-orange rounded-xl px-4 py-2 text-xs font-semibold"
+                >
+                  去填写 DeepSeek Key
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

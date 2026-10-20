@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   ActiveTab,
   DeepSeekConfig,
@@ -37,6 +37,15 @@ export function App() {
   const [writingReports, setWritingReports] = useLocalStorage<
     WritingEvaluationReport[]
   >('ielts_studio_writing_reports_v1', []);
+
+  // Purge any legacy mock/demo-engine reports from localStorage so only 100% real DeepSeek reports exist
+  useEffect(() => {
+    if (writingReports.some((r) => r.sourceMode === 'demo-engine')) {
+      setWritingReports((prev) =>
+        prev.filter((r) => r.sourceMode !== 'demo-engine')
+      );
+    }
+  }, [writingReports, setWritingReports]);
 
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
 
@@ -108,6 +117,7 @@ export function App() {
             onSaveReport={handleSaveWritingReport}
             vocabCards={vocabCards}
             onIngestVocab={handleIngestVocabFromWriting}
+            onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
           />
         )}
       </main>
