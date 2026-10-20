@@ -22,8 +22,6 @@ export interface VocabularyCard {
 
 export type WritingTaskType = 'task1' | 'task2';
 
-export type TimerMode = 'task2-40m' | 'task1-20m' | 'free';
-
 export interface CriterionEvaluation {
   band: number;
   summary: string;
@@ -73,6 +71,8 @@ export interface WritingEvaluationReport {
 
 export interface WritingDraftState {
   taskType: WritingTaskType;
+  step?: 'catalog' | 'writing';
+  isCustomPrompt?: boolean;
   topicTag: string;
   prompt: string;
   chartImageDataUrl?: string | null;

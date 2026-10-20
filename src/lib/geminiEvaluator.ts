@@ -87,17 +87,20 @@ export async function evaluateIeltsWriting({
 
   const taskSpecificGuidelines = isTask1
     ? `当前为【IELTS Academic Writing Task 1（图表小作文，最低150词）】。
-请将第一项评分维度严格设定为 **Task Achievement (TA)**，并重点围绕以下小作文核心标准进行考官级诊断：
-1. **TA (Task Achievement 任务完成度)**：重点检查是否包含独立且合格的 **Overview（总体趋势/核心极值概括段，且不混杂机械细节数据）**；是否准确提炼了图表的关键特征（极值、转折点、交点、起止点）；字数是否满 150 词。
+请首先解析用户所给题目（Prompt）的图表类型、统计对象与时间跨度，并将第一项评分维度严格设定为 **Task Achievement (TA)**：
+1. **TA (Task Achievement 任务完成度)**：重点检查是否包含独立且合格的 **Overview（总体趋势/核心极值概括段，且不混杂机械细节数据）**；是否准确提炼了题目要求的关键特征（极值、转折点、交点、起止点）；字数是否满 150 词。
 2. **CC (Coherence and Cohesion 逻辑连贯与衔接)**：数据分段是否具备清晰的归类逻辑（如按趋势分组、按对比对象分组或按时间阶段分段）；句间及段间对比过渡词（By contrast, Meanwhile, Respectively）是否自然准确。
 3. **LR (Lexical Resource 词汇丰富度与同义替换)**：重点评估 **动态趋势词**（如 surge, skyrocket, plummet, witness a steady upward trajectory, plateau）与 **静态占比/倍差表达**（如 account for the lion's share, outstrip, pale in comparison, a threefold increase）的丰富度与精准度，并在 paraphrasingUpgrades 中给出针对图表趋势与数据表达的地道升级替换。
 4. **GRA (Grammatical Range and Accuracy 语法多样性与数据句式修正)**：重点检查静态/动态比较句式（twice as high as, whereas, while）、分词伴随状语（peaking at..., followed by a slight dip to...）、被动语态（流程图/地图题）及过去/将来时态与数据介词（at, by, to, of）的准确度。`
     : `当前为【IELTS Academic Writing Task 2（议论文大作文，最低250词）】。
-请将第一项评分维度严格设定为 **Task Response (TR)**，并重点围绕以下大作文核心标准进行考官级诊断：
-1. **TR (Task Response 任务回应与立意)**：是否精准回应题干所有设问；总论点（Thesis Statement）立场是否始终如一；主体段分论点是否具备充分的因果链条推导与具体例证支持。
+【审题与扣题强制要求】：请首先严格解析用户所给题目（Prompt）的：
+- **核心议题与限定词**（如绝对化限定词 completely, only, best way, 特定人群或特定范围）；
+- **提问方式（Question Type）**：明确区分是 Discuss both views and give your own opinion（双边讨论+个人立场）、To what extent do you agree or disagree（观点赞同度）、Do the advantages outweigh the disadvantages（利弊权衡）、还是 Causes & Solutions / Two-part question（原因与解决/双问题）。
+请将第一项评分维度严格设定为 **Task Response (TR)**，严判考生文章是否精准回应了该特定题目的所有设问、是否存在偏题/偷换概念/遗漏设问或对绝对化限定词回应不足的情况：
+1. **TR (Task Response 任务回应与立意)**：首先在 summary 中指明题目的设问类型及考生的扣题准确度；检查总论点（Thesis Statement）立场是否始终如一；主体段分论点是否具备充分的因果链条推导与具体例证支持。
 2. **CC (Coherence and Cohesion 逻辑连贯与衔接)**：四段/五段式结构是否均衡；每段 Topic Sentence 是否清晰；指代衔接与逻辑递进/让步转折是否自然。
-3. **LR (Lexical Resource 学术词汇丰富度与同义替换)**：学术书面语体（Academic Register）、话题高阶词伙搭配（Collocations），并在 paraphrasingUpgrades 中给出 3-5 组同义替换升级。
-4. **GRA (Grammatical Range and Accuracy 语法多样性与标红修正)**：复杂从句、非谓语结构、虚拟语气或倒装句的多样性及语法准确性。`;
+3. **LR (Lexical Resource 学术词汇丰富度与同义替换)**：结合本题具体话题评估学术书面语体（Academic Register）与话题高阶词伙搭配（Collocations），并在 paraphrasingUpgrades 中给出 3-5 组可直接一键入库背诵的高分同义替换升级。
+4. **GRA (Grammatical Range and Accuracy 语法多样性与标红修正)**：复杂从句、非谓语结构、虚拟语气或倒装句的多样性及语法准确性，并在 errorCorrections 中提供 3-4 处句子精修及核心可入库词伙。`;
 
   const systemInstruction = `你是一位拥有15年雅思考官经验的资深学术写作评审官（Senior IELTS Writing Examiner）。
 请严格依据剑桥雅思官方评分标准（IELTS Writing Band Descriptors）对考生的作文进行深度诊断批改，并以 JSON 格式（json_object）输出完整评分报告。
@@ -110,7 +113,7 @@ ${taskSpecificGuidelines}
   "overallBand": 7.0,
   "trTa": {
     "band": 7.0,
-    "summary": "针对 ${isTask1 ? 'Task Achievement (TA：重点点评 Overview 总体趋势概括与关键数据特征筛选)' : 'Task Response (TR：重点点评审题立意与论证深度)'} 的核心考官评语（中文）",
+    "summary": "针对 ${isTask1 ? 'Task Achievement (TA：重点点评 Overview 总体趋势概括与关键数据特征筛选)' : 'Task Response (TR：首先点明本题设问类型与限定词，严判考生是否精准扣题及论证展开深度)'} 的核心考官评语（中文）",
     "strengths": ["亮点1", "亮点2"],
     "improvements": ["改进建议1", "改进建议2"]
   },
@@ -150,7 +153,7 @@ ${taskSpecificGuidelines}
       }
     ]
   },
-  "improvedSampleParagraph": "选取考生作文中最核心的一段（${isTask1 ? '如 Overview 段或核心数据对比主体段' : '核心论证主体段'}），重写为 Band 8.0 考官示范段落（全英文）",
+  "improvedSampleParagraph": "选取考生作文中最核心的一段（${isTask1 ? '如 Overview 段或核心数据对比主体段' : '紧扣本题题干的核心论证主体段'}），重写为 Band 8.0 考官示范段落（全英文）",
   "examinerSummary": "总结性的备考冲刺建议（中文，2-3句话指明下一步提分关键）"
 }
 
@@ -159,7 +162,7 @@ ${taskSpecificGuidelines}
 2. paraphrasingUpgrades 至少提供 3-5 组原文词汇/数据表达同义替换升级。
 3. errorCorrections 至少提供 3-4 处原文句子标红修正或高阶句式升级对照。`;
 
-  const userContent = `请对以下雅思 ${
+  const userContent = `请严格结合以下具体题目要求，对考生的雅思 ${
     isTask1 ? 'Task 1 小作文' : 'Task 2 大作文'
   } 进行四维精批并返回 JSON 对象：\n\n【雅思写作题目 Prompt】:\n${prompt}\n\n【考生作文 Essay (${wordCount} words)】:\n${essay}`;
 
@@ -285,7 +288,7 @@ ${taskSpecificGuidelines}
 }
 
 /**
- * Local Offline Diagnostic Generator (Adaptive for Task 1 vs Task 2)
+ * Local Offline Diagnostic Generator (Adaptive for Task 1 vs Task 2 and Question Type)
  */
 export function generateOfflineDiagnosticReport(
   taskType: WritingTaskType,
@@ -308,6 +311,18 @@ export function generateOfflineDiagnosticReport(
     /mitigate|ubiquitous|exacerbate|detrimental|indispensable|disparity|catalyst|proliferate|trajectory|outstrip|skyrocket|proportion|respectively|albeit/i.test(
       essay
     );
+
+  // Detect question type in Task 2 prompt
+  let questionTypeDesc = '议论文观点阐述（Opinion / Argumentation）';
+  if (/discuss both views/i.test(prompt)) {
+    questionTypeDesc = '双边讨论并给出个人观点（Discuss both views & give your opinion）';
+  } else if (/agree or disagree/i.test(prompt)) {
+    questionTypeDesc = '观点赞同度探讨（To what extent do you agree or disagree）';
+  } else if (/outweigh/i.test(prompt)) {
+    questionTypeDesc = '利弊权衡类（Do the advantages outweigh the disadvantages）';
+  } else if (/causes|problems|solutions|measures|reasons/i.test(prompt)) {
+    questionTypeDesc = '原因/影响与解决方案类（Problem & Solution / Two-part Question）';
+  }
 
   const baseScore = hasAdvancedVocab ? 7.0 : 6.0;
   const trBand = roundToHalfBand(
@@ -459,9 +474,9 @@ export function generateOfflineDiagnosticReport(
     overallBand,
     trTa: {
       band: trBand,
-      summary: `文章切题度良好（当前字数 ${wordCount} 词），立场表达清晰。主体段能够围绕核心论点展开，但在第二个分论点的因果推导链条上略显跳跃，建议增加具体例证或反面假设论证。`,
+      summary: `【审题与扣题诊断】本题属于「${questionTypeDesc}」。文章切题度良好（当前字数 ${wordCount} 词），立场表达清晰。主体段能够围绕所给题干的核心议题展开，但在第二个分论点的因果推导链条上略显跳跃，建议结合题干限定词增加具体例证或反面假设论证。`,
       strengths: [
-        '开篇成功进行了题目背景改写（Paraphrasing），立场鲜明不模棱两可',
+        '开篇成功进行了题目背景改写（Paraphrasing），立场回应紧扣题干设问方式',
         wordCount >= minWords
           ? `篇幅充实（${wordCount} 词），满足并超过雅思官方 ${minWords} 词的字数基准线`
           : '核心论点方向紧扣题干设问，未出现偏题现象',
@@ -469,7 +484,7 @@ export function generateOfflineDiagnosticReport(
       improvements: [
         wordCount < minWords
           ? `当前字数（${wordCount} 词）未达到 ${minWords} 词官方下限，会在 TR 维度触发扣分，请务必扩充主体段论证细节`
-          : '主体段在提出 Topic Sentence 后，建议采用“解释机理 → 具体例证 → 扣回分论点”的三步扩展法',
+          : '主体段在提出 Topic Sentence 后，建议采用“解释机理 → 具体例证 → 扣回题干限定词”的三步扩展法',
       ],
     },
     cc: {
@@ -546,7 +561,7 @@ export function generateOfflineDiagnosticReport(
     improvedSampleParagraph:
       'Furthermore, addressing this multifaceted challenge necessitates a pragmatic synthesis of regulatory oversight and technological innovation. Rather than relying on superficial short-term restrictions, policymakers ought to allocate substantial resources toward sustainable infrastructure.',
     examinerSummary:
-      '建议在右上角配置您的 DeepSeek API Key，即可使用 DeepSeek-V3 或 DeepSeek-R1 深度思考模型解锁针对您作文逐句精批的实时 AI 考官评分。',
+      '建议在右上角配置您的 DeepSeek API Key，即可使用 DeepSeek-V3 或 DeepSeek-R1 深度思考模型解锁针对您所给题目的逐句精批。',
     sourceMode: 'demo-engine',
   };
 }
