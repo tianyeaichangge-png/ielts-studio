@@ -11,6 +11,9 @@ import {
   Check,
   Lock,
   PenLine,
+  Play,
+  Pause,
+  RotateCcw,
 } from 'lucide-react';
 import {
   DeepSeekConfig,
@@ -275,32 +278,18 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     setSecondsLeft(type === 'task1' ? 20 * 60 : 40 * 60);
   }, []);
 
-  // Single-click vs Double-click handler for the minimalist countdown digits
-  const clickTimeoutRef = useRef<number | null>(null);
-
-  const handleTimerSingleClick = () => {
+  const handleToggleTimer = () => {
     if (isHistoryMode) return;
-    if (clickTimeoutRef.current !== null) {
-      window.clearTimeout(clickTimeoutRef.current);
-      clickTimeoutRef.current = null;
+    if (isTimeUpLocked || secondsLeft === 0) {
+      resetTimerForTask(draft.taskType);
+      setIsTimerRunning(true);
+    } else {
+      setIsTimerRunning((prev) => !prev);
     }
-    clickTimeoutRef.current = window.setTimeout(() => {
-      if (isTimeUpLocked || secondsLeft === 0) {
-        resetTimerForTask(draft.taskType);
-        setIsTimerRunning(true);
-      } else {
-        setIsTimerRunning((prev) => !prev);
-      }
-      clickTimeoutRef.current = null;
-    }, 200);
   };
 
-  const handleTimerDoubleClick = () => {
+  const handleResetTimer = () => {
     if (isHistoryMode) return;
-    if (clickTimeoutRef.current !== null) {
-      window.clearTimeout(clickTimeoutRef.current);
-      clickTimeoutRef.current = null;
-    }
     resetTimerForTask(draft.taskType);
   };
 
@@ -862,53 +851,93 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
             </div>
 
-            {/* Minimalist Single-Line Header Bar */}
-            <div className="flex items-center justify-between gap-3 px-8 pt-5 pb-3 select-none">
-              {/* Left: [ ← 重选题目 ] + Pure Printed Typographic Stamp */}
-              <div className="flex items-center gap-3 min-w-0">
+            {/* Symmetrical 3-Column Light-Skeuomorphic Header Bar */}
+            <div className="grid grid-cols-3 items-center gap-2 px-8 pt-5 pb-3.5 select-none">
+              {/* Left Column: Tactile Raised Cream Button [ ← 重选题目 ] */}
+              <div className="flex items-center justify-start">
                 {!isHistoryMode && displayedTaskType === 'task2' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleRequestBackToCatalog}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-[#7A7873] transition-colors hover:text-[#262523] shrink-0"
-                    >
-                      <span>← 重选题目</span>
-                    </button>
-                    <span className="text-[#D5D1C6]">|</span>
-                  </>
+                  <button
+                    type="button"
+                    onClick={handleRequestBackToCatalog}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2DDD5] bg-[#FAF8F5] px-3 py-1.5 text-xs font-medium leading-none text-[#262523] shadow-sm transition-all hover:border-[#D5CFC4] hover:bg-white active:translate-y-[1px]"
+                  >
+                    <span className="leading-none">← 重选题目</span>
+                  </button>
                 )}
+              </div>
 
-                <span className="truncate font-mono text-[11px] uppercase tracking-[0.14em] text-[#7A7873]">
+              {/* Center Column: Static Ink-Printed Topic Stamp (Pixel-Centered Vertically & Horizontally) */}
+              <div className="flex items-center justify-center text-center min-w-0">
+                <span className="truncate text-center font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#7A7873] leading-none translate-y-[1px]">
                   {isHistoryMode
                     ? `ARCHIVE · ${formatPrintedStamp(displayedTopicTag)}`
                     : formatPrintedStamp(displayedTopicTag)}
                 </span>
               </div>
 
-              {/* Right: Ultra-Minimalist Countdown Numerals (Click to Start/Pause, Double-Click to Reset) */}
-              {!isHistoryMode && (
-                <button
-                  type="button"
-                  onClick={handleTimerSingleClick}
-                  onDoubleClick={handleTimerDoubleClick}
-                  title="单击开始/暂停倒计时 · 双击重置时间"
-                  className={`inline-flex items-center gap-2 font-mono text-sm tracking-wider transition-colors ${
-                    isTimeUpLocked || isFinalFiveMinutes
-                      ? 'font-semibold text-[#EA5B25]'
-                      : isTimerRunning
-                      ? 'font-semibold text-[#262523]'
-                      : 'text-[#7A7873] hover:text-[#262523]'
-                  }`}
-                >
-                  {isTimerRunning && (
-                    <span className="h-2 w-2 rounded-full bg-[#EA5B25] animate-pulse" />
-                  )}
-                  <span className={isFinalFiveMinutes ? 'animate-pulse' : ''}>
-                    {formatTimerDisplay(secondsLeft)}
-                  </span>
-                </button>
-              )}
+              {/* Right Column: Braun Recessed Window + Tactile Micro-Buttons Timer Capsule */}
+              <div className="flex items-center justify-end">
+                {!isHistoryMode && (
+                  <div className="inline-flex items-center gap-1 rounded-xl border border-[#E2DDD5] bg-[#EFECE4] p-1 shadow-[0_1px_2px_rgba(38,37,35,0.04),inset_0_1px_0_rgba(255,255,255,0.75)]">
+                    {/* Recessed Digital Readout Window */}
+                    <button
+                      type="button"
+                      onClick={handleToggleTimer}
+                      title="点击开始/暂停倒计时"
+                      className={`inline-flex items-center gap-1.5 rounded-lg border border-[#D8D3C8] bg-[#E5E1D8] px-2.5 py-1 font-mono text-xs font-bold leading-none tracking-wider shadow-inner transition-colors ${
+                        isTimeUpLocked || isFinalFiveMinutes
+                          ? 'text-[#EA5B25]'
+                          : isTimerRunning
+                          ? 'text-[#262523]'
+                          : 'text-[#5C5A55] hover:text-[#262523]'
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                          isTimerRunning
+                            ? 'bg-[#EA5B25] animate-pulse shadow-[0_0_4px_rgba(234,91,37,0.65)]'
+                            : isTimeUpLocked
+                            ? 'bg-[#EA5B25]'
+                            : 'bg-[#C4BFB4]'
+                        }`}
+                      />
+                      <span
+                        className={`leading-none translate-y-[0.5px] ${
+                          isFinalFiveMinutes ? 'animate-pulse' : ''
+                        }`}
+                      >
+                        {formatTimerDisplay(secondsLeft)}
+                      </span>
+                    </button>
+
+                    {/* Tactile Raised Play/Pause Micro-Button */}
+                    <button
+                      type="button"
+                      onClick={handleToggleTimer}
+                      title={isTimerRunning ? '暂停计时' : '开始计时'}
+                      aria-label={isTimerRunning ? '暂停计时' : '开始计时'}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-[#E2DDD5] bg-[#FAF8F5] text-[#262523] shadow-sm transition-all hover:bg-white hover:text-[#EA5B25] active:translate-y-[1px]"
+                    >
+                      {isTimerRunning ? (
+                        <Pause className="h-3 w-3 fill-current" />
+                      ) : (
+                        <Play className="h-3 w-3 translate-x-[0.5px] fill-current" />
+                      )}
+                    </button>
+
+                    {/* Tactile Raised Reset Micro-Button */}
+                    <button
+                      type="button"
+                      onClick={handleResetTimer}
+                      title="重置倒计时"
+                      aria-label="重置倒计时"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-[#E2DDD5] bg-[#FAF8F5] text-[#7A7873] shadow-sm transition-all hover:bg-white hover:text-[#262523] active:translate-y-[1px]"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Lightweight Anti-Loss Confirmation when clicking [ ← 重选题目 ] with >10 words */}
