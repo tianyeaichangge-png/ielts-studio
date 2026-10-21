@@ -50,8 +50,11 @@ export interface WritingEvaluationReport {
   id: string;
   createdAt: string;
   taskType: WritingTaskType;
+  firstCriterionLabel?: 'TA' | 'TR';
+  topicId?: string | 'custom';
   topicTag?: string;
   prompt: string;
+  image?: string | null;
   chartImageDataUrl?: string | null;
   essay: string;
   wordCount: number;

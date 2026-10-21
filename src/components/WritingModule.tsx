@@ -12,6 +12,7 @@ import {
   Lock,
   PenLine,
   RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import {
   DeepSeekConfig,
@@ -36,8 +37,10 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 
 interface WritingModuleProps {
   aiConfig: DeepSeekConfig;
-  reports: WritingEvaluationReport[];
+  task1Reports: WritingEvaluationReport[];
+  task2Reports: WritingEvaluationReport[];
   onSaveReport: (report: WritingEvaluationReport) => void;
+  onDeleteReport: (reportId: string, taskType: WritingTaskType) => void;
   vocabCards: VocabularyCard[];
   onIngestVocab: (
     newCard: Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'>
@@ -123,8 +126,10 @@ function findMatchingSentenceInEssay(
 
 export const WritingModule: React.FC<WritingModuleProps> = ({
   aiConfig,
-  reports,
+  task1Reports,
+  task2Reports,
   onSaveReport,
+  onDeleteReport,
   vocabCards,
   onIngestVocab,
   onOpenApiKeyModal,
@@ -160,9 +165,11 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     }
   );
 
-  // 2. Strict Mode Isolation: 'draft' vs 'history'
+  // 2. Strict Mode Isolation: 'draft' vs 'history' + History Drawer
   const [viewMode, setViewMode] = useState<ViewMode>('draft');
   const [historyIndex, setHistoryIndex] = useState<number>(0);
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] =
+    useState<boolean>(false);
 
   // 3. Topic Catalog Filter State
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -234,33 +241,46 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const currentStep =
     activeTaskType === 'task1' ? 'writing' : task2Draft.viewStep || 'catalog';
 
+  // Strictly isolated history list for the currently active task ('task1' vs 'task2')
+  const activeTaskReports =
+    activeTaskType === 'task1' ? task1Reports : task2Reports;
+
   const safeHistoryIndex =
-    reports.length > 0 ? Math.min(historyIndex, reports.length - 1) : 0;
+    activeTaskReports.length > 0
+      ? Math.min(historyIndex, activeTaskReports.length - 1)
+      : 0;
   const activeHistoryReport = isHistoryMode
-    ? reports[safeHistoryIndex] || null
+    ? activeTaskReports[safeHistoryIndex] || null
     : null;
 
   // Reports corresponding to Task 1 or Task 2 draft (if already graded)
   const task1Report = useMemo(() => {
     if (!task1Draft.gradedReportId) return null;
-    return reports.find((r) => r.id === task1Draft.gradedReportId) || null;
-  }, [task1Draft.gradedReportId, reports]);
+    return (
+      task1Reports.find((r) => r.id === task1Draft.gradedReportId) || null
+    );
+  }, [task1Draft.gradedReportId, task1Reports]);
 
   const task2Report = useMemo(() => {
     if (!task2Draft.gradedReportId) return null;
-    return reports.find((r) => r.id === task2Draft.gradedReportId) || null;
-  }, [task2Draft.gradedReportId, reports]);
+    return (
+      task2Reports.find((r) => r.id === task2Draft.gradedReportId) || null
+    );
+  }, [task2Draft.gradedReportId, task2Reports]);
 
   const draftReport = activeTaskType === 'task1' ? task1Report : task2Report;
   const activeRightReport = isHistoryMode ? activeHistoryReport : draftReport;
 
   // Displayed values on the Left Sheet (Strictly isolated by activeTaskType)
   const displayedTaskType: WritingTaskType = isHistoryMode
-    ? activeHistoryReport?.taskType || 'task2'
+    ? activeHistoryReport?.taskType || activeTaskType
     : activeTaskType;
 
   const displayedTopicTag = isHistoryMode
-    ? activeHistoryReport?.topicTag || '历史存档 · Archive'
+    ? activeHistoryReport?.topicTag ||
+      (activeTaskType === 'task1'
+        ? '图表小作文 · Academic Task 1'
+        : '大作文历史存档 · Task 2 Archive')
     : activeTaskType === 'task1'
     ? '图表小作文 · Academic Task 1'
     : task2ResolvedTopicTag;
@@ -272,7 +292,9 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     : task2ResolvedPrompt;
 
   const displayedChartImage = isHistoryMode
-    ? activeHistoryReport?.chartImageDataUrl || null
+    ? activeHistoryReport?.image ||
+      activeHistoryReport?.chartImageDataUrl ||
+      null
     : activeTaskType === 'task1'
     ? task1Draft.image || null
     : null;
@@ -341,10 +363,16 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     return new Set(vocabCards.map((c) => c.word.trim().toLowerCase()));
   }, [vocabCards]);
 
-  // Set of practiced prompts from historical reports for the [ ✓ 已练 ] stamp
+  // Set of practiced prompts from Task 2 historical reports for the [ ✓ 已练 ] stamp
   const practicedPromptSet = useMemo(() => {
-    return new Set(reports.map((r) => r.prompt.trim()));
-  }, [reports]);
+    return new Set(task2Reports.map((r) => r.prompt.trim()));
+  }, [task2Reports]);
+
+  const practicedTopicIdSet = useMemo(() => {
+    return new Set(
+      task2Reports.map((r) => r.topicId).filter(Boolean) as string[]
+    );
+  }, [task2Reports]);
 
   // Countdown Timer Tick Effect (Persists remaining seconds directly into task1Draft.timer or task2Draft.timer)
   useEffect(() => {
@@ -461,17 +489,18 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     return () => window.removeEventListener('paste', handleGlobalPaste);
   }, [isHistoryMode, activeTaskType, handleAttachChartBlob]);
 
-  // Close Lightbox on Escape key
+  // Close Lightbox or History Drawer on Escape key
   useEffect(() => {
-    if (!isLightboxOpen) return;
+    if (!isLightboxOpen && !isHistoryDrawerOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsLightboxOpen(false);
+        setIsHistoryDrawerOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLightboxOpen]);
+  }, [isLightboxOpen, isHistoryDrawerOpen]);
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -495,6 +524,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     if (isHistoryMode) {
       setViewMode('draft');
     }
+    setIsHistoryDrawerOpen(false);
     setIsTimerRunning(false);
     setConfirmBackToCatalog(false);
     setErrorMsg(null);
@@ -688,7 +718,12 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
       const enrichedReport: WritingEvaluationReport = {
         ...newReport,
+        taskType: activeTaskType,
+        firstCriterionLabel: activeTaskType === 'task1' ? 'TA' : 'TR',
+        topicId:
+          activeTaskType === 'task2' ? task2Draft.selectedTopicId : undefined,
         topicTag: activeTopicTag,
+        image: activeTaskType === 'task1' ? task1Draft.image || null : null,
         chartImageDataUrl:
           activeTaskType === 'task1' ? task1Draft.image || null : null,
       };
@@ -721,17 +756,52 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     }
   };
 
+  // Open the task-specific History Archive Drawer ('TASK 1 · 小作文历史档案' or 'TASK 2 · 大作文历史档案')
   const handleEnterHistoryMode = () => {
-    if (reports.length === 0) return;
+    if (activeTaskReports.length === 0) return;
     setIsTimerRunning(false);
-    setHistoryIndex(0);
+    setConfirmBackToCatalog(false);
+    setErrorMsg(null);
+    setIsHistoryDrawerOpen(true);
+  };
+
+  // Inspect a specific historical record in full dual-sheet view
+  const handleSelectHistoryRecord = (index: number) => {
+    setHistoryIndex(index);
     setViewMode('history');
+    setIsHistoryDrawerOpen(false);
     setConfirmBackToCatalog(false);
     setErrorMsg(null);
   };
 
+  // Single-record deletion [ 🗑️ 删除 ]
+  const handleDeleteHistoryRecord = (
+    reportId: string,
+    taskType: WritingTaskType
+  ) => {
+    onDeleteReport(reportId, taskType);
+    if (taskType === 'task1' && task1Draft.gradedReportId === reportId) {
+      setTask1Draft((prev) => ({ ...prev, gradedReportId: null }));
+    }
+    if (taskType === 'task2' && task2Draft.gradedReportId === reportId) {
+      setTask2Draft((prev) => ({ ...prev, gradedReportId: null }));
+    }
+    const remainingCount = activeTaskReports.filter(
+      (r) => r.id !== reportId
+    ).length;
+    if (remainingCount === 0) {
+      setIsHistoryDrawerOpen(false);
+      if (isHistoryMode) {
+        setViewMode('draft');
+      }
+    } else if (safeHistoryIndex >= remainingCount) {
+      setHistoryIndex(Math.max(0, remainingCount - 1));
+    }
+  };
+
   const handleReturnToDraft = () => {
     setViewMode('draft');
+    setIsHistoryDrawerOpen(false);
     setConfirmBackToCatalog(false);
     setErrorMsg(null);
   };
@@ -871,14 +941,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 })}
               </div>
 
-              {/* History Archive Entry Button */}
-              {reports.length > 0 && (
+              {/* Task 2 Exclusive History Archive Entry Button */}
+              {task2Reports.length > 0 && (
                 <button
                   type="button"
                   onClick={handleEnterHistoryMode}
                   className="skeuo-btn-light rounded-lg px-3 py-1.5 font-mono text-xs text-[#262523]"
                 >
-                  历史批改 ({reports.length})
+                  历史批改 ({task2Reports.length})
                 </button>
               )}
             </div>
@@ -926,9 +996,9 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   const globalIdx =
                     task2Prompts.findIndex((p) => p.id === item.id) + 1;
                   const formattedNo = String(globalIdx).padStart(2, '0');
-                  const isPracticed = practicedPromptSet.has(
-                    item.prompt.trim()
-                  );
+                  const isPracticed =
+                    practicedTopicIdSet.has(item.id) ||
+                    practicedPromptSet.has(item.prompt.trim());
                   const hasActiveDraftHere =
                     !isTask2CustomPrompt &&
                     task2Draft.selectedTopicId === item.id &&
@@ -1244,20 +1314,19 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   <span className="text-xs text-[#EA5B25]">{errorMsg}</span>
                 ) : (
                   !isHistoryMode &&
-                  !hasComparisonReport &&
-                  reports.length > 0 && (
+                  activeTaskReports.length > 0 && (
                     <button
                       type="button"
                       onClick={handleEnterHistoryMode}
-                      className="font-mono text-[11px] text-[#7A7873] transition-colors hover:text-[#262523]"
+                      className="skeuo-btn-light rounded-lg px-3 py-1.5 font-mono text-xs text-[#262523]"
                     >
-                      历史批改 ({reports.length})
+                      历史批改 ({activeTaskReports.length})
                     </button>
                   )
                 )}
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 {timedCompletedWords !== null && !isHistoryMode ? (
                   <span className="rounded-md border border-[#DFC5B8] bg-[#F9EFEA] px-2.5 py-1 font-mono text-xs font-semibold text-[#EA5B25]">
                     考场限时完成：{timedCompletedWords} words
@@ -1266,6 +1335,16 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   <span className="font-mono text-xs tracking-wide text-[#7A7873]">
                     {displayedWordCount} words
                   </span>
+                )}
+
+                {!isHistoryMode && activeTaskReports.length > 0 && errorMsg && (
+                  <button
+                    type="button"
+                    onClick={handleEnterHistoryMode}
+                    className="skeuo-btn-light rounded-lg px-3 py-1.5 font-mono text-xs text-[#262523]"
+                  >
+                    历史批改 ({activeTaskReports.length})
+                  </button>
                 )}
 
                 {!isHistoryMode && (
@@ -1295,14 +1374,19 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               {/* History Mode Top Bar OR Draft Graded Top Bar */}
               {isHistoryMode ? (
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E2DFD5] bg-[#EFECE3] px-6 py-3">
-                  {/* Compact History Pager: [ < ] 02 / 05 篇 [ > ] */}
-                  <div className="flex items-center gap-1.5 font-mono text-xs text-[#262523]">
+                  {/* Left: Archive Title Stamp + Compact History Pager */}
+                  <div className="flex items-center gap-2 font-mono text-xs text-[#262523]">
+                    <span className="hidden sm:inline-block font-mono text-[11px] font-semibold tracking-wider text-[#7A7873]">
+                      {activeTaskType === 'task1'
+                        ? 'TASK 1 · 小作文历史档案'
+                        : 'TASK 2 · 大作文历史档案'}
+                    </span>
                     <button
                       type="button"
-                      disabled={safeHistoryIndex >= reports.length - 1}
+                      disabled={safeHistoryIndex >= activeTaskReports.length - 1}
                       onClick={() =>
                         setHistoryIndex((prev) =>
-                          Math.min(reports.length - 1, prev + 1)
+                          Math.min(activeTaskReports.length - 1, prev + 1)
                         )
                       }
                       className="skeuo-btn-light flex h-6 w-6 items-center justify-center rounded-md disabled:opacity-35"
@@ -1310,13 +1394,17 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     >
                       <ChevronLeft className="h-3.5 w-3.5" />
                     </button>
-                    <span className="px-1.5 text-[11px] font-semibold">
-                      {String(reports.length - safeHistoryIndex).padStart(
-                        2,
-                        '0'
-                      )}{' '}
-                      / {String(reports.length).padStart(2, '0')} 篇
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsHistoryDrawerOpen(true)}
+                      className="skeuo-btn-light rounded-md px-2 py-0.5 text-[11px] font-semibold"
+                      title="展开历史档案目录"
+                    >
+                      {String(
+                        activeTaskReports.length - safeHistoryIndex
+                      ).padStart(2, '0')}{' '}
+                      / {String(activeTaskReports.length).padStart(2, '0')} 篇
+                    </button>
                     <button
                       type="button"
                       disabled={safeHistoryIndex <= 0}
@@ -1330,25 +1418,32 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     </button>
                   </div>
 
-                  {/* Prominent Core Exit: [ ← 返回当前写作草稿 ] */}
-                  <button
-                    type="button"
-                    onClick={handleReturnToDraft}
-                    className="skeuo-btn-dark inline-flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-xs font-medium"
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5 text-[#EA5B25]" />
-                    <span>返回当前写作草稿</span>
-                  </button>
+                  {/* Right Actions: [ 🗑️ 删除 ] + [ ← 返回当前写作草稿 ] */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleDeleteHistoryRecord(
+                          activeRightReport.id,
+                          activeRightReport.taskType
+                        )
+                      }
+                      className="skeuo-btn-light inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[#7A7873] hover:text-[#EA5B25]"
+                      title="删除当前这条历史批改记录"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>删除</span>
+                    </button>
 
-                  {/* Minimalist [ ＋ 写篇新的 ] */}
-                  <button
-                    type="button"
-                    onClick={handleStartNewSheet}
-                    className="skeuo-btn-light inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[#262523]"
-                  >
-                    <Plus className="h-3.5 w-3.5 text-[#EA5B25]" />
-                    <span>写篇新的</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={handleReturnToDraft}
+                      className="skeuo-btn-dark inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-medium"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5 text-[#EA5B25]" />
+                      <span>返回当前写作草稿</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-between border-b border-[#E2DFD5] bg-[#EFECE3]/60 px-8 py-2.5">
@@ -1362,14 +1457,30 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                       }
                     )}
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleStartNewSheet}
-                    className="skeuo-btn-light inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-[#262523]"
-                  >
-                    <Plus className="h-3.5 w-3.5 text-[#EA5B25]" />
-                    <span>写篇新的</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleDeleteHistoryRecord(
+                          activeRightReport.id,
+                          activeRightReport.taskType
+                        )
+                      }
+                      className="skeuo-btn-light inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-[#7A7873] hover:text-[#EA5B25]"
+                      title="删除此条批改记录"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      <span>删除</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStartNewSheet}
+                      className="skeuo-btn-light inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-[#262523]"
+                    >
+                      <Plus className="h-3.5 w-3.5 text-[#EA5B25]" />
+                      <span>写篇新的</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1385,11 +1496,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     </div>
                   </div>
 
-                  {/* 4 Sub-scores Mechanical Stamp */}
+                  {/* 4 Sub-scores Mechanical Stamp (First dimension fixed as TA for Task 1, TR for Task 2) */}
                   <div className="flex items-center gap-4 font-mono">
                     <div className="text-right">
                       <div className="text-[10px] text-[#7A7873]">
-                        {activeRightReport.taskType === 'task1' ? 'TA' : 'TR'}
+                        {activeRightReport.firstCriterionLabel ||
+                          (activeRightReport.taskType === 'task1'
+                            ? 'TA'
+                            : 'TR')}
                       </div>
                       <div className="text-sm font-semibold text-[#262523]">
                         {activeRightReport.trTa.band.toFixed(1)}
@@ -1623,18 +1737,162 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   )}
                 </span>
 
-                {!isHistoryMode && reports.length > 0 && (
+                {activeTaskReports.length > 0 && (
                   <button
                     type="button"
                     onClick={handleEnterHistoryMode}
                     className="skeuo-btn-light rounded-lg px-3 py-1 font-mono text-[11px] text-[#7A7873] hover:text-[#262523]"
                   >
-                    历史批改 ({reports.length})
+                    历史批改 ({activeTaskReports.length})
                   </button>
                 )}
               </div>
             </section>
           )}
+        </div>
+      )}
+
+      {/* Task-Isolated History Archive Drawer / Modal ('TASK 1 · 小作文历史档案' / 'TASK 2 · 大作文历史档案') */}
+      {isHistoryDrawerOpen && (
+        <div
+          onClick={() => setIsHistoryDrawerOpen(false)}
+          className="fixed inset-0 z-50 flex justify-end bg-[#262523]/35 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="history-drawer-title"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="skeuo-paper flex h-full w-full max-w-xl flex-col overflow-hidden border-l border-[#DCD8CE]"
+          >
+            {/* Smartisan Vintage Double Crimson Header Rule */}
+            <div className="pt-3">
+              <div className="h-[2px] w-full bg-[#C97A63]/35" />
+              <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
+            </div>
+
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between border-b border-[#E2DFD5] px-6 py-4">
+              <div className="flex items-center gap-2.5">
+                <span className="h-2 w-2 rounded-full bg-[#EA5B25]" />
+                <h2
+                  id="history-drawer-title"
+                  className="font-mono text-sm font-bold tracking-wider text-[#262523]"
+                >
+                  {activeTaskType === 'task1'
+                    ? 'TASK 1 · 小作文历史档案'
+                    : 'TASK 2 · 大作文历史档案'}
+                </h2>
+                <span className="rounded-md border border-[#D8D4C8] bg-[#EFECE3] px-2 py-0.5 font-mono text-[11px] font-semibold text-[#7A7873]">
+                  {activeTaskReports.length} 篇
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsHistoryDrawerOpen(false)}
+                className="skeuo-btn-light flex h-7 w-7 items-center justify-center rounded-lg text-[#7A7873] hover:text-[#262523]"
+                aria-label="关闭历史档案"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Drawer Body: Filtered History List for Current Task Only */}
+            <div className="flex-1 space-y-3 overflow-y-auto p-6">
+              {activeTaskReports.length === 0 ? (
+                <div className="py-16 text-center text-xs text-[#7A7873]">
+                  暂无{activeTaskType === 'task1' ? '小作文' : '大作文'}历史批改记录
+                </div>
+              ) : (
+                activeTaskReports.map((item, idx) => {
+                  const seqNo = String(activeTaskReports.length - idx).padStart(
+                    2,
+                    '0'
+                  );
+                  const firstDimName =
+                    item.firstCriterionLabel ||
+                    (item.taskType === 'task1' ? 'TA' : 'TR');
+                  const itemImage =
+                    item.image || item.chartImageDataUrl || null;
+                  const isCurrentlySelected =
+                    isHistoryMode && activeHistoryReport?.id === item.id;
+
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => handleSelectHistoryRecord(idx)}
+                      className={`group relative cursor-pointer rounded-xl border p-4 transition-all ${
+                        isCurrentlySelected
+                          ? 'border-[#EA5B25] bg-[#F7F3EA] shadow-sm'
+                          : 'border-[#E2DFD5] bg-[#FAF8F2] hover:border-[#C5C0B2] hover:bg-[#F5F2EA]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+                          <span className="font-semibold text-[#7A7873]">
+                            #{seqNo}
+                          </span>
+                          <span className="rounded bg-[#262523] px-2 py-0.5 text-[11px] font-bold text-[#FAF8F2]">
+                            BAND {item.overallBand.toFixed(1)}
+                          </span>
+                          <span className="text-[11px] text-[#7A7873]">
+                            {firstDimName} {item.trTa.band.toFixed(1)} · CC{' '}
+                            {item.cc.band.toFixed(1)} · LR{' '}
+                            {item.lr.band.toFixed(1)} · GRA{' '}
+                            {item.gra.band.toFixed(1)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[11px] text-[#7A7873]">
+                            {new Date(item.createdAt).toLocaleString('zh-CN', {
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+
+                          {/* Single-Record Delete Button [ 🗑️ 删除 ] */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteHistoryRecord(item.id, item.taskType);
+                            }}
+                            className="skeuo-btn-light inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10px] font-medium text-[#7A7873] hover:text-[#EA5B25]"
+                            title="删除此条批改记录"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            <span>删除</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mt-2.5 flex items-start gap-3">
+                        {item.taskType === 'task1' && itemImage && (
+                          <img
+                            src={itemImage}
+                            alt="Task 1 Chart Thumbnail"
+                            className="h-14 w-20 shrink-0 rounded-lg border border-[#DCD8CE] bg-white object-contain p-0.5"
+                          />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="line-clamp-2 font-serif text-xs font-medium leading-relaxed text-[#262523]">
+                            {item.prompt}
+                          </p>
+                          <p className="mt-1 line-clamp-1 font-serif text-[11px] text-[#7A7873]">
+                            {item.essay} ({item.wordCount} words)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         </div>
       )}
 

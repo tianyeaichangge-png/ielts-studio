@@ -5,6 +5,7 @@ import {
   MasteryStatus,
   VocabularyCard,
   WritingEvaluationReport,
+  WritingTaskType,
 } from './types/ielts';
 import { DEFAULT_IELTS_VOCABULARY } from './lib/defaultVocabulary';
 import { DEFAULT_DEEPSEEK_ENDPOINT } from './lib/geminiEvaluator';
@@ -34,18 +35,78 @@ export function App() {
     }
   );
 
-  const [writingReports, setWritingReports] = useLocalStorage<
+  // Independent Task 1 & Task 2 History Archives ('ielts_history_task1' & 'ielts_history_task2')
+  const [task1Reports, setTask1Reports] = useLocalStorage<
     WritingEvaluationReport[]
-  >('ielts_studio_writing_reports_v1', []);
+  >('ielts_history_task1', []);
 
-  // Purge any legacy mock/demo-engine reports from localStorage so only 100% real DeepSeek reports exist
+  const [task2Reports, setTask2Reports] = useLocalStorage<
+    WritingEvaluationReport[]
+  >('ielts_history_task2', []);
+
+  // Automatic compatibility migration from legacy shared history ('ielts_studio_writing_reports_v1')
   useEffect(() => {
-    if (writingReports.some((r) => r.sourceMode === 'demo-engine')) {
-      setWritingReports((prev) =>
-        prev.filter((r) => r.sourceMode !== 'demo-engine')
+    try {
+      const legacyRaw = window.localStorage.getItem(
+        'ielts_studio_writing_reports_v1'
       );
+      if (!legacyRaw) return;
+      const legacyList = JSON.parse(legacyRaw);
+      if (Array.isArray(legacyList) && legacyList.length > 0) {
+        const migratedTask1: WritingEvaluationReport[] = [];
+        const migratedTask2: WritingEvaluationReport[] = [];
+
+        for (const item of legacyList) {
+          if (!item || typeof item !== 'object') continue;
+          const hasImage = Boolean(item.chartImageDataUrl || item.image);
+          const summaryStr = String(item?.trTa?.summary || '');
+          const isT1 =
+            item.taskType === 'task1' ||
+            hasImage ||
+            /\bTA\b|Task Achievement|图表/i.test(summaryStr);
+
+          if (isT1) {
+            migratedTask1.push({
+              ...item,
+              taskType: 'task1',
+              firstCriterionLabel: 'TA',
+              image: item.image || item.chartImageDataUrl || null,
+              chartImageDataUrl: item.chartImageDataUrl || item.image || null,
+            });
+          } else {
+            migratedTask2.push({
+              ...item,
+              taskType: 'task2',
+              firstCriterionLabel: 'TR',
+              topicId: item.topicId || 'custom',
+            });
+          }
+        }
+
+        if (migratedTask1.length > 0) {
+          setTask1Reports((prev) => {
+            const existingIds = new Set(prev.map((r) => r.id));
+            const uniqueNew = migratedTask1.filter(
+              (r) => !existingIds.has(r.id)
+            );
+            return [...prev, ...uniqueNew];
+          });
+        }
+        if (migratedTask2.length > 0) {
+          setTask2Reports((prev) => {
+            const existingIds = new Set(prev.map((r) => r.id));
+            const uniqueNew = migratedTask2.filter(
+              (r) => !existingIds.has(r.id)
+            );
+            return [...prev, ...uniqueNew];
+          });
+        }
+      }
+      window.localStorage.removeItem('ielts_studio_writing_reports_v1');
+    } catch {
+      // ignore migration parse errors
     }
-  }, [writingReports, setWritingReports]);
+  }, [setTask1Reports, setTask2Reports]);
 
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
 
@@ -88,9 +149,40 @@ export function App() {
     [setVocabCards]
   );
 
-  const handleSaveWritingReport = (report: WritingEvaluationReport) => {
-    setWritingReports((prev) => [report, ...prev]);
-  };
+  const handleSaveWritingReport = useCallback(
+    (report: WritingEvaluationReport) => {
+      if (report.taskType === 'task1') {
+        const normalizedT1: WritingEvaluationReport = {
+          ...report,
+          taskType: 'task1',
+          firstCriterionLabel: 'TA',
+          image: report.image || report.chartImageDataUrl || null,
+          chartImageDataUrl: report.chartImageDataUrl || report.image || null,
+        };
+        setTask1Reports((prev) => [normalizedT1, ...prev]);
+      } else {
+        const normalizedT2: WritingEvaluationReport = {
+          ...report,
+          taskType: 'task2',
+          firstCriterionLabel: 'TR',
+          topicId: report.topicId || 'custom',
+        };
+        setTask2Reports((prev) => [normalizedT2, ...prev]);
+      }
+    },
+    [setTask1Reports, setTask2Reports]
+  );
+
+  const handleDeleteWritingReport = useCallback(
+    (reportId: string, taskType: WritingTaskType) => {
+      if (taskType === 'task1') {
+        setTask1Reports((prev) => prev.filter((r) => r.id !== reportId));
+      } else {
+        setTask2Reports((prev) => prev.filter((r) => r.id !== reportId));
+      }
+    },
+    [setTask1Reports, setTask2Reports]
+  );
 
   const currentTab: ActiveTab =
     activeTab === 'writing' ? 'writing' : 'vocabulary';
@@ -113,8 +205,10 @@ export function App() {
         ) : (
           <WritingModule
             aiConfig={aiConfig}
-            reports={writingReports}
+            task1Reports={task1Reports}
+            task2Reports={task2Reports}
             onSaveReport={handleSaveWritingReport}
+            onDeleteReport={handleDeleteWritingReport}
             vocabCards={vocabCards}
             onIngestVocab={handleIngestVocabFromWriting}
             onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
