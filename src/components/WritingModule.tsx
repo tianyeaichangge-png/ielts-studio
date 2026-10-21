@@ -900,36 +900,40 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const isFinalFiveMinutes = secondsLeft > 0 && secondsLeft <= 300;
   const hasComparisonReport = Boolean(activeRightReport);
+  const showTopTaskSwitcher =
+    isHistoryMode || activeTaskType === 'task1' || currentStep === 'catalog';
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-14 pt-1">
-      {/* TOP TASK SWITCHER BAR: [ Task 1 | Task 2 ] */}
-      <div className="mb-6 flex items-center justify-center select-none">
-        <div className="skeuo-groove inline-flex items-center rounded-xl p-1">
-          <button
-            type="button"
-            onClick={() => handleTopTaskTypeSwitch('task1')}
-            className={`rounded-lg px-5 py-1 text-xs font-mono tracking-wide transition-all ${
-              displayedTaskType === 'task1'
-                ? 'skeuo-switch-thumb font-semibold text-[#262523]'
-                : 'text-[#7A7873] hover:text-[#262523]'
-            }`}
-          >
-            Task 1
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTopTaskTypeSwitch('task2')}
-            className={`rounded-lg px-5 py-1 text-xs font-mono tracking-wide transition-all ${
-              displayedTaskType === 'task2'
-                ? 'skeuo-switch-thumb font-semibold text-[#262523]'
-                : 'text-[#7A7873] hover:text-[#262523]'
-            }`}
-          >
-            Task 2
-          </button>
+      {/* TOP TASK SWITCHER BAR: [ Task 1 | Task 2 ] — Hidden during Task 2 immersive notepad writing */}
+      {showTopTaskSwitcher && (
+        <div className="mb-6 flex items-center justify-center select-none">
+          <div className="skeuo-groove inline-flex items-center rounded-xl p-1">
+            <button
+              type="button"
+              onClick={() => handleTopTaskTypeSwitch('task1')}
+              className={`rounded-lg px-5 py-1 text-xs font-mono tracking-wide transition-all ${
+                displayedTaskType === 'task1'
+                  ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                  : 'text-[#7A7873] hover:text-[#262523]'
+              }`}
+            >
+              Task 1
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTopTaskTypeSwitch('task2')}
+              className={`rounded-lg px-5 py-1 text-xs font-mono tracking-wide transition-all ${
+                displayedTaskType === 'task2'
+                  ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                  : 'text-[#7A7873] hover:text-[#262523]'
+              }`}
+            >
+              Task 2
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* =====================================================================
           STEP 1: TASK 2 TOPIC DIRECTORY INDEX VIEW (大作文题目目录索引页)
