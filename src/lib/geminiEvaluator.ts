@@ -30,7 +30,8 @@ function roundToHalfBand(score: number): number {
 
 /**
  * Converts a File or Clipboard Blob into a crisp, storage-friendly Base64 Data URL
- * suitable for localStorage persistence and lightbox inspection.
+ * and automatically crops out redundant pure-white margins around chart screenshots
+ * so axis labels and numbers render as large and clear as possible.
  */
 export function convertImageFileToDataUrl(file: File | Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -41,29 +42,104 @@ export function convertImageFileToDataUrl(file: File | Blob): Promise<string> {
       const img = new Image();
       img.onerror = () => resolve(rawDataUrl);
       img.onload = () => {
-        const maxDim = 1440;
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
+        const srcW = img.width;
+        const srcH = img.height;
+        if (!srcW || !srcH) {
           resolve(rawDataUrl);
           return;
         }
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.86));
+
+        // Step 1: Draw raw image onto a working canvas to detect non-white content bounds
+        const workCanvas = document.createElement('canvas');
+        workCanvas.width = srcW;
+        workCanvas.height = srcH;
+        const workCtx = workCanvas.getContext('2d');
+        if (!workCtx) {
+          resolve(rawDataUrl);
+          return;
+        }
+        workCtx.fillStyle = '#FFFFFF';
+        workCtx.fillRect(0, 0, srcW, srcH);
+        workCtx.drawImage(img, 0, 0, srcW, srcH);
+
+        let cropX = 0;
+        let cropY = 0;
+        let cropW = srcW;
+        let cropH = srcH;
+
+        try {
+          const imgData = workCtx.getImageData(0, 0, srcW, srcH).data;
+          let minX = srcW;
+          let minY = srcH;
+          let maxX = 0;
+          let maxY = 0;
+          let foundContent = false;
+
+          // Threshold: treat near-white pixels (R>246, G>246, B>246) as margin
+          for (let y = 0; y < srcH; y += 2) {
+            for (let x = 0; x < srcW; x += 2) {
+              const idx = (y * srcW + x) * 4;
+              const r = imgData[idx];
+              const g = imgData[idx + 1];
+              const b = imgData[idx + 2];
+              const a = imgData[idx + 3];
+              if (a > 16 && (r < 246 || g < 246 || b < 246)) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+                foundContent = true;
+              }
+            }
+          }
+
+          if (foundContent && maxX > minX + 40 && maxY > minY + 40) {
+            const pad = Math.round(Math.min(srcW, srcH) * 0.022);
+            cropX = Math.max(0, minX - pad);
+            cropY = Math.max(0, minY - pad);
+            cropW = Math.min(srcW - cropX, maxX - minX + pad * 2);
+            cropH = Math.min(srcH - cropY, maxY - minY + pad * 2);
+          }
+        } catch {
+          // Fallback to full image if getImageData fails
+        }
+
+        // Step 2: Scale cropped area down only if larger than 1600px
+        const maxDim = 1600;
+        let outW = cropW;
+        let outH = cropH;
+        if (outW > maxDim || outH > maxDim) {
+          if (outW > outH) {
+            outH = Math.round((outH * maxDim) / outW);
+            outW = maxDim;
+          } else {
+            outW = Math.round((outW * maxDim) / outH);
+            outH = maxDim;
+          }
+        }
+
+        const outCanvas = document.createElement('canvas');
+        outCanvas.width = outW;
+        outCanvas.height = outH;
+        const outCtx = outCanvas.getContext('2d');
+        if (!outCtx) {
+          resolve(rawDataUrl);
+          return;
+        }
+        outCtx.fillStyle = '#FFFFFF';
+        outCtx.fillRect(0, 0, outW, outH);
+        outCtx.drawImage(
+          workCanvas,
+          cropX,
+          cropY,
+          cropW,
+          cropH,
+          0,
+          0,
+          outW,
+          outH
+        );
+        resolve(outCanvas.toDataURL('image/jpeg', 0.9));
       };
       img.src = rawDataUrl;
     };

@@ -598,9 +598,36 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       viewStep: 'catalog',
       customPrompt: prev.selectedTopicId === 'custom' ? '' : prev.customPrompt,
       content: '',
+      outline: '',
+      outlinesByTopic: {
+        ...(prev.outlinesByTopic || {}),
+        [prev.selectedTopicId || 'custom']: '',
+      },
       timer: 2400,
       gradedReportId: null,
     }));
+  };
+
+  // Task 2 Outline / Notes per-topic persistence
+  const activeTask2TopicKey = task2Draft.selectedTopicId || 'custom';
+  const activeTask2Outline =
+    task2Draft.outlinesByTopic?.[activeTask2TopicKey] ??
+    task2Draft.outline ??
+    '';
+
+  const handleTask2OutlineChange = (newOutlineText: string) => {
+    if (isHistoryMode) return;
+    setTask2Draft((prev) => {
+      const key = prev.selectedTopicId || 'custom';
+      return {
+        ...prev,
+        outline: newOutlineText,
+        outlinesByTopic: {
+          ...(prev.outlinesByTopic || {}),
+          [key]: newOutlineText,
+        },
+      };
+    });
   };
 
   // Strictly isolated prompt text change handler
@@ -662,6 +689,11 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         customPrompt:
           prev.selectedTopicId === 'custom' ? '' : prev.customPrompt,
         content: '',
+        outline: '',
+        outlinesByTopic: {
+          ...(prev.outlinesByTopic || {}),
+          [prev.selectedTopicId || 'custom']: '',
+        },
         timer: 2400,
         gradedReportId: null,
       }));
@@ -934,7 +966,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     isHistoryMode || activeTaskType === 'task1' || currentStep === 'catalog';
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-14 pt-1">
+    <div className="mx-auto w-[92vw] max-w-[1280px] pb-14 pt-1">
       {/* TOP TASK SWITCHER BAR: [ Task 1 | Task 2 ] — Hidden during Task 2 immersive notepad writing */}
       {showTopTaskSwitcher && (
         <div className="mb-6 flex items-center justify-center select-none">
@@ -966,12 +998,12 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       )}
 
       {/* =====================================================================
-          STEP 1: TASK 2 TOPIC DIRECTORY INDEX VIEW (大作文题目目录索引页)
+          STEP 1: TASK 2 TOPIC DIRECTORY INDEX VIEW (大作文题目目录索引页 · 拓宽至 1000px)
          ===================================================================== */}
       {!isHistoryMode &&
       activeTaskType === 'task2' &&
       currentStep === 'catalog' ? (
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-[1000px]">
           <section className="skeuo-paper overflow-hidden rounded-2xl">
             {/* Smartisan Vintage Double Crimson Header Rule */}
             <div className="pt-4">
@@ -980,7 +1012,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             </div>
 
             {/* Catalog Header & Top Theme Filter Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E3DA] px-7 py-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E3DA] px-8 py-5">
               {/* Gentle Theme Filter Pills */}
               <div className="flex flex-wrap items-center gap-1.5">
                 {TASK2_CATALOG_FILTERS.map((cat) => {
@@ -1015,8 +1047,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             </div>
 
             {/* Catalog Body: Pinned Custom Prompt Card + Built-in Master Prompts */}
-            <div className="space-y-3.5 px-7 py-6">
-              {/* PINNED TOP SPECIAL CARD: ✍️ 自由命题 (Custom Prompt) */}
+            <div className="space-y-3.5 px-8 py-6">
+              {/* PINNED TOP SPECIAL CARD: 自由命题 (Custom Prompt) */}
               <button
                 type="button"
                 onClick={handleSelectCustomPromptMode}
@@ -1108,274 +1140,318 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             </div>
           </section>
         </div>
-      ) : (
+      ) : !activeRightReport ? (
         /* =====================================================================
-            STEP 2: IMMERSIVE WRITING NOTE PAD & EXAMINER SCORE SHEET
-            - Centered single sheet while writing (!hasComparisonReport)
-            - Dual-sheet side-by-side comparison after submitting (hasComparisonReport)
+            STEP 2A: WIDE-SCREEN OPEN-SPREAD DUAL-COLUMN WORKBENCH (左审题 45% · 右书写 55%)
            ===================================================================== */
-        <div
-          className={
-            hasComparisonReport
-              ? 'grid grid-cols-1 gap-7 lg:grid-cols-2 transition-all duration-300'
-              : 'mx-auto max-w-3xl transition-all duration-300'
-          }
+        <section
+          className={`skeuo-paper relative overflow-hidden rounded-2xl transition-shadow ${
+            isTimeUpLocked && !isHistoryMode
+              ? 'ring-2 ring-[#EA5B25]/45'
+              : ''
+          }`}
         >
-          {/* LEFT / CENTER SHEET: Smartisan Cream Writing Pad */}
-          <section
-            className={`skeuo-paper relative flex min-h-[680px] flex-col overflow-hidden rounded-2xl transition-shadow ${
-              isTimeUpLocked && !isHistoryMode
-                ? 'ring-2 ring-[#EA5B25]/45'
-                : ''
-            }`}
-          >
-            {/* Smartisan Vintage Double Crimson Header Rule */}
-            <div className="pt-4">
-              <div className="h-[2px] w-full bg-[#C97A63]/35" />
-              <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
-            </div>
+          {/* Smartisan Vintage Double Crimson Header Rule Across Open Spread */}
+          <div className="pt-4">
+            <div className="h-[2px] w-full bg-[#C97A63]/35" />
+            <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
+          </div>
 
-            {/* Symmetrical 3-Column Light-Skeuomorphic Header Bar */}
-            <div className="grid grid-cols-3 items-center gap-2 px-8 pt-5 pb-3.5 select-none">
-              {/* Left Column: Unified 1:1 Tactile White Button [ ← 重选题目 ] */}
-              <div className="flex items-center justify-start">
-                {!isHistoryMode && displayedTaskType === 'task2' && (
-                  <button
-                    type="button"
-                    onClick={handleRequestBackToCatalog}
-                    className="skeuo-switch-thumb inline-flex h-7 items-center gap-1 rounded-lg px-3 text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
-                  >
-                    <span className="leading-none">← 重选题目</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Center Column: Static Ink-Printed Topic Stamp (Pixel-Centered Vertically & Horizontally) */}
-              <div className="flex items-center justify-center text-center min-w-0">
-                <span className="truncate text-center font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#7A7873] leading-none translate-y-[1px]">
-                  {isHistoryMode
-                    ? `ARCHIVE · ${formatPrintedStamp(displayedTopicTag)}`
-                    : formatPrintedStamp(displayedTopicTag)}
-                </span>
-              </div>
-
-              {/* Right Column: Integrated Single-Piece Tactile Timer Key [ ● 40:00 ] */}
-              <div className="flex items-center justify-end">
-                {!isHistoryMode && (
-                  <button
-                    type="button"
-                    onClick={handleToggleTimer}
-                    title={isTimerRunning ? '点击暂停倒计时' : '点击开始倒计时'}
-                    className="skeuo-switch-thumb inline-flex h-7 items-center gap-2 rounded-lg px-3 font-mono text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
-                  >
-                    {/* 6px Status Dot: Light Gray when idle/paused, Braun Signal Orange pulsing when running */}
-                    <span
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${
-                        isTimerRunning
-                          ? 'bg-[#EA5B25] animate-pulse shadow-[0_0_4px_rgba(234,91,37,0.65)]'
-                          : isTimeUpLocked
-                          ? 'bg-[#EA5B25]'
-                          : 'bg-[#B8B4A9]'
-                      }`}
-                    />
-
-                    {/* Monospace Bold Countdown Digits */}
-                    <span
-                      className={`leading-none tracking-wider ${
-                        isTimeUpLocked || isFinalFiveMinutes
-                          ? 'text-[#EA5B25]'
-                          : 'text-[#262523]'
-                      } ${isFinalFiveMinutes ? 'animate-pulse' : ''}`}
+          {/* Open-Spread 2-Column Grid: Left 45% (Sticky Prompt/Chart/Outline) | Right 55% (Essay Writing) */}
+          <div className="grid grid-cols-1 lg:grid-cols-[45%_55%]">
+            {/* ===============================================================
+                LEFT PAGE (45%): Prompt, High-Res Chart (Task 1) or Outline Notes (Task 2)
+               =============================================================== */}
+            <div className="flex flex-col border-b border-[#E6E1D8] lg:sticky lg:top-4 lg:self-start lg:border-b-0 lg:border-r lg:border-[#E6E1D8]">
+              {/* Left Page Top Header */}
+              <div className="flex min-h-[54px] items-center justify-between gap-3 border-b border-[#ECE8DF] px-7 py-3.5 select-none">
+                {displayedTaskType === 'task2' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleRequestBackToCatalog}
+                      className="skeuo-switch-thumb inline-flex h-7 shrink-0 items-center gap-1 rounded-lg px-3 text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
                     >
-                      {formatTimerDisplay(secondsLeft)}
+                      <span className="leading-none">← 重选题目</span>
+                    </button>
+                    <span className="truncate font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#7A7873] leading-none translate-y-[1px]">
+                      {formatPrintedStamp(displayedTopicTag)}
                     </span>
-
-                    {/* On-Demand Borderless Reset Icon (Only shown when timer has moved and is paused) */}
-                    {!isTimerRunning && secondsLeft < defaultSecondsForTask && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleResetTimer();
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleResetTimer();
-                          }
-                        }}
-                        title="重置回初始时间"
-                        aria-label="重置回初始时间"
-                        className="ml-0.5 inline-flex items-center justify-center text-[#7A7873] transition-colors hover:text-[#EA5B25]"
-                      >
-                        <RotateCcw className="h-3 w-3" />
-                      </span>
-                    )}
-                  </button>
+                  </>
+                ) : (
+                  <span className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#7A7873] leading-none translate-y-[1px]">
+                    ACADEMIC TASK 1 · 图表小作文
+                  </span>
                 )}
               </div>
-            </div>
 
-            {/* Lightweight Anti-Loss Confirmation when clicking [ ← 重选题目 ] with >10 words */}
-            {confirmBackToCatalog && !isHistoryMode && (
-              <div className="mx-8 mb-3 flex items-center justify-between gap-3 rounded-xl border border-[#DFC5B8] bg-[#F9EFEA] px-4 py-2.5 text-xs text-[#262523]">
-                <span>当前正文已有内容，重选题目将清空当前草稿，是否继续？</span>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmBackToCatalog(false)}
-                    className="skeuo-btn-light rounded-lg px-2.5 py-1 text-[11px] font-medium"
-                  >
-                    取消
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmReturnAndClear}
-                    className="skeuo-btn-orange rounded-lg px-2.5 py-1 text-[11px] font-semibold"
-                  >
-                    继续
-                  </button>
+              {/* Anti-Loss Confirmation when clicking [ ← 重选题目 ] with >10 words */}
+              {confirmBackToCatalog && !isHistoryMode && (
+                <div className="mx-7 mt-4 flex items-center justify-between gap-3 rounded-xl border border-[#DFC5B8] bg-[#F9EFEA] px-4 py-2.5 text-xs text-[#262523]">
+                  <span>当前正文已有内容，重选题目将清空当前草稿，是否继续？</span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmBackToCatalog(false)}
+                      className="skeuo-btn-light rounded-lg px-2.5 py-1 text-[11px] font-medium"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmReturnAndClear}
+                      className="skeuo-btn-orange rounded-lg px-2.5 py-1 text-[11px] font-semibold"
+                    >
+                      继续
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-
-            {/* Time-Up Exam Lock Notice Banner */}
-            {isTimeUpLocked && !isHistoryMode && (
-              <div className="mx-8 mb-3 flex items-center justify-between gap-3 rounded-xl border border-[#EA5B25]/40 bg-[#F9EFEA] px-4 py-2 text-xs text-[#262523]">
-                <div className="flex items-center gap-2">
-                  <Lock className="h-3.5 w-3.5 text-[#EA5B25]" />
-                  <span>
-                    考场计时结束（00:00），正文已锁定，请点击右下角「交卷批改」。
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsTimeUpLocked(false)}
-                  className="skeuo-btn-light shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-medium text-[#7A7873] hover:text-[#262523]"
-                >
-                  解锁继续写
-                </button>
-              </div>
-            )}
-
-            {/* PROMPT PRESENTATION AREA */}
-            <div className="px-8 pb-4 pt-1">
-              {!isHistoryMode &&
-              (displayedTaskType === 'task1' || isTask2CustomPrompt) ? (
-                /* Custom Prompt or Task 1: Clean borderless auto-growing textarea */
-                <textarea
-                  ref={customPromptTextareaRef}
-                  rows={2}
-                  value={displayedPrompt}
-                  onChange={(e) => handlePromptChange(e.target.value)}
-                  placeholder={
-                    displayedTaskType === 'task1'
-                      ? '在此粘贴或输入你的小作文题目...'
-                      : '在此粘贴或输入你的大作文题目...'
-                  }
-                  aria-label="作文题目"
-                  className="w-full resize-none overflow-hidden bg-transparent font-serif text-[15px] leading-relaxed text-[#262523] placeholder-[#B5B1A6] focus:outline-none"
-                />
-              ) : (
-                /* Built-in Prompt or History Manuscript: Static printed serif typography on paper */
-                <p className="font-serif text-[15px] leading-relaxed text-[#262523] select-text">
-                  {displayedPrompt}
-                </p>
               )}
-            </div>
 
-            {/* TASK 1 EXCLUSIVE CHART PASTE & POLAROID PHOTO SLOT */}
-            {displayedTaskType === 'task1' && (
-              <div className="px-8 pb-4">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileInputChange}
-                  className="hidden"
-                />
+              {/* Left Page Upper Half: Prompt Presentation Area */}
+              <div className="px-7 pt-5 pb-4">
+                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
+                  PROMPT · 题目要求
+                </div>
+                {displayedTaskType === 'task1' || isTask2CustomPrompt ? (
+                  <textarea
+                    ref={customPromptTextareaRef}
+                    rows={3}
+                    value={displayedPrompt}
+                    onChange={(e) => handlePromptChange(e.target.value)}
+                    placeholder={
+                      displayedTaskType === 'task1'
+                        ? '在此粘贴或输入你的小作文题目...'
+                        : '在此粘贴或输入你的大作文题目...'
+                    }
+                    aria-label="作文题目"
+                    className="w-full resize-none overflow-hidden bg-transparent font-serif text-[15px] leading-relaxed text-[#262523] placeholder-[#B5B1A6] focus:outline-none"
+                  />
+                ) : (
+                  <p className="font-serif text-[15px] leading-relaxed text-[#262523] select-text">
+                    {displayedPrompt}
+                  </p>
+                )}
+              </div>
 
-                {displayedChartImage ? (
-                  /* Polaroid Photo Frame Card when chart image is attached */
-                  <div
-                    onClick={() => setIsLightboxOpen(true)}
-                    className="group relative mx-auto cursor-zoom-in overflow-hidden rounded-xl border border-[#D8D4C8] bg-[#FAF8F2] p-3 pb-4 shadow-[0_6px_16px_rgba(38,37,35,0.08),inset_0_1px_0_rgba(255,255,255,0.95)] transition hover:border-[#C2BDB0]"
-                    title="点击放大查看图表细节"
-                  >
-                    <img
-                      src={displayedChartImage}
-                      alt="Task 1 Chart"
-                      className="max-h-52 w-full rounded-lg object-contain bg-white"
-                    />
+              {/* Left Page Lower Half: Smartly allocated by Task 1 (HD Chart) vs Task 2 (Outline / Notes) */}
+              {displayedTaskType === 'task1' ? (
+                <div className="flex-1 border-t border-dashed border-[#DFDBD0] px-7 pt-4 pb-7">
+                  <div className="mb-2.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
+                    <span>CHART VISUAL · 图表原图</span>
+                    {displayedChartImage && (
+                      <span className="text-[#7A7873]">点击图片全屏放大</span>
+                    )}
+                  </div>
 
-                    {/* Subtle Zoom Hint Pill */}
-                    <span className="pointer-events-none absolute bottom-5 left-5 inline-flex items-center gap-1 rounded-md bg-[#262523]/75 px-2 py-0.5 font-mono text-[10px] text-[#FAF8F2] opacity-0 transition-opacity group-hover:opacity-100">
-                      <ZoomIn className="h-3 w-3" />
-                      <span>点击放大</span>
-                    </span>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileInputChange}
+                    className="hidden"
+                  />
 
-                    {/* Minimalist Top-Right Delete Button [×] */}
-                    {!isHistoryMode && (
+                  {displayedChartImage ? (
+                    <div
+                      onClick={() => setIsLightboxOpen(true)}
+                      className="group relative mx-auto cursor-zoom-in overflow-hidden rounded-xl border border-[#D8D4C8] bg-white p-2.5 shadow-[0_6px_16px_rgba(38,37,35,0.06)] transition hover:border-[#C2BDB0]"
+                      title="点击全屏放大查看图表细节"
+                    >
+                      <img
+                        src={displayedChartImage}
+                        alt="Task 1 Chart"
+                        className="h-auto max-h-[520px] w-full rounded-lg bg-white object-contain"
+                      />
+
+                      <span className="pointer-events-none absolute bottom-4 left-4 inline-flex items-center gap-1 rounded-md bg-[#262523]/75 px-2.5 py-1 font-mono text-[10px] text-[#FAF8F2] opacity-0 transition-opacity group-hover:opacity-100">
+                        <ZoomIn className="h-3 w-3" />
+                        <span>点击全屏放大</span>
+                      </span>
+
                       <button
                         type="button"
                         onClick={handleRemoveChartImage}
-                        className="skeuo-btn-light absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-md text-[#7A7873] hover:text-[#EA5B25]"
+                        className="skeuo-btn-light absolute right-3.5 top-3.5 flex h-6 w-6 items-center justify-center rounded-md text-[#7A7873] hover:text-[#EA5B25]"
                         title="移除图表"
                         aria-label="移除图表"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
-                    )}
-                  </div>
-                ) : (
-                  /* Recessed Chart Drop/Paste Slot in Draft Mode */
-                  !isHistoryMode && (
+                    </div>
+                  ) : (
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#CFCBC0] bg-[#F3F0E6]/65 py-3 px-4 text-xs text-[#7A7873] shadow-[inset_0_1px_3px_rgba(38,37,35,0.04)] transition hover:border-[#B8B3A6] hover:bg-[#EFECE2] hover:text-[#262523]"
+                      className="flex min-h-[300px] w-full flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-[#CFCBC0] bg-[#F3F0E6]/65 px-5 py-8 text-center text-xs text-[#7A7873] shadow-[inset_0_1px_3px_rgba(38,37,35,0.04)] transition hover:border-[#B8B3A6] hover:bg-[#EFECE2] hover:text-[#262523]"
                     >
-                      <ImagePlus className="h-4 w-4 text-[#EA5B25]" />
-                      <span>
+                      <ImagePlus className="h-6 w-6 text-[#EA5B25]" />
+                      <span className="leading-relaxed">
                         直接按{' '}
-                        <kbd className="font-mono font-semibold">Ctrl + V</kbd>{' '}
-                        粘贴图表截图，或点击上传本地图片
+                        <kbd className="font-mono font-semibold text-[#262523]">
+                          Ctrl + V
+                        </kbd>{' '}
+                        粘贴图表截图（自动裁切多余白边）
+                      </span>
+                      <span className="font-mono text-[11px] text-[#9E988E]">
+                        或点击此处上传本地图表图片
                       </span>
                     </button>
-                  )
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              ) : (
+                /* Task 2 Lower Half: Elegant Outline & Notes Area (审题与提纲草稿区) */
+                <div className="flex flex-1 flex-col border-t border-dashed border-[#DFDBD0] px-7 pt-4 pb-7">
+                  <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
+                    <span>OUTLINE &amp; NOTES · 审题与提纲草稿</span>
+                    <span>自动保存</span>
+                  </div>
 
-            {/* Fine Dashed Divider */}
-            <div className="mx-8 border-t border-dashed border-[#D5D1C6]" />
-
-            {/* Main Essay Writing Pad */}
-            <div className="flex flex-1 flex-col px-8 pt-5 pb-4">
-              <textarea
-                readOnly={isHistoryMode || isTimeUpLocked}
-                value={displayedEssay}
-                onChange={(e) => handleEssayChange(e.target.value)}
-                placeholder="在此开始书写正文..."
-                aria-label="作文正文"
-                className={`w-full flex-1 resize-none bg-transparent font-serif text-[16px] leading-[1.9] text-[#262523] placeholder-[#B5B1A6] focus:outline-none ${
-                  isHistoryMode || isTimeUpLocked
-                    ? 'cursor-default select-text opacity-85'
-                    : ''
-                }`}
-              />
+                  <div className="relative flex-1 rounded-xl border border-[#E4E0D5] bg-[#F6F3EB]/75 px-4 py-3 shadow-[inset_0_1px_2px_rgba(38,37,35,0.03)]">
+                    <textarea
+                      value={activeTask2Outline}
+                      onChange={(e) => handleTask2OutlineChange(e.target.value)}
+                      placeholder="在此快速列下你的核心论点、分论点结构与计划使用的高分词汇..."
+                      aria-label="审题与提纲草稿"
+                      style={{
+                        backgroundImage:
+                          'linear-gradient(to bottom, transparent 27px, rgba(216, 211, 198, 0.55) 28px)',
+                        backgroundSize: '100% 28px',
+                        lineHeight: '28px',
+                      }}
+                      className="min-h-[336px] w-full resize-none bg-transparent font-serif text-[13.5px] text-[#4A4843] placeholder-[#B0ACA0] focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Bottom Bar of Writing Sheet */}
-            <div className="flex items-center justify-between gap-4 border-t border-[#ECE9E0] bg-[#F6F3EB]/60 px-8 py-4">
-              <div className="flex items-center gap-3">
-                {!isHistoryMode && errorMsg ? (
-                  <span className="text-xs text-[#EA5B25]">{errorMsg}</span>
-                ) : (
-                  !isHistoryMode &&
-                  activeTaskReports.length > 0 && (
+            {/* ===============================================================
+                RIGHT PAGE (55%): Pure Immersive Essay Writing Area
+               =============================================================== */}
+            <div className="flex min-h-[720px] flex-col justify-between">
+              {/* Right Page Top Header: Subtle Manuscript Stamp + Right Tactile Countdown Timer */}
+              <div className="flex min-h-[54px] items-center justify-between gap-3 border-b border-[#ECE8DF] px-8 py-3.5 select-none">
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E] leading-none translate-y-[1px]">
+                  ESSAY MANUSCRIPT · 正文书写区
+                </span>
+
+                <button
+                  type="button"
+                  onClick={handleToggleTimer}
+                  title={isTimerRunning ? '点击暂停倒计时' : '点击开始倒计时'}
+                  className="skeuo-switch-thumb inline-flex h-7 items-center gap-2 rounded-lg px-3 font-mono text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
+                >
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${
+                      isTimerRunning
+                        ? 'bg-[#EA5B25] animate-pulse shadow-[0_0_4px_rgba(234,91,37,0.65)]'
+                        : isTimeUpLocked
+                        ? 'bg-[#EA5B25]'
+                        : 'bg-[#B8B4A9]'
+                    }`}
+                  />
+
+                  <span
+                    className={`leading-none tracking-wider ${
+                      isTimeUpLocked || isFinalFiveMinutes
+                        ? 'text-[#EA5B25]'
+                        : 'text-[#262523]'
+                    } ${isFinalFiveMinutes ? 'animate-pulse' : ''}`}
+                  >
+                    {formatTimerDisplay(secondsLeft)}
+                  </span>
+
+                  {!isTimerRunning && secondsLeft < defaultSecondsForTask && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleResetTimer();
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleResetTimer();
+                        }
+                      }}
+                      title="重置回初始时间"
+                      aria-label="重置回初始时间"
+                      className="ml-0.5 inline-flex items-center justify-center text-[#7A7873] transition-colors hover:text-[#EA5B25]"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Time-Up Exam Lock Notice Banner */}
+              {isTimeUpLocked && (
+                <div className="mx-8 mt-4 flex items-center justify-between gap-3 rounded-xl border border-[#EA5B25]/40 bg-[#F9EFEA] px-4 py-2 text-xs text-[#262523]">
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-3.5 w-3.5 text-[#EA5B25]" />
+                    <span>
+                      考场计时结束（00:00），正文已锁定，请点击右下角「交卷批改」。
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsTimeUpLocked(false)}
+                    className="skeuo-btn-light shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-medium text-[#7A7873] hover:text-[#262523]"
+                  >
+                    解锁继续写
+                  </button>
+                </div>
+              )}
+
+              {/* Right Page Center: Tall Unobstructed Pure Essay Writing Area (min-h-[600px]) */}
+              <div className="flex flex-1 flex-col px-8 pt-6 pb-5">
+                <textarea
+                  readOnly={isTimeUpLocked}
+                  value={displayedEssay}
+                  onChange={(e) => handleEssayChange(e.target.value)}
+                  placeholder="在此开始沉浸式书写正文..."
+                  aria-label="作文正文"
+                  className={`min-h-[600px] w-full flex-1 resize-none bg-transparent font-serif text-[16px] leading-[1.9] text-[#262523] placeholder-[#B5B1A6] focus:outline-none ${
+                    isTimeUpLocked
+                      ? 'cursor-default select-text opacity-85'
+                      : ''
+                  }`}
+                />
+              </div>
+
+              {/* Right Page Bottom Bar */}
+              <div className="flex items-center justify-between gap-4 border-t border-[#ECE9E0] bg-[#F6F3EB]/60 px-8 py-4">
+                <div className="flex items-center gap-3">
+                  {errorMsg ? (
+                    <span className="text-xs text-[#EA5B25]">{errorMsg}</span>
+                  ) : (
+                    activeTaskReports.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleEnterHistoryMode}
+                        className="skeuo-btn-light rounded-lg px-3 py-1.5 font-mono text-xs text-[#262523]"
+                      >
+                        历史批改 ({activeTaskReports.length})
+                      </button>
+                    )
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {timedCompletedWords !== null ? (
+                    <span className="rounded-md border border-[#DFC5B8] bg-[#F9EFEA] px-2.5 py-1 font-mono text-xs font-semibold text-[#EA5B25]">
+                      考场限时完成：{timedCompletedWords} words
+                    </span>
+                  ) : (
+                    <span className="font-mono text-xs tracking-wide text-[#7A7873]">
+                      {displayedWordCount} words
+                    </span>
+                  )}
+
+                  {activeTaskReports.length > 0 && errorMsg && (
                     <button
                       type="button"
                       onClick={handleEnterHistoryMode}
@@ -1383,32 +1459,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     >
                       历史批改 ({activeTaskReports.length})
                     </button>
-                  )
-                )}
-              </div>
+                  )}
 
-              <div className="flex items-center gap-3">
-                {timedCompletedWords !== null && !isHistoryMode ? (
-                  <span className="rounded-md border border-[#DFC5B8] bg-[#F9EFEA] px-2.5 py-1 font-mono text-xs font-semibold text-[#EA5B25]">
-                    考场限时完成：{timedCompletedWords} words
-                  </span>
-                ) : (
-                  <span className="font-mono text-xs tracking-wide text-[#7A7873]">
-                    {displayedWordCount} words
-                  </span>
-                )}
-
-                {!isHistoryMode && activeTaskReports.length > 0 && errorMsg && (
-                  <button
-                    type="button"
-                    onClick={handleEnterHistoryMode}
-                    className="skeuo-btn-light rounded-lg px-3 py-1.5 font-mono text-xs text-[#262523]"
-                  >
-                    历史批改 ({activeTaskReports.length})
-                  </button>
-                )}
-
-                {!isHistoryMode && (
                   <button
                     type="button"
                     disabled={isEvaluating}
@@ -1424,18 +1476,132 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                       <span>交卷批改</span>
                     )}
                   </button>
-                )}
+                </div>
               </div>
             </div>
-          </section>
+          </div>
+        </section>
+      ) : (
+        /* =====================================================================
+            STEP 2B: POST-SUBMISSION / HISTORY OPEN-SPREAD DUAL-PAGE VIEW
+            - Left Page (45%): Prompt + Chart Thumbnail + Candidate Essay Manuscript
+            - Right Page (55%): Examiner 4-Dimension Diagnostic Score Sheet
+           ===================================================================== */
+        <section className="skeuo-paper relative overflow-hidden rounded-2xl">
+          {/* Smartisan Vintage Double Crimson Header Rule Across Open Spread */}
+          <div className="pt-4">
+            <div className="h-[2px] w-full bg-[#C97A63]/35" />
+            <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
+          </div>
 
-          {/* RIGHT SHEET: Printed Examiner Score Sheet (Only shown after grading or in History mode) */}
-          {activeRightReport && (
-            <section className="skeuo-paper relative flex min-h-[680px] flex-col justify-between overflow-hidden rounded-2xl">
+          <div className="grid grid-cols-1 lg:grid-cols-[45%_55%]">
+            {/* ===============================================================
+                LEFT PAGE (45%): Compact Prompt + Chart Thumbnail + Essay Manuscript
+               =============================================================== */}
+            <div className="flex flex-col justify-between border-b border-[#E6E1D8] lg:border-b-0 lg:border-r lg:border-[#E6E1D8]">
+              <div>
+                {/* Left Page Top Bar */}
+                <div className="flex min-h-[52px] items-center justify-between gap-2 border-b border-[#ECE8DF] px-7 py-3 select-none">
+                  <div className="flex items-center gap-2.5">
+                    {!isHistoryMode && displayedTaskType === 'task2' && (
+                      <button
+                        type="button"
+                        onClick={handleRequestBackToCatalog}
+                        className="skeuo-switch-thumb inline-flex h-7 items-center gap-1 rounded-lg px-3 text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
+                      >
+                        <span className="leading-none">← 重选题目</span>
+                      </button>
+                    )}
+                    <span className="truncate font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#7A7873] leading-none translate-y-[1px]">
+                      {isHistoryMode
+                        ? `ARCHIVE · ${formatPrintedStamp(displayedTopicTag)}`
+                        : formatPrintedStamp(displayedTopicTag)}
+                    </span>
+                  </div>
+
+                  <span className="font-mono text-xs text-[#7A7873]">
+                    {displayedWordCount} words
+                  </span>
+                </div>
+
+                {/* Compact Prompt Section */}
+                <div className="border-b border-dashed border-[#DFDBD0] px-7 py-4">
+                  <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
+                    PROMPT · 题目
+                  </div>
+                  <p className="font-serif text-[14px] leading-relaxed text-[#262523] select-text">
+                    {displayedPrompt}
+                  </p>
+
+                  {/* Task 1 Chart Thumbnail in Graded/History View */}
+                  {displayedTaskType === 'task1' && displayedChartImage && (
+                    <div
+                      onClick={() => setIsLightboxOpen(true)}
+                      className="group relative mt-3 cursor-zoom-in overflow-hidden rounded-xl border border-[#D8D4C8] bg-white p-2 shadow-sm transition hover:border-[#C2BDB0]"
+                      title="点击全屏放大查看图表"
+                    >
+                      <img
+                        src={displayedChartImage}
+                        alt="Task 1 Chart"
+                        className="max-h-[260px] w-full rounded-lg bg-white object-contain"
+                      />
+                      <span className="pointer-events-none absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-md bg-[#262523]/75 px-2 py-0.5 font-mono text-[10px] text-[#FAF8F2] opacity-0 transition-opacity group-hover:opacity-100">
+                        <ZoomIn className="h-3 w-3" />
+                        <span>点击放大</span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Candidate Essay Manuscript */}
+                <div className="px-7 py-5">
+                  <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
+                    CANDIDATE ESSAY · 作文原稿
+                  </div>
+                  <textarea
+                    readOnly={isHistoryMode}
+                    value={displayedEssay}
+                    onChange={(e) => handleEssayChange(e.target.value)}
+                    aria-label="作文原稿"
+                    className={`min-h-[420px] w-full resize-none bg-transparent font-serif text-[15px] leading-[1.85] text-[#262523] focus:outline-none ${
+                      isHistoryMode ? 'cursor-default select-text' : ''
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Left Page Footer (Draft mode allows re-submitting after edits) */}
+              {!isHistoryMode && (
+                <div className="flex items-center justify-between gap-3 border-t border-[#ECE9E0] bg-[#F6F3EB]/60 px-7 py-3.5">
+                  <span className="font-mono text-[11px] text-[#7A7873]">
+                    可直接修改上方原稿并再次交卷
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isEvaluating}
+                    onClick={handleEvaluateDraft}
+                    className="skeuo-btn-orange inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold disabled:opacity-60"
+                  >
+                    {isEvaluating ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>批改中</span>
+                      </>
+                    ) : (
+                      <span>重新交卷批改</span>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ===============================================================
+                RIGHT PAGE (55%): Examiner 4-Dimension Diagnostic Score Sheet
+               =============================================================== */}
+            <div className="flex min-h-[700px] flex-col justify-between">
               {/* History Mode Top Bar OR Draft Graded Top Bar */}
               {isHistoryMode ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E2DFD5] bg-[#EFECE3] px-6 py-3">
-                  {/* Left: Archive Title Stamp + Compact History Pager */}
+                <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-2 border-b border-[#E2DFD5] bg-[#EFECE3] px-7 py-3">
                   <div className="flex items-center gap-2 font-mono text-xs text-[#262523]">
                     <span className="hidden sm:inline-block font-mono text-[11px] font-semibold tracking-wider text-[#7A7873]">
                       {activeTaskType === 'task1'
@@ -1444,7 +1610,9 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     </span>
                     <button
                       type="button"
-                      disabled={safeHistoryIndex >= activeTaskReports.length - 1}
+                      disabled={
+                        safeHistoryIndex >= activeTaskReports.length - 1
+                      }
                       onClick={() =>
                         setHistoryIndex((prev) =>
                           Math.min(activeTaskReports.length - 1, prev + 1)
@@ -1479,7 +1647,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     </button>
                   </div>
 
-                  {/* Right Actions: [ 🗑️ 删除 ] + [ ← 返回当前写作草稿 ] */}
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1507,7 +1674,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between border-b border-[#E2DFD5] bg-[#EFECE3]/60 px-8 py-2.5">
+                <div className="flex min-h-[52px] items-center justify-between border-b border-[#E2DFD5] bg-[#EFECE3]/60 px-8 py-2.5">
                   <span className="font-mono text-[11px] text-[#7A7873]">
                     当前批改成绩单 ·{' '}
                     {new Date(activeRightReport.createdAt).toLocaleTimeString(
@@ -1596,7 +1763,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               </div>
 
               {/* Printed Examiner Feedback Body */}
-              <div className="max-h-[470px] flex-1 space-y-6 overflow-y-auto px-8 py-6 text-xs leading-relaxed text-[#262523]">
+              <div className="max-h-[580px] flex-1 space-y-6 overflow-y-auto px-8 py-6 text-xs leading-relaxed text-[#262523]">
                 {/* Four Criteria Summaries */}
                 <div className="space-y-3.5">
                   <div>
@@ -1784,7 +1951,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               </div>
 
               {/* Bottom Footer of Right Score Sheet */}
-              <div className="flex items-center justify-between border-t border-[#ECE9E0] bg-[#F6F3EB]/60 px-8 py-3 text-[11px] font-mono text-[#7A7873]">
+              <div className="flex items-center justify-between border-t border-[#ECE9E0] bg-[#F6F3EB]/60 px-8 py-3.5 text-[11px] font-mono text-[#7A7873]">
                 <span>
                   {new Date(activeRightReport.createdAt).toLocaleString(
                     'zh-CN',
@@ -1808,9 +1975,9 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   </button>
                 )}
               </div>
-            </section>
-          )}
-        </div>
+            </div>
+          </div>
+        </section>
       )}
 
       {/* Task-Isolated History Archive Drawer / Modal ('TASK 1 · 小作文历史档案' / 'TASK 2 · 大作文历史档案') */}

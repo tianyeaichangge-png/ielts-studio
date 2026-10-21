@@ -98,6 +98,8 @@ export interface Task2DraftState {
   selectedTopicId: string | 'custom';
   customPrompt: string;
   content: string;
+  outline?: string;
+  outlinesByTopic?: Record<string, string>;
   timer: number;
   viewStep: 'catalog' | 'writing';
   gradedReportId?: string | null;
