@@ -256,8 +256,9 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [studyMode, setStudyMode] = useState<StudyMode>('recognize');
 
-  // Recognize Mode state
-  const [isMeaningRevealed, setIsMeaningRevealed] = useState(false);
+  // Recognize Mode 3D flip state
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [isFlipTransitionEnabled, setIsFlipTransitionEnabled] = useState(true);
 
   // Spelling Mode states
   const [typedInput, setTypedInput] = useState('');
@@ -378,7 +379,8 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
       window.clearTimeout(autoAdvanceTimerRef.current);
       autoAdvanceTimerRef.current = null;
     }
-    setIsMeaningRevealed(false);
+    setIsFlipTransitionEnabled(false);
+    setIsFlipped(false);
     setTypedInput('');
     setSpellStatus('idle');
     setHasRecordedMistakeThisCard(false);
@@ -400,6 +402,12 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
     handleSpeak,
   ]);
 
+  const handleToggleFlip = useCallback(() => {
+    if (studyMode !== 'recognize') return;
+    setIsFlipTransitionEnabled(true);
+    setIsFlipped((prev) => !prev);
+  }, [studyMode]);
+
   const handleDecision = useCallback(
     (status: MasteryStatus) => {
       if (!activeCard || total === 0) return;
@@ -408,7 +416,8 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
         autoAdvanceTimerRef.current = null;
       }
       onUpdateStatus(activeCard.id, status);
-      setIsMeaningRevealed(false);
+      setIsFlipTransitionEnabled(false);
+      setIsFlipped(false);
       setTypedInput('');
       setSpellStatus('idle');
       setHasRecordedMistakeThisCard(false);
@@ -508,7 +517,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
       }
       if (e.code === 'Space') {
         e.preventDefault();
-        setIsMeaningRevealed((prev) => !prev);
+        handleToggleFlip();
       } else if (e.key === '1') {
         e.preventDefault();
         handleDecision('unlearned');
@@ -519,7 +528,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawerOpen, studyMode, handleDecision]);
+  }, [isDrawerOpen, studyMode, handleDecision, handleToggleFlip]);
 
   // AI Smart Word Ingestion handler
   const handleAiIngestWords = async () => {
@@ -664,93 +673,320 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
         </div>
       ) : (
         <>
+          {/* =====================================================================
+              3D PERSPECTIVE CONTAINER & FLIPPER (Front & Back Always Mounted)
+             ===================================================================== */}
           <div
-            onClick={() => {
-              if (studyMode === 'recognize') {
-                setIsMeaningRevealed((prev) => !prev);
-              } else {
-                spellInputRef.current?.focus();
-              }
-            }}
-            className={`skeuo-paper relative flex min-h-[380px] w-full max-w-[540px] flex-col justify-between rounded-2xl px-8 py-8 text-center transition-all sm:px-10 ${
-              studyMode === 'recognize' ? 'cursor-pointer' : 'cursor-text'
-            }`}
+            className="w-full max-w-[540px]"
+            style={{ perspective: '1200px' }}
           >
-            {/* TOP HEADER ROW: Left POS + Stamp | Right Pure Text Mode Switcher [ 认读 | 拼写 ] */}
-            <div className="flex w-full items-center justify-between gap-2">
-              <div className="flex items-center gap-2 font-mono text-[11px] tracking-wider text-[#7A7873]">
-                {validPos && <span className="font-semibold">{validPos}</span>}
-                {activeCard.fromWriting && (
-                  <span className="rounded border border-[#D8D4C8] bg-[#F3F0E6] px-2 py-0.5 font-mono text-[10px] tracking-normal text-[#7A7873] shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
-                    [ 来自写作批改 ]
-                  </span>
-                )}
-              </div>
-
-              {/* Right Top: Pure Text Braun Micro Toggle [ 认读 | 拼写 ] */}
+            <div
+              onClick={() => {
+                if (studyMode === 'recognize') {
+                  handleToggleFlip();
+                } else {
+                  spellInputRef.current?.focus();
+                }
+              }}
+              className={`relative h-[390px] w-full ${
+                studyMode === 'recognize' ? 'cursor-pointer' : 'cursor-text'
+              }`}
+              style={{
+                transformStyle: 'preserve-3d',
+                transition: isFlipTransitionEnabled
+                  ? 'transform 0.55s cubic-bezier(0.22, 1, 0.36, 1)'
+                  : 'none',
+                transform:
+                  studyMode === 'recognize' && isFlipped
+                    ? 'rotateY(180deg)'
+                    : 'rotateY(0deg)',
+              }}
+            >
+              {/* =================================================================
+                  FRONT FACE (rotateY(0deg)) — Recognize Front OR Spelling Mode
+                 ================================================================= */}
               <div
-                onClick={(e) => e.stopPropagation()}
-                className="skeuo-groove inline-flex items-center rounded-lg p-0.5"
+                className="skeuo-paper absolute inset-0 flex flex-col justify-between rounded-2xl px-8 py-8 text-center sm:px-10"
+                style={{
+                  backfaceVisibility: 'hidden',
+                  WebkitBackfaceVisibility: 'hidden',
+                  transform: 'rotateY(0deg)',
+                  pointerEvents:
+                    studyMode === 'recognize' && isFlipped ? 'none' : 'auto',
+                }}
               >
-                <button
-                  type="button"
-                  onClick={() => setStudyMode('recognize')}
-                  className={`rounded-md px-3 py-1 text-[11px] transition-all ${
-                    studyMode === 'recognize'
-                      ? 'skeuo-switch-thumb font-semibold text-[#262523]'
-                      : 'text-[#7A7873] hover:text-[#262523]'
-                  }`}
-                >
-                  认读
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStudyMode('spell')}
-                  className={`rounded-md px-3 py-1 text-[11px] transition-all ${
-                    studyMode === 'spell'
-                      ? 'skeuo-switch-thumb font-semibold text-[#262523]'
-                      : 'text-[#7A7873] hover:text-[#262523]'
-                  }`}
-                >
-                  拼写
-                </button>
-              </div>
-            </div>
+                {/* TOP HEADER ROW: Pure Ink POS + Stamp | Right Mode Switcher [ 认读 | 拼写 ] */}
+                <div className="flex w-full items-center justify-between gap-2">
+                  <div className="font-mono text-xs tracking-wide text-[#9E988E]">
+                    {validPos}
+                    {activeCard.fromWriting
+                      ? `${validPos ? ' · ' : ''}来自写作批改`
+                      : ''}
+                  </div>
 
-            {/* =====================================================================
-                MODE 1: RECOGNIZE MODE (认读模式 — 纯粹正反面翻转 Card Flip)
-               ===================================================================== */}
-            {studyMode === 'recognize' ? (
-              !isMeaningRevealed ? (
-                /* CARD FRONT (正面：大号单词 + 音标发音) */
-                <div className="my-auto flex flex-col items-center py-6">
-                  <h1
-                    className={`font-serif font-normal tracking-tight text-[#262523] ${
-                      isLongPhrase
-                        ? 'text-3xl sm:text-4xl leading-snug'
-                        : 'text-5xl'
-                    }`}
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="skeuo-groove inline-flex items-center rounded-lg p-0.5"
                   >
-                    {activeCard.word}
-                  </h1>
-
-                  <div className="mt-4 inline-flex items-center gap-2 text-[#7A7873]">
-                    {validPhonetic && (
-                      <span className="font-mono text-sm">{validPhonetic}</span>
-                    )}
                     <button
                       type="button"
-                      onClick={(e) => handleSpeak(activeCard.word, e)}
-                      className="skeuo-btn-light flex h-7 w-7 items-center justify-center rounded-lg text-[#7A7873] hover:text-[#EA5B25]"
-                      title="朗读英式发音 (en-GB)"
-                      aria-label="朗读英式发音"
+                      onClick={() => setStudyMode('recognize')}
+                      className={`rounded-md px-3 py-1 text-[11px] transition-all ${
+                        studyMode === 'recognize'
+                          ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                          : 'text-[#7A7873] hover:text-[#262523]'
+                      }`}
                     >
-                      <Volume2 className="h-3.5 w-3.5" />
+                      认读
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsFlipTransitionEnabled(false);
+                        setIsFlipped(false);
+                        setStudyMode('spell');
+                      }}
+                      className={`rounded-md px-3 py-1 text-[11px] transition-all ${
+                        studyMode === 'spell'
+                          ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                          : 'text-[#7A7873] hover:text-[#262523]'
+                      }`}
+                    >
+                      拼写
                     </button>
                   </div>
                 </div>
-              ) : (
-                /* CARD BACK (背面：无内嵌灰框，直接在米白道林纸面上居中排版) */
+
+                {studyMode === 'recognize' ? (
+                  /* RECOGNIZE MODE — FRONT CENTER */
+                  <div className="my-auto flex flex-col items-center py-6">
+                    <h1
+                      className={`font-serif font-normal tracking-tight text-[#262523] ${
+                        isLongPhrase
+                          ? 'text-3xl sm:text-4xl leading-snug'
+                          : 'text-5xl'
+                      }`}
+                    >
+                      {activeCard.word}
+                    </h1>
+
+                    <div className="mt-4 inline-flex items-center gap-2 text-[#7A7873]">
+                      {validPhonetic && (
+                        <span className="font-mono text-sm">
+                          {validPhonetic}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => handleSpeak(activeCard.word, e)}
+                        className="skeuo-btn-light flex h-7 w-7 items-center justify-center rounded-lg text-[#7A7873] hover:text-[#EA5B25]"
+                        title="朗读英式发音 (en-GB)"
+                        aria-label="朗读英式发音"
+                      >
+                        <Volume2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* SPELLING MODE — FRONT CENTER (Minimalist Single-Layer Underlines, No Hint Clutter) */
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      spellInputRef.current?.focus();
+                    }}
+                    className="my-auto flex w-full flex-col items-center py-4"
+                  >
+                    <div className="flex flex-col items-center gap-1.5">
+                      <div className="inline-flex items-center gap-2">
+                        <span className="text-xl font-semibold tracking-tight text-[#262523]">
+                          {activeCard.chineseMeaning}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleSpeak(activeCard.word, e)}
+                          className="inline-flex h-6 w-6 items-center justify-center rounded text-[#9B978E] transition-colors hover:text-[#EA5B25]"
+                          title="重播发音 (Tab)"
+                          aria-label="重播发音"
+                        >
+                          <Volume2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      {originalErrorText && (
+                        <span className="font-mono text-[11px] text-[#7A7873]">
+                          原词误写：
+                          <span className="ml-1 text-[#EA5B25] line-through">
+                            {originalErrorText}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Borderless Paper-Direct Spelling Zone (Single Bottom Dash Only) */}
+                    <div
+                      key={shakeKey}
+                      className={`relative mt-7 w-full max-w-md py-2 transition-all ${
+                        spellStatus === 'wrong' ? 'animate-shake' : ''
+                      }`}
+                    >
+                      <input
+                        ref={spellInputRef}
+                        type="text"
+                        value={typedInput}
+                        autoFocus
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                        onChange={(e) => {
+                          if (spellStatus === 'correct') return;
+                          setTypedInput(e.target.value);
+                          if (spellStatus === 'wrong') {
+                            setSpellStatus('idle');
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleVerifySpelling();
+                          } else if (e.key === 'Tab') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleTabHintAndReplay();
+                          }
+                        }}
+                        aria-label="拼写默写输入框"
+                        className="absolute inset-0 z-10 h-full w-full cursor-text opacity-0"
+                      />
+
+                      <div className="flex flex-wrap items-end justify-center gap-x-1.5 gap-y-3">
+                        {targetWord.split('').map((targetChar, idx) => {
+                          if (targetChar === ' ') {
+                            return <span key={idx} className="w-3.5" />;
+                          }
+
+                          const userChar = typedInput[idx] || '';
+                          const isCurrentCursor =
+                            spellStatus !== 'correct' &&
+                            idx === typedInput.length;
+                          const isWrongCharHere =
+                            spellStatus === 'wrong' &&
+                            userChar.toLowerCase() !==
+                              targetChar.toLowerCase();
+
+                          return (
+                            <span
+                              key={idx}
+                              className={`inline-flex h-9 w-[22px] items-center justify-center border-b-2 pb-1 font-mono text-xl font-semibold leading-none transition-colors ${
+                                spellStatus === 'correct'
+                                  ? 'border-[#2E7D5B] text-[#2E7D5B]'
+                                  : isWrongCharHere
+                                  ? 'border-[#EA5B25] text-[#EA5B25]'
+                                  : isCurrentCursor
+                                  ? 'border-[#EA5B25] text-[#262523]'
+                                  : userChar
+                                  ? 'border-[#262523] text-[#262523]'
+                                  : 'border-[#C8C3B6] text-transparent'
+                              }`}
+                            >
+                              {userChar}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Feedback Banner Below Slot */}
+                    <div className="mt-2 min-h-[26px]">
+                      {spellStatus === 'correct' && (
+                        <div className="inline-flex items-center gap-1.5 font-mono text-xs font-medium text-[#2E7D5B]">
+                          <Check className="h-3.5 w-3.5" />
+                          <span>拼写正确</span>
+                        </div>
+                      )}
+
+                      {spellStatus === 'wrong' && (
+                        <div className="inline-flex items-center gap-1.5 font-mono text-xs text-[#EA5B25]">
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          <span>
+                            正确拼写：
+                            <strong className="ml-1 font-serif text-sm tracking-wide text-[#262523] underline decoration-[#EA5B25] underline-offset-4">
+                              {targetWord}
+                            </strong>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* FRONT BOTTOM: Pure Example Sentence Only (Zero Hint Clutter) */}
+                <p className="mx-auto max-w-md font-serif text-sm italic leading-relaxed text-[#7A7873] line-clamp-3">
+                  “
+                  {studyMode === 'spell' && spellStatus !== 'correct'
+                    ? maskedSentence
+                    : activeCard.exampleSentence}
+                  ”
+                </p>
+              </div>
+
+              {/* =================================================================
+                  BACK FACE (rotateY(180deg)) — Always Mounted in DOM for True 3D Flip
+                 ================================================================= */}
+              <div
+                className="skeuo-paper absolute inset-0 flex flex-col justify-between rounded-2xl px-8 py-8 text-center sm:px-10"
+                style={{
+                  backfaceVisibility: 'hidden',
+                  WebkitBackfaceVisibility: 'hidden',
+                  transform: 'rotateY(180deg)',
+                  pointerEvents:
+                    studyMode === 'recognize' && isFlipped ? 'auto' : 'none',
+                }}
+              >
+                {/* BACK TOP HEADER ROW: Pure Ink POS + Stamp | Right Mode Switcher [ 认读 | 拼写 ] */}
+                <div className="flex w-full items-center justify-between gap-2">
+                  <div className="font-mono text-xs tracking-wide text-[#9E988E]">
+                    {validPos}
+                    {activeCard.fromWriting
+                      ? `${validPos ? ' · ' : ''}来自写作批改`
+                      : ''}
+                  </div>
+
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="skeuo-groove inline-flex items-center rounded-lg p-0.5"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setStudyMode('recognize')}
+                      className={`rounded-md px-3 py-1 text-[11px] transition-all ${
+                        studyMode === 'recognize'
+                          ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                          : 'text-[#7A7873] hover:text-[#262523]'
+                      }`}
+                    >
+                      认读
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsFlipTransitionEnabled(false);
+                        setIsFlipped(false);
+                        setStudyMode('spell');
+                      }}
+                      className={`rounded-md px-3 py-1 text-[11px] transition-all ${
+                        studyMode === 'spell'
+                          ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                          : 'text-[#7A7873] hover:text-[#262523]'
+                      }`}
+                    >
+                      拼写
+                    </button>
+                  </div>
+                </div>
+
+                {/* BACK CENTER: Word Echo + Prominent Meaning + Synonyms + Original Error */}
                 <div className="my-auto flex flex-col items-center py-4">
                   {/* 1. 顶部小字回显英文单词与音标 */}
                   <div className="inline-flex items-center gap-2 text-[#7A7873]">
@@ -798,165 +1034,12 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                     </div>
                   )}
                 </div>
-              )
-            ) : (
-              /* =====================================================================
-                  MODE 2: SPELLING MODE (极简无框 · 单层底线 · 聚焦输入)
-                 ===================================================================== */
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  spellInputRef.current?.focus();
-                }}
-                className="my-auto flex w-full flex-col items-center py-4"
-              >
-                {/* Clue Header: Pure Chinese Meaning + Subtle Speaker */}
-                <div className="flex flex-col items-center gap-1.5">
-                  <div className="inline-flex items-center gap-2">
-                    <span className="text-xl font-semibold tracking-tight text-[#262523]">
-                      {activeCard.chineseMeaning}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => handleSpeak(activeCard.word, e)}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded text-[#9B978E] transition-colors hover:text-[#EA5B25]"
-                      title="重播发音 (Tab)"
-                      aria-label="重播发音"
-                    >
-                      <Volume2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
 
-                  {originalErrorText && (
-                    <span className="font-mono text-[11px] text-[#7A7873]">
-                      原词误写：
-                      <span className="ml-1 text-[#EA5B25] line-through">
-                        {originalErrorText}
-                      </span>
-                    </span>
-                  )}
-                </div>
-
-                {/* Borderless Paper-Direct Spelling Zone (Single Bottom Dash Only) */}
-                <div
-                  key={shakeKey}
-                  className={`relative mt-7 w-full max-w-md py-2 transition-all ${
-                    spellStatus === 'wrong' ? 'animate-shake' : ''
-                  }`}
-                >
-                  {/* Hidden Real Keyboard Input */}
-                  <input
-                    ref={spellInputRef}
-                    type="text"
-                    value={typedInput}
-                    autoFocus
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    onChange={(e) => {
-                      if (spellStatus === 'correct') return;
-                      setTypedInput(e.target.value);
-                      if (spellStatus === 'wrong') {
-                        setSpellStatus('idle');
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleVerifySpelling();
-                      } else if (e.key === 'Tab') {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleTabHintAndReplay();
-                      }
-                    }}
-                    aria-label="拼写默写输入框"
-                    className="absolute inset-0 z-10 h-full w-full cursor-text opacity-0"
-                  />
-
-                  {/* Single-Layer Bottom Underline Slots */}
-                  <div className="flex flex-wrap items-end justify-center gap-x-1.5 gap-y-3">
-                    {targetWord.split('').map((targetChar, idx) => {
-                      if (targetChar === ' ') {
-                        return <span key={idx} className="w-3.5" />;
-                      }
-
-                      const userChar = typedInput[idx] || '';
-                      const isCurrentCursor =
-                        spellStatus !== 'correct' && idx === typedInput.length;
-                      const isWrongCharHere =
-                        spellStatus === 'wrong' &&
-                        userChar.toLowerCase() !== targetChar.toLowerCase();
-
-                      return (
-                        <span
-                          key={idx}
-                          className={`inline-flex h-9 w-[22px] items-center justify-center border-b-2 pb-1 font-mono text-xl font-semibold leading-none transition-colors ${
-                            spellStatus === 'correct'
-                              ? 'border-[#2E7D5B] text-[#2E7D5B]'
-                              : isWrongCharHere
-                              ? 'border-[#EA5B25] text-[#EA5B25]'
-                              : isCurrentCursor
-                              ? 'border-[#EA5B25] text-[#262523]'
-                              : userChar
-                              ? 'border-[#262523] text-[#262523]'
-                              : 'border-[#C8C3B6] text-transparent'
-                          }`}
-                        >
-                          {userChar}
-                        </span>
-                      );
-                    })}
-                  </div>
-
-                  {/* Centered Subtle Instruction Line Below Underlines */}
-                  <div className="mt-4 text-center font-mono text-[11px] tracking-wider text-[#B0ACA0]">
-                    Tab 听音提示 &nbsp;·&nbsp; Enter 核对
-                  </div>
-                </div>
-
-                {/* Feedback Banner Below Slot */}
-                <div className="mt-2 min-h-[26px]">
-                  {spellStatus === 'correct' && (
-                    <div className="inline-flex items-center gap-1.5 font-mono text-xs font-medium text-[#2E7D5B]">
-                      <Check className="h-3.5 w-3.5" />
-                      <span>拼写正确</span>
-                    </div>
-                  )}
-
-                  {spellStatus === 'wrong' && (
-                    <div className="inline-flex items-center gap-1.5 font-mono text-xs text-[#EA5B25]">
-                      <AlertCircle className="h-3.5 w-3.5" />
-                      <span>
-                        正确拼写：
-                        <strong className="ml-1 font-serif text-sm tracking-wide text-[#262523] underline decoration-[#EA5B25] underline-offset-4">
-                          {targetWord}
-                        </strong>
-                      </span>
-                    </div>
-                  )}
-                </div>
+                {/* BACK BOTTOM: Pure Example Sentence Only */}
+                <p className="mx-auto max-w-md font-serif text-sm italic leading-relaxed text-[#7A7873] line-clamp-3">
+                  “{activeCard.exampleSentence}”
+                </p>
               </div>
-            )}
-
-            {/* BOTTOM EXAMPLE SENTENCE + FLIP HINT IN RECOGNIZE MODE */}
-            <div className="space-y-2">
-              <p className="mx-auto max-w-md font-serif text-sm italic leading-relaxed text-[#7A7873] line-clamp-3">
-                “
-                {studyMode === 'spell' && spellStatus !== 'correct'
-                  ? maskedSentence
-                  : activeCard.exampleSentence}
-                ”
-              </p>
-              {studyMode === 'recognize' && (
-                <div className="font-mono text-[10px] tracking-wider text-[#B5B0A4]">
-                  {isMeaningRevealed
-                    ? '点击卡片或按 Space 翻回正面'
-                    : '点击卡片或按 Space 翻转背面'}
-                </div>
-              )}
             </div>
           </div>
 
