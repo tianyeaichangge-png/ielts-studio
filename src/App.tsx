@@ -26,7 +26,7 @@ export function App() {
     DEFAULT_IELTS_VOCABULARY
   );
 
-  // Sanitize legacy ingested vocabulary cards (remove fake /academic/, /phrase/, /collocation/, acad., expr.)
+  // Sanitize legacy ingested vocabulary cards & merge built-in Task 1 (30) + Task 2 (30) word-boxes
   useEffect(() => {
     const KNOWN_WORD_FIXES: Record<
       string,
@@ -56,21 +56,51 @@ export function App() {
       },
     };
 
-    const needsCleanup = vocabCards.some((card) => {
-      const lower = card.word.trim().toLowerCase();
-      const hasFakePhonetic = /\/(academic|phrase|collocation)\//i.test(
-        card.phonetic || ''
-      );
-      const hasFakePos = /^(acad\.|expr\.)$/i.test(card.partOfSpeech || '');
-      const needsKnownFix =
-        KNOWN_WORD_FIXES[lower] &&
-        card.phonetic !== KNOWN_WORD_FIXES[lower].phonetic;
-      return hasFakePhonetic || hasFakePos || Boolean(needsKnownFix);
-    });
+    const existingWordsLower = new Set(
+      vocabCards.map((c) => c.word.trim().toLowerCase())
+    );
+    const missingDefaults = DEFAULT_IELTS_VOCABULARY.filter(
+      (defCard) =>
+        !existingWordsLower.has(defCard.word.trim().toLowerCase()) &&
+        !vocabCards.some((c) => c.id === defCard.id)
+    );
+
+    const needsCleanup =
+      missingDefaults.length > 0 ||
+      vocabCards.some((card) => {
+        const lower = card.word.trim().toLowerCase();
+        const hasFakePhonetic = /\/(academic|phrase|collocation)\//i.test(
+          card.phonetic || ''
+        );
+        const hasFakePos = /^(acad\.|expr\.)$/i.test(card.partOfSpeech || '');
+        const needsKnownFix =
+          KNOWN_WORD_FIXES[lower] &&
+          card.phonetic !== KNOWN_WORD_FIXES[lower].phonetic;
+        const missingCategory = !card.vocabCategory;
+        return (
+          hasFakePhonetic ||
+          hasFakePos ||
+          Boolean(needsKnownFix) ||
+          missingCategory
+        );
+      });
 
     if (needsCleanup) {
-      setVocabCards((prev) =>
-        prev.map((card) => {
+      setVocabCards((prev) => {
+        const defaultCategoryByWord = new Map<
+          string,
+          'writing' | 'task1' | 'task2'
+        >();
+        for (const def of DEFAULT_IELTS_VOCABULARY) {
+          if (def.vocabCategory) {
+            defaultCategoryByWord.set(
+              def.word.trim().toLowerCase(),
+              def.vocabCategory
+            );
+          }
+        }
+
+        const cleaned = prev.map((card) => {
           const lower = card.word.trim().toLowerCase();
           const known = KNOWN_WORD_FIXES[lower];
           const isFakePhonetic = /\/(academic|phrase|collocation)\//i.test(
@@ -92,7 +122,6 @@ export function App() {
               : 'n.'
             : card.partOfSpeech;
 
-          // Extract originalError from legacy paraphrasing or translation if missing
           let nextOriginalError = card.originalError;
           if (!nextOriginalError && card.fromWriting) {
             const match = card.exampleTranslation?.match(
@@ -105,6 +134,13 @@ export function App() {
             }
           }
 
+          const resolvedCategory: 'writing' | 'task1' | 'task2' =
+            card.vocabCategory ||
+            (card.fromWriting || card.isCustom
+              ? 'writing'
+              : defaultCategoryByWord.get(lower) ||
+                (card.id.startsWith('task1-') ? 'task1' : 'task2'));
+
           return {
             ...card,
             phonetic: nextPhonetic,
@@ -114,9 +150,22 @@ export function App() {
                 ? known.meaning
                 : card.chineseMeaning,
             originalError: nextOriginalError,
+            vocabCategory: resolvedCategory,
           };
-        })
-      );
+        });
+
+        const currentLowerSet = new Set(
+          cleaned.map((c) => c.word.trim().toLowerCase())
+        );
+        const currentIdSet = new Set(cleaned.map((c) => c.id));
+        const toAppend = DEFAULT_IELTS_VOCABULARY.filter(
+          (def) =>
+            !currentLowerSet.has(def.word.trim().toLowerCase()) &&
+            !currentIdSet.has(def.id)
+        );
+
+        return [...cleaned, ...toAppend];
+      });
     }
   }, [vocabCards, setVocabCards]);
 
@@ -236,9 +285,50 @@ export function App() {
           status: 'unlearned',
           reviewCount: 0,
           fromWriting: true,
+          vocabCategory: 'writing',
         };
         return [newCard, ...prev];
       });
+    },
+    [setVocabCards]
+  );
+
+  const handleAddVocabCards = useCallback(
+    (
+      newCardsData: Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'>[]
+    ): number => {
+      let addedCount = 0;
+      setVocabCards((prev) => {
+        const existingLower = new Set(
+          prev.map((c) => c.word.trim().toLowerCase())
+        );
+        const createdCards: VocabularyCard[] = [];
+        for (const item of newCardsData) {
+          const normalized = item.word.trim().toLowerCase();
+          if (!normalized || existingLower.has(normalized)) continue;
+          existingLower.add(normalized);
+          createdCards.push({
+            ...item,
+            id: `custom-vocab-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 6)}`,
+            status: 'unlearned',
+            reviewCount: 0,
+            isCustom: true,
+            vocabCategory: item.vocabCategory || 'writing',
+          });
+        }
+        addedCount = createdCards.length;
+        return createdCards.length > 0 ? [...createdCards, ...prev] : prev;
+      });
+      return addedCount;
+    },
+    [setVocabCards]
+  );
+
+  const handleDeleteVocabCard = useCallback(
+    (cardId: string) => {
+      setVocabCards((prev) => prev.filter((c) => c.id !== cardId));
     },
     [setVocabCards]
   );
@@ -295,6 +385,10 @@ export function App() {
           <VocabularyModule
             cards={vocabCards}
             onUpdateStatus={handleUpdateVocabStatus}
+            aiConfig={aiConfig}
+            onAddCards={handleAddVocabCards}
+            onDeleteCard={handleDeleteVocabCard}
+            onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
           />
         ) : (
           <WritingModule

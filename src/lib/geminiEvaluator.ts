@@ -1,4 +1,8 @@
-import { WritingEvaluationReport, WritingTaskType } from '../types/ielts';
+import {
+  VocabularyCard,
+  WritingEvaluationReport,
+  WritingTaskType,
+} from '../types/ielts';
 
 export const DEFAULT_DEEPSEEK_ENDPOINT =
   'https://api.deepseek.com/chat/completions';
@@ -333,4 +337,193 @@ ${essay}`;
     reasoningSummary: reasoningContent,
     sourceMode: 'deepseek',
   };
+}
+
+export interface GenerateVocabularyWithAIParams {
+  rawInput: string;
+  targetCategory?: 'writing' | 'task1' | 'task2';
+  apiKey: string;
+  endpoint?: string;
+  model?: string;
+}
+
+/**
+ * Uses DeepSeek API to automatically generate structured IELTS vocabulary cards
+ * (with genuine IPA phonetics, accurate POS, concise IELTS Chinese meaning, and authentic IELTS example sentences)
+ * from one or more user-submitted English words or phrases.
+ */
+export async function generateVocabularyCardsWithAI({
+  rawInput,
+  targetCategory = 'writing',
+  apiKey,
+  endpoint = DEFAULT_DEEPSEEK_ENDPOINT,
+  model = 'deepseek-chat',
+}: GenerateVocabularyWithAIParams): Promise<
+  Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'>[]
+> {
+  const cleanKey = apiKey.trim();
+  if (!cleanKey) {
+    throw new Error('请先点击右上角齿轮图标 ⚙️ 配置有效的 DeepSeek API Key。');
+  }
+
+  const words = rawInput
+    .split(/[,，;\n\r]+/)
+    .map((w) => w.trim())
+    .filter(Boolean)
+    .slice(0, 15);
+
+  if (words.length === 0) {
+    throw new Error('请输入至少一个英文单词或词组。');
+  }
+
+  const targetEndpoint = endpoint.trim() || DEFAULT_DEEPSEEK_ENDPOINT;
+  const targetModel = model.trim() || 'deepseek-chat';
+
+  const systemPrompt = `你是一位严谨的雅思（IELTS）学术词汇专家与词典编纂者。
+用户将提供一组英文单词或短语，请你为每个单词/短语生成标准的雅思背诵卡片数据，并严格只输出合法的 JSON 对象（不要包含任何 Markdown 代码块标记）。
+
+【严格要求】
+1. "word": 规范化后的英文单词或短语（修正明显拼写错误，保持原词核心形态）。
+2. "phonetic": 必须是真实的英式国际音标（IPA，例如 "/kənˈsɪdərəbl/"）。如果是多词短语，若无单字音标请填 ""（空字符串），严禁编造 "/academic/"、"/phrase/" 等假音标！
+3. "partOfSpeech": 准确的词性缩写，仅限 "n."、"v."、"adj."、"adv."、"phrase"、"prep."、"conj."，严禁出现 "acad." 或 "expr."。
+4. "chineseMeaning": 简明、地道的雅思核心中文释义（控制在 12 个汉字以内，不要带多余前缀）。
+5. "englishDefinition": 简明的英文学术释义。
+6. "paraphrasing": 2~3 个高分雅思同义替换词（字符串数组）。
+7. "exampleSentence": 一句地道的雅思学术写作（Task 1 或 Task 2）真题风格英文例句，必须包含该单词或短语。
+8. "exampleTranslation": 对应的精准中文翻译。
+
+请严格返回如下 JSON 格式：
+{
+  "cards": [
+    {
+      "word": "string",
+      "phonetic": "/.../",
+      "partOfSpeech": "n. | v. | adj. | adv. | phrase",
+      "chineseMeaning": "简明中文释义",
+      "englishDefinition": "Concise English definition",
+      "paraphrasing": ["synonym1", "synonym2"],
+      "exampleSentence": "Authentic IELTS academic example sentence containing the word.",
+      "exampleTranslation": "例句中文翻译"
+    }
+  ]
+}`;
+
+  const requestBody: Record<string, unknown> = {
+    model: targetModel,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: `请为以下英文单词/词组生成雅思词汇卡片 JSON：\n${words.join('\n')}`,
+      },
+    ],
+    temperature: 0.2,
+    response_format: { type: 'json_object' },
+  };
+
+  let response: Response;
+  try {
+    response = await fetch(targetEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cleanKey}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+  } catch (err) {
+    throw new Error(
+      `网络请求失败，无法连接到 DeepSeek 接口 (${
+        err instanceof Error ? err.message : 'Network Error'
+      })`
+    );
+  }
+
+  if (!response.ok) {
+    let errorDetail = `HTTP ${response.status}`;
+    try {
+      const errJson = await response.json();
+      errorDetail =
+        errJson?.error?.message || errJson?.message || errorDetail;
+    } catch {
+      // ignore
+    }
+    throw new Error(`DeepSeek 添词请求失败 (${errorDetail})`);
+  }
+
+  const data = await response.json();
+  const rawText: string = data?.choices?.[0]?.message?.content || '';
+  if (!rawText) {
+    throw new Error('DeepSeek 返回内容为空，请重试。');
+  }
+
+  const cleanedJson = rawText
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+
+  let parsed: Record<string, any>;
+  try {
+    parsed = JSON.parse(cleanedJson);
+  } catch {
+    throw new Error('DeepSeek 返回的词汇 JSON 解析失败，请重试。');
+  }
+
+  const rawCards = Array.isArray(parsed?.cards) ? parsed.cards : [];
+  if (rawCards.length === 0) {
+    throw new Error('未能生成有效的词汇卡片，请检查输入的英文单词。');
+  }
+
+  return rawCards
+    .map((item: any) => {
+      const word = String(item?.word || '').trim();
+      if (!word) return null;
+      const isPhrase = word.includes(' ');
+      const rawPhonetic = String(item?.phonetic || '').trim();
+      const phonetic =
+        /academic|phrase|collocation|expr/i.test(rawPhonetic) || isPhrase
+          ? ''
+          : rawPhonetic;
+      const rawPos = String(item?.partOfSpeech || '').trim();
+      const partOfSpeech =
+        !rawPos || /^(acad\.|expr\.)$/i.test(rawPos)
+          ? isPhrase
+            ? 'phrase'
+            : 'n.'
+          : rawPos;
+
+      return {
+        word,
+        phonetic,
+        partOfSpeech,
+        chineseMeaning: String(item?.chineseMeaning || '核心词汇').trim(),
+        englishDefinition: String(
+          item?.englishDefinition || 'High-frequency IELTS academic expression.'
+        ).trim(),
+        topicTag:
+          targetCategory === 'task1'
+            ? 'Task 1 核心词'
+            : targetCategory === 'task2'
+            ? 'Task 2 学术词'
+            : 'Academic Writing',
+        paraphrasing: Array.isArray(item?.paraphrasing)
+          ? item.paraphrasing.map((s: any) => String(s).trim()).filter(Boolean)
+          : [],
+        exampleSentence: String(
+          item?.exampleSentence ||
+            `This concept plays a vital role in modern society (${word}).`
+        ).trim(),
+        exampleTranslation: String(item?.exampleTranslation || '').trim(),
+        isCustom: true,
+        fromWriting: targetCategory === 'writing',
+        vocabCategory: targetCategory,
+      } as Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'>;
+    })
+    .filter(
+      (
+        c: Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'> | null
+      ): c is Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'> => c !== null
+    );
 }

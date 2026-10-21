@@ -19,6 +19,7 @@ export interface VocabularyCard {
   isCustom?: boolean;
   fromWriting?: boolean;
   originalError?: string;
+  vocabCategory?: 'writing' | 'task1' | 'task2';
 }
 
 export type WritingTaskType = 'task1' | 'task2';

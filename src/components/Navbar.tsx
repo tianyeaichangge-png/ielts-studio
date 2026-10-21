@@ -61,10 +61,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="skeuo-btn-light relative flex h-8 w-8 items-center justify-center rounded-lg text-[#7A7873] hover:text-[#262523]"
           >
             <Settings className="h-3.5 w-3.5" />
-            {hasApiKey && (
+            {!hasApiKey && (
               <span
                 className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#EA5B25] ring-2 ring-[#E6E4DD]"
-                title="DeepSeek API Key 已就绪"
+                title="尚未配置 DeepSeek API Key，点击配置"
               />
             )}
           </button>
