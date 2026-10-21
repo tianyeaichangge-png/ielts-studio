@@ -824,16 +824,28 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       report.essay,
       item.original
     );
-    const modifiedSentence =
-      item.upgradedSentence?.trim() || userSentence;
+    const modifiedSentence = item.upgradedSentence?.trim() || userSentence;
+    const rawPhonetic = (item.phonetic || '').trim();
+    const cleanPhonetic =
+      rawPhonetic && !/academic|phrase|collocation/i.test(rawPhonetic)
+        ? rawPhonetic
+        : '';
+    const rawPos = (item.pos || '').trim();
+    const cleanPos =
+      rawPos && !/^(acad\.|expr\.)$/i.test(rawPos)
+        ? rawPos
+        : headword.includes(' ')
+        ? 'phrase'
+        : 'n.';
 
     onIngestVocab({
       word: headword,
-      phonetic: headword.includes(' ') ? '/phrase/' : '/academic/',
-      partOfSpeech: headword.includes(' ') ? 'phrase' : 'acad.',
+      phonetic: cleanPhonetic,
+      partOfSpeech: cleanPos,
       chineseMeaning:
+        item.meaning ||
         item.chineseMeaning ||
-        `高分替换：${item.original}（${item.contextExplanation.slice(0, 26)}）`,
+        item.contextExplanation.slice(0, 32),
       englishDefinition: item.contextExplanation,
       paraphrasing:
         paraphrasingList.length > 0 ? paraphrasingList : [item.original],
@@ -842,6 +854,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       topicTag: report.topicTag || '来自写作批改',
       isCustom: true,
       fromWriting: true,
+      originalError: (item.originalError || item.original || '').trim(),
     });
   };
 
@@ -856,11 +869,24 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       corr.corrected
     ).trim();
 
+    const rawPhonetic = (corr.phonetic || '').trim();
+    const cleanPhonetic =
+      rawPhonetic && !/academic|phrase|collocation/i.test(rawPhonetic)
+        ? rawPhonetic
+        : '';
+    const rawPos = (corr.pos || '').trim();
+    const cleanPos =
+      rawPos && !/^(acad\.|expr\.)$/i.test(rawPos)
+        ? rawPos
+        : targetPhrase.includes(' ')
+        ? 'phrase'
+        : 'n.';
+
     onIngestVocab({
       word: targetPhrase,
-      phonetic: '/collocation/',
-      partOfSpeech: 'expr.',
-      chineseMeaning: corr.chineseMeaning || corr.errorType,
+      phonetic: cleanPhonetic,
+      partOfSpeech: cleanPos,
+      chineseMeaning: corr.meaning || corr.chineseMeaning || corr.errorType,
       englishDefinition: corr.explanation,
       paraphrasing: [corr.original.slice(0, 48)],
       exampleSentence: corr.corrected,
@@ -868,6 +894,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       topicTag: report.topicTag || '来自写作批改',
       isCustom: true,
       fromWriting: true,
+      originalError: (corr.originalError || corr.original || '').trim(),
     });
   };
 

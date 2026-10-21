@@ -99,14 +99,22 @@ export async function evaluateIeltsWriting({
 2. 评语中指出的所有优缺点，以及 LR 模块（paraphrasingUpgrades）和 GRA 模块（errorCorrections）列出的“原文错误/低分表达 -> 高分升级替换”，必须 **100% 逐字摘自考生实际提交的这篇作文原文**（例如精准揪出原文中的拼写错误、语法错误、未写完的残缺句或低幼表达），绝不允许编造原文中不存在的词汇或句子！
 3. 在 paraphrasingUpgrades 中：
    - "original": 必须逐字摘自考生原文中的真实词汇或短语（包含拼写错误或低分口语表达）；
-   - "upgraded": 推荐替换的 1 个核心雅思高分词汇或词组（不要用斜杠堆砌多个，以便考生一键入库背诵）；
+   - "originalError": 考生原文中写错的原词或不当原词（如 "catogerise"）；
+   - "upgraded": 推荐替换的 1 个核心雅思高分单词或词组（不要用斜杠堆砌多个，以便考生一键入库背诵与默写）；
+   - "phonetic": 该推荐单词的真实国际音标（如 "/ˈkætəɡəriz/"；若为多词短语无单字音标则返回 "" 空字符串，严禁填写 "/academic/" 等假音标！）；
+   - "pos": 准确词性缩写（严格使用 "n." / "v." / "adj." / "adv." / "phrase"，严禁使用 "acad." 或 "expr."！）；
+   - "meaning": 该推荐词的精准中文释义（同 chineseMeaning）；
    - "chineseMeaning": 该推荐词的精准中文释义；
    - "upgradedSentence": 将考生包含该词的原句用该高分推荐词改写后的完整正确英文例句；
    - "contextExplanation": 结合考生原句一针见血地说明原词存在的问题（如拼写错误、搭配不当、语体过口语）及升级理由。
 4. 在 errorCorrections 中：
    - "original": 必须逐字摘自考生原文中含有语法错误、拼写错误、句子残缺或中式表达的真实原句/分句；
+   - "originalError": 该句中考生拼写错误或误用的具体原词（如有，如 "catogerise"）；
    - "corrected": 修正并升级后的地道英文句子；
-   - "keyExpression": 该修正句中最值得收录背诵的 1 个核心高分表达或学术词伙；
+   - "keyExpression": 该修正句中最值得收录背诵的 1 个核心高分单词或短语；
+   - "phonetic": keyExpression 的真实国际音标（若为单字则给真实音标如 "/ˈkætəɡəriz/"，若为多词短语则返回 "" 空字符串，严禁假音标！）；
+   - "pos": keyExpression 的准确词性缩写（"n." / "v." / "adj." / "adv." / "phrase"）；
+   - "meaning": 该核心表达的简明中文释义（同 chineseMeaning）；
    - "chineseMeaning": 该核心表达的简明中文释义；
    - "errorType": 具体错误类型（如：拼写错误 / 句子未写完残缺 / 主谓不一致 / 冠词与介词误用 / 句式单薄）；
    - "explanation": 针对该原句的具体纠错解析。
@@ -134,8 +142,12 @@ export async function evaluateIeltsWriting({
     "paraphrasingUpgrades": [
       {
         "original": "100%摘自考生原文的词或短语",
+        "originalError": "考生原文误写或低分原词",
         "upgraded": "地道高分替换词/短语",
-        "chineseMeaning": "中文释义",
+        "phonetic": "/ˈkætəɡəriz/（多词短语填 \"\"）",
+        "pos": "n. / v. / adj. / adv. / phrase",
+        "meaning": "精准中文释义",
+        "chineseMeaning": "精准中文释义",
         "upgradedSentence": "基于考生原句改写后的完整正确英文例句",
         "contextExplanation": "为什么原词不妥及替换解析"
       }
@@ -149,9 +161,13 @@ export async function evaluateIeltsWriting({
     "errorCorrections": [
       {
         "original": "100%摘自考生原文的错误或残缺原句",
+        "originalError": "原文中写错的具体单词（如有）",
         "corrected": "修正并升级后的完整英文句",
-        "keyExpression": "修正句中的核心可背诵短语/词伙",
-        "chineseMeaning": "该核心短语的中文释义",
+        "keyExpression": "修正句中的核心可背诵单词/短语",
+        "phonetic": "单字填真实国际音标，短语填 \"\"",
+        "pos": "n. / v. / adj. / adv. / phrase",
+        "meaning": "该核心词/短语的中文释义",
+        "chineseMeaning": "该核心词/短语的中文释义",
         "errorType": "错误类型",
         "explanation": "具体语法/拼写纠错说明"
       }

@@ -26,6 +26,100 @@ export function App() {
     DEFAULT_IELTS_VOCABULARY
   );
 
+  // Sanitize legacy ingested vocabulary cards (remove fake /academic/, /phrase/, /collocation/, acad., expr.)
+  useEffect(() => {
+    const KNOWN_WORD_FIXES: Record<
+      string,
+      { phonetic: string; pos: string; meaning?: string }
+    > = {
+      categories: {
+        phonetic: '/ˈkætəɡəriz/',
+        pos: 'n.',
+        meaning: '类别，种类（category 的复数）',
+      },
+      category: {
+        phonetic: '/ˈkætəɡəri/',
+        pos: 'n.',
+        meaning: '类别，种类',
+      },
+      proportion: {
+        phonetic: '/prəˈpɔːʃn/',
+        pos: 'n.',
+      },
+      significantly: {
+        phonetic: '/sɪɡˈnɪfɪkəntli/',
+        pos: 'adv.',
+      },
+      dramatically: {
+        phonetic: '/drəˈmætɪkli/',
+        pos: 'adv.',
+      },
+    };
+
+    const needsCleanup = vocabCards.some((card) => {
+      const lower = card.word.trim().toLowerCase();
+      const hasFakePhonetic = /\/(academic|phrase|collocation)\//i.test(
+        card.phonetic || ''
+      );
+      const hasFakePos = /^(acad\.|expr\.)$/i.test(card.partOfSpeech || '');
+      const needsKnownFix =
+        KNOWN_WORD_FIXES[lower] &&
+        card.phonetic !== KNOWN_WORD_FIXES[lower].phonetic;
+      return hasFakePhonetic || hasFakePos || Boolean(needsKnownFix);
+    });
+
+    if (needsCleanup) {
+      setVocabCards((prev) =>
+        prev.map((card) => {
+          const lower = card.word.trim().toLowerCase();
+          const known = KNOWN_WORD_FIXES[lower];
+          const isFakePhonetic = /\/(academic|phrase|collocation)\//i.test(
+            card.phonetic || ''
+          );
+          const isFakePos = /^(acad\.|expr\.)$/i.test(card.partOfSpeech || '');
+
+          const nextPhonetic = known
+            ? known.phonetic
+            : isFakePhonetic || card.word.trim().includes(' ')
+            ? ''
+            : card.phonetic;
+
+          const nextPos = known
+            ? known.pos
+            : isFakePos
+            ? card.word.trim().includes(' ')
+              ? 'phrase'
+              : 'n.'
+            : card.partOfSpeech;
+
+          // Extract originalError from legacy paraphrasing or translation if missing
+          let nextOriginalError = card.originalError;
+          if (!nextOriginalError && card.fromWriting) {
+            const match = card.exampleTranslation?.match(
+              /将\s*[“"]([^”"]+)[”"]\s*升级为/
+            );
+            if (match?.[1]) {
+              nextOriginalError = match[1].trim();
+            } else if (card.paraphrasing?.[0]) {
+              nextOriginalError = card.paraphrasing[0].trim();
+            }
+          }
+
+          return {
+            ...card,
+            phonetic: nextPhonetic,
+            partOfSpeech: nextPos,
+            chineseMeaning:
+              known?.meaning && card.chineseMeaning.startsWith('高分替换：')
+                ? known.meaning
+                : card.chineseMeaning,
+            originalError: nextOriginalError,
+          };
+        })
+      );
+    }
+  }, [vocabCards, setVocabCards]);
+
   const [aiConfig, setAiConfig] = useLocalStorage<DeepSeekConfig>(
     'ielts_studio_deepseek_config_v1',
     {

@@ -18,6 +18,7 @@ export interface VocabularyCard {
   lastReviewedAt?: string;
   isCustom?: boolean;
   fromWriting?: boolean;
+  originalError?: string;
 }
 
 export type WritingTaskType = 'task1' | 'task2';
@@ -31,16 +32,24 @@ export interface CriterionEvaluation {
 
 export interface LexicalUpgradeItem {
   original: string;
+  originalError?: string;
   upgraded: string;
+  phonetic?: string;
+  pos?: string;
+  meaning?: string;
   chineseMeaning?: string;
-   upgradedSentence?: string;
+  upgradedSentence?: string;
   contextExplanation: string;
 }
 
 export interface GrammarCorrectionItem {
   original: string;
+  originalError?: string;
   corrected: string;
   keyExpression?: string;
+  phonetic?: string;
+  pos?: string;
+  meaning?: string;
   chineseMeaning?: string;
   errorType: string;
   explanation: string;
