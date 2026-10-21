@@ -109,6 +109,7 @@ export async function evaluateIeltsWriting({
    - "pos": 准确词性缩写（严格使用 "n." / "v." / "adj." / "adv." / "phrase"，严禁使用 "acad." 或 "expr."！）；
    - "meaning": 该推荐词的精准中文释义（同 chineseMeaning）；
    - "chineseMeaning": 该推荐词的精准中文释义；
+   - "synonyms": 额外提供 2~3 个与该推荐词同义的地道正确雅思学术词汇数组（如 ["classifications", "types"]，严禁把考生的错误原词 originalError 放进 synonyms！）；
    - "upgradedSentence": 将考生包含该词的原句用该高分推荐词改写后的完整正确英文例句；
    - "contextExplanation": 结合考生原句一针见血地说明原词存在的问题（如拼写错误、搭配不当、语体过口语）及升级理由。
 4. 在 errorCorrections 中：
@@ -120,6 +121,7 @@ export async function evaluateIeltsWriting({
    - "pos": keyExpression 的准确词性缩写（"n." / "v." / "adj." / "adv." / "phrase"）；
    - "meaning": 该核心表达的简明中文释义（同 chineseMeaning）；
    - "chineseMeaning": 该核心表达的简明中文释义；
+   - "synonyms": 额外提供 2~3 个与 keyExpression 同义的地道正确雅思词汇数组（严禁把考生的错误原词放进 synonyms！）；
    - "errorType": 具体错误类型（如：拼写错误 / 句子未写完残缺 / 主谓不一致 / 冠词与介词误用 / 句式单薄）；
    - "explanation": 针对该原句的具体纠错解析。
 
@@ -152,6 +154,7 @@ export async function evaluateIeltsWriting({
         "pos": "n. / v. / adj. / adv. / phrase",
         "meaning": "精准中文释义",
         "chineseMeaning": "精准中文释义",
+        "synonyms": ["地道雅思同义词1", "地道雅思同义词2"],
         "upgradedSentence": "基于考生原句改写后的完整正确英文例句",
         "contextExplanation": "为什么原词不妥及替换解析"
       }
@@ -172,6 +175,7 @@ export async function evaluateIeltsWriting({
         "pos": "n. / v. / adj. / adv. / phrase",
         "meaning": "该核心词/短语的中文释义",
         "chineseMeaning": "该核心词/短语的中文释义",
+        "synonyms": ["地道雅思同义词1", "地道雅思同义词2"],
         "errorType": "错误类型",
         "explanation": "具体语法/拼写纠错说明"
       }

@@ -10,6 +10,7 @@ export interface VocabularyCard {
   chineseMeaning: string;
   englishDefinition: string;
   paraphrasing: string[];
+  synonyms?: string[];
   exampleSentence: string;
   exampleTranslation: string;
   topicTag: string;
@@ -39,6 +40,7 @@ export interface LexicalUpgradeItem {
   pos?: string;
   meaning?: string;
   chineseMeaning?: string;
+  synonyms?: string[];
   upgradedSentence?: string;
   contextExplanation: string;
 }
@@ -52,6 +54,7 @@ export interface GrammarCorrectionItem {
   pos?: string;
   meaning?: string;
   chineseMeaning?: string;
+  synonyms?: string[];
   errorType: string;
   explanation: string;
 }

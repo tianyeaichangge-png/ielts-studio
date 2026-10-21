@@ -40,13 +40,54 @@ const WORD_BOX_TABS: {
   { id: 'task2', label: 'Task 2 学术' },
 ];
 
-const FALLBACK_PHONETIC_DICT: Record<string, { phonetic: string; pos: string }> = {
-  categories: { phonetic: '/ˈkætəɡəriz/', pos: 'n.' },
-  category: { phonetic: '/ˈkætəɡəri/', pos: 'n.' },
-  proportion: { phonetic: '/prəˈpɔːʃn/', pos: 'n.' },
-  significantly: { phonetic: '/sɪɡˈnɪfɪkəntli/', pos: 'adv.' },
-  dramatically: { phonetic: '/drəˈmætɪkli/', pos: 'adv.' },
+const FALLBACK_PHONETIC_DICT: Record<
+  string,
+  { phonetic: string; pos: string; synonyms?: string[] }
+> = {
+  categories: {
+    phonetic: '/ˈkætəɡəriz/',
+    pos: 'n.',
+    synonyms: ['classifications', 'types'],
+  },
+  category: {
+    phonetic: '/ˈkætəɡəri/',
+    pos: 'n.',
+    synonyms: ['classification', 'type'],
+  },
+  'scenic spots': {
+    phonetic: '',
+    pos: 'phrase',
+    synonyms: ['tourist attractions', 'landmarks'],
+  },
+  trajectory: {
+    phonetic: '/trəˈdʒektəri/',
+    pos: 'n.',
+    synonyms: ['trend', 'path', 'course'],
+  },
+  proportion: {
+    phonetic: '/prəˈpɔːʃn/',
+    pos: 'n.',
+    synonyms: ['percentage', 'share', 'ratio'],
+  },
+  significantly: {
+    phonetic: '/sɪɡˈnɪfɪkəntli/',
+    pos: 'adv.',
+    synonyms: ['considerably', 'markedly', 'substantially'],
+  },
+  dramatically: {
+    phonetic: '/drəˈmætɪkli/',
+    pos: 'adv.',
+    synonyms: ['sharply', 'drastically', 'steeply'],
+  },
 };
+
+const KNOWN_ERRONEOUS_SYNONYMS = new Set([
+  'catogerise',
+  'catogerises',
+  'categorys',
+  'scenery spots',
+  'scenery spot',
+]);
 
 /**
  * Resolves which word-box category a card belongs to.
@@ -111,6 +152,34 @@ function getOriginalErrorText(card: VocabularyCard): string | null {
     return match[1].trim();
   }
   return null;
+}
+
+/**
+ * Returns strictly validated IELTS synonyms, ensuring originalError or misspelled words NEVER appear.
+ */
+function getCleanSynonyms(
+  card: VocabularyCard,
+  originalErrorText: string | null
+): string[] {
+  const lower = card.word.trim().toLowerCase();
+  if (FALLBACK_PHONETIC_DICT[lower]?.synonyms) {
+    return FALLBACK_PHONETIC_DICT[lower].synonyms!;
+  }
+  const errLower = (originalErrorText || card.originalError || '')
+    .trim()
+    .toLowerCase();
+  const rawList = card.synonyms?.length ? card.synonyms : card.paraphrasing || [];
+
+  return rawList
+    .map((s) => String(s).trim())
+    .filter((s) => {
+      if (!s || s.length > 36) return false;
+      const sl = s.toLowerCase();
+      if (sl === lower) return false;
+      if (errLower && sl === errLower) return false;
+      if (KNOWN_ERRONEOUS_SYNONYMS.has(sl)) return false;
+      return true;
+    });
 }
 
 /**
@@ -253,6 +322,11 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
   const originalErrorText = useMemo(
     () => (activeCard ? getOriginalErrorText(activeCard) : null),
     [activeCard]
+  );
+  const cleanSynonyms = useMemo(
+    () =>
+      activeCard ? getCleanSynonyms(activeCard, originalErrorText) : [],
+    [activeCard, originalErrorText]
   );
 
   // Sync AI target category when user switches word-box
@@ -644,64 +718,87 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
             </div>
 
             {/* =====================================================================
-                MODE 1: RECOGNIZE MODE (认读模式)
+                MODE 1: RECOGNIZE MODE (认读模式 — 纯粹正反面翻转 Card Flip)
                ===================================================================== */}
             {studyMode === 'recognize' ? (
-              <div className="my-auto flex flex-col items-center py-4">
-                <h1
-                  className={`font-serif font-normal tracking-tight text-[#262523] ${
-                    isLongPhrase
-                      ? 'text-3xl sm:text-4xl leading-snug'
-                      : 'text-5xl'
-                  }`}
-                >
-                  {activeCard.word}
-                </h1>
-
-                {/* Phonetic + Pure en-GB Speaker Button */}
-                <div className="mt-3.5 inline-flex items-center gap-2 text-[#7A7873]">
-                  {validPhonetic && (
-                    <span className="font-mono text-sm">{validPhonetic}</span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => handleSpeak(activeCard.word, e)}
-                    className="skeuo-btn-light flex h-7 w-7 items-center justify-center rounded-lg text-[#7A7873] hover:text-[#EA5B25]"
-                    title="朗读英式发音 (en-GB)"
-                    aria-label="朗读英式发音"
+              !isMeaningRevealed ? (
+                /* CARD FRONT (正面：大号单词 + 音标发音) */
+                <div className="my-auto flex flex-col items-center py-6">
+                  <h1
+                    className={`font-serif font-normal tracking-tight text-[#262523] ${
+                      isLongPhrase
+                        ? 'text-3xl sm:text-4xl leading-snug'
+                        : 'text-5xl'
+                    }`}
                   >
-                    <Volume2 className="h-3.5 w-3.5" />
-                  </button>
+                    {activeCard.word}
+                  </h1>
+
+                  <div className="mt-4 inline-flex items-center gap-2 text-[#7A7873]">
+                    {validPhonetic && (
+                      <span className="font-mono text-sm">{validPhonetic}</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => handleSpeak(activeCard.word, e)}
+                      className="skeuo-btn-light flex h-7 w-7 items-center justify-center rounded-lg text-[#7A7873] hover:text-[#EA5B25]"
+                      title="朗读英式发音 (en-GB)"
+                      aria-label="朗读英式发音"
+                    >
+                      <Volume2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                /* CARD BACK (背面：无内嵌灰框，直接在米白道林纸面上居中排版) */
+                <div className="my-auto flex flex-col items-center py-4">
+                  {/* 1. 顶部小字回显英文单词与音标 */}
+                  <div className="inline-flex items-center gap-2 text-[#7A7873]">
+                    <span className="font-serif text-base font-medium text-[#262523]">
+                      {activeCard.word}
+                    </span>
+                    {validPhonetic && (
+                      <span className="font-mono text-xs text-[#9B978E]">
+                        {validPhonetic}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => handleSpeak(activeCard.word, e)}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded text-[#9B978E] transition-colors hover:text-[#EA5B25]"
+                      title="朗读英式发音 (en-GB)"
+                      aria-label="朗读英式发音"
+                    >
+                      <Volume2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
 
-                {/* Expandable Meaning + Original Error Warning */}
-                {isMeaningRevealed ? (
-                  <div className="mt-5 w-full max-w-md space-y-2.5 rounded-xl border border-[#DFDBD0] bg-[#F4F1EA]/85 px-5 py-3.5 text-center transition-all">
-                    <p className="text-base font-semibold text-[#262523]">
-                      {activeCard.chineseMeaning}
+                  {/* 2. 中央醒目展示中文释义 */}
+                  <h2 className="mt-3.5 text-2xl font-semibold tracking-tight text-[#262523]">
+                    {activeCard.chineseMeaning}
+                  </h2>
+
+                  {/* 3. 下方展示真正的雅思同义替换（Synonyms，无则隐藏） */}
+                  {cleanSynonyms.length > 0 && (
+                    <p className="mt-3 font-serif text-sm text-[#7A7873]">
+                      同义替换：
+                      <span className="text-[#262523]">
+                        {cleanSynonyms.join(' / ')}
+                      </span>
                     </p>
+                  )}
 
-                    {originalErrorText && (
-                      <div className="inline-flex items-center gap-1.5 rounded-md border border-[#E5C5B8] bg-[#FAF0EC] px-2.5 py-0.5 font-mono text-[11px] text-[#EA5B25]">
-                        <span>原词误写/原表达：</span>
-                        <span className="line-through font-semibold">
-                          {originalErrorText}
-                        </span>
-                      </div>
-                    )}
-
-                    {activeCard.paraphrasing.length > 0 && (
-                      <p className="font-serif text-xs text-[#7A7873]">
-                        同义替换：{activeCard.paraphrasing.join(' / ')}
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-5 font-mono text-[11px] tracking-wider text-[#B0ACA0]">
-                    [ 点击卡片或按 Space 查看中文释义 ]
-                  </div>
-                )}
-              </div>
+                  {/* 4. 原词误写/原表达警示（若来自写作批改） */}
+                  {originalErrorText && (
+                    <div className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-[#E5C5B8] bg-[#FAF0EC] px-3 py-1 font-mono text-xs text-[#EA5B25]">
+                      <span>原词误写/原表达：</span>
+                      <span className="font-semibold line-through">
+                        {originalErrorText}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
             ) : (
               /* =====================================================================
                   MODE 2: SPELLING MODE (极简无框 · 单层底线 · 聚焦输入)
@@ -844,14 +941,23 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
               </div>
             )}
 
-            {/* BOTTOM EXAMPLE SENTENCE (Cloze masked in Spelling Mode, full in Recognize Mode) */}
-            <p className="mx-auto max-w-md font-serif text-sm italic leading-relaxed text-[#7A7873] line-clamp-3">
-              “
-              {studyMode === 'spell' && spellStatus !== 'correct'
-                ? maskedSentence
-                : activeCard.exampleSentence}
-              ”
-            </p>
+            {/* BOTTOM EXAMPLE SENTENCE + FLIP HINT IN RECOGNIZE MODE */}
+            <div className="space-y-2">
+              <p className="mx-auto max-w-md font-serif text-sm italic leading-relaxed text-[#7A7873] line-clamp-3">
+                “
+                {studyMode === 'spell' && spellStatus !== 'correct'
+                  ? maskedSentence
+                  : activeCard.exampleSentence}
+                ”
+              </p>
+              {studyMode === 'recognize' && (
+                <div className="font-mono text-[10px] tracking-wider text-[#B5B0A4]">
+                  {isMeaningRevealed
+                    ? '点击卡片或按 Space 翻回正面'
+                    : '点击卡片或按 Space 翻转背面'}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Two Physical Mechanical Buttons — ONLY rendered in Recognize Mode */}

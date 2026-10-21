@@ -30,31 +30,61 @@ export function App() {
   useEffect(() => {
     const KNOWN_WORD_FIXES: Record<
       string,
-      { phonetic: string; pos: string; meaning?: string }
+      {
+        phonetic: string;
+        pos: string;
+        meaning?: string;
+        synonyms?: string[];
+      }
     > = {
       categories: {
         phonetic: '/ˈkætəɡəriz/',
         pos: 'n.',
         meaning: '类别，种类（category 的复数）',
+        synonyms: ['classifications', 'types'],
       },
       category: {
         phonetic: '/ˈkætəɡəri/',
         pos: 'n.',
         meaning: '类别，种类',
+        synonyms: ['classification', 'type'],
+      },
+      'scenic spots': {
+        phonetic: '',
+        pos: 'phrase',
+        meaning: '风景名胜，旅游景点',
+        synonyms: ['tourist attractions', 'landmarks'],
+      },
+      trajectory: {
+        phonetic: '/trəˈdʒektəri/',
+        pos: 'n.',
+        meaning: '轨迹，发展道路，趋势',
+        synonyms: ['trend', 'path', 'course'],
       },
       proportion: {
         phonetic: '/prəˈpɔːʃn/',
         pos: 'n.',
+        synonyms: ['percentage', 'share', 'ratio'],
       },
       significantly: {
         phonetic: '/sɪɡˈnɪfɪkəntli/',
         pos: 'adv.',
+        synonyms: ['considerably', 'markedly', 'substantially'],
       },
       dramatically: {
         phonetic: '/drəˈmætɪkli/',
         pos: 'adv.',
+        synonyms: ['sharply', 'drastically', 'steeply'],
       },
     };
+
+    const KNOWN_BAD_SYNONYMS = new Set([
+      'catogerise',
+      'catogerises',
+      'categorys',
+      'scenery spots',
+      'scenery spot',
+    ]);
 
     const existingWordsLower = new Set(
       vocabCards.map((c) => c.word.trim().toLowerCase())
@@ -69,18 +99,46 @@ export function App() {
       missingDefaults.length > 0 ||
       vocabCards.some((card) => {
         const lower = card.word.trim().toLowerCase();
+        const known = KNOWN_WORD_FIXES[lower];
         const hasFakePhonetic = /\/(academic|phrase|collocation)\//i.test(
           card.phonetic || ''
         );
         const hasFakePos = /^(acad\.|expr\.)$/i.test(card.partOfSpeech || '');
-        const needsKnownFix =
-          KNOWN_WORD_FIXES[lower] &&
-          card.phonetic !== KNOWN_WORD_FIXES[lower].phonetic;
+        const needsKnownPhoneticFix =
+          known && card.phonetic !== known.phonetic;
+
+        // Check if paraphrasing / synonyms is polluted by originalError or known bad words
+        const extractedErr =
+          card.originalError?.trim().toLowerCase() ||
+          card.exampleTranslation
+            ?.match(/将\s*[“"]([^”"]+)[”"]\s*升级为/)?.[1]
+            ?.trim()
+            .toLowerCase() ||
+          '';
+
+        const currentSyns = card.paraphrasing || [];
+        const hasPollutedSynonym = currentSyns.some((s) => {
+          const sl = s.trim().toLowerCase();
+          return (
+            KNOWN_BAD_SYNONYMS.has(sl) ||
+            (extractedErr && sl === extractedErr) ||
+            sl === lower
+          );
+        });
+
+        const needsKnownSynonymFix =
+          known?.synonyms &&
+          (currentSyns.length === 0 ||
+            hasPollutedSynonym ||
+            currentSyns.join('|') !== known.synonyms.join('|'));
+
         const missingCategory = !card.vocabCategory;
         return (
           hasFakePhonetic ||
           hasFakePos ||
-          Boolean(needsKnownFix) ||
+          Boolean(needsKnownPhoneticFix) ||
+          Boolean(hasPollutedSynonym) ||
+          Boolean(needsKnownSynonymFix) ||
           missingCategory
         );
       });
@@ -134,6 +192,18 @@ export function App() {
             }
           }
 
+          const errLower = (nextOriginalError || '').trim().toLowerCase();
+          const sanitizedSynonyms = known?.synonyms
+            ? known.synonyms
+            : (card.synonyms || card.paraphrasing || []).filter((s) => {
+                const sl = String(s).trim().toLowerCase();
+                if (!sl || sl.length > 36) return false;
+                if (sl === lower) return false;
+                if (errLower && sl === errLower) return false;
+                if (KNOWN_BAD_SYNONYMS.has(sl)) return false;
+                return true;
+              });
+
           const resolvedCategory: 'writing' | 'task1' | 'task2' =
             card.vocabCategory ||
             (card.fromWriting || card.isCustom
@@ -149,6 +219,8 @@ export function App() {
               known?.meaning && card.chineseMeaning.startsWith('高分替换：')
                 ? known.meaning
                 : card.chineseMeaning,
+            paraphrasing: sanitizedSynonyms,
+            synonyms: sanitizedSynonyms,
             originalError: nextOriginalError,
             vocabCategory: resolvedCategory,
           };

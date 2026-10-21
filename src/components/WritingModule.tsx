@@ -812,13 +812,26 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     report: WritingEvaluationReport
   ) => {
     const { headword, extraSynonyms } = parseUpgradedParts(item.upgraded);
-    const originalTerms = item.original
-      .split(/\s*[/|]\s*/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const paraphrasingList = Array.from(
-      new Set([...extraSynonyms, ...originalTerms])
-    ).filter((s) => s.toLowerCase() !== headword.toLowerCase());
+    const forbiddenOriginals = new Set(
+      [
+        headword,
+        item.original,
+        item.originalError,
+        ...item.original.split(/\s*[/|]\s*/),
+      ]
+        .filter(Boolean)
+        .map((s) => String(s).trim().toLowerCase())
+    );
+
+    const rawAiSynonyms = Array.isArray(item.synonyms) ? item.synonyms : [];
+    const cleanSynonyms = Array.from(
+      new Set([...rawAiSynonyms, ...extraSynonyms].map((s) => String(s).trim()))
+    ).filter(
+      (s) =>
+        s.length > 0 &&
+        s.length <= 36 &&
+        !forbiddenOriginals.has(s.toLowerCase())
+    );
 
     const userSentence = findMatchingSentenceInEssay(
       report.essay,
@@ -847,8 +860,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         item.chineseMeaning ||
         item.contextExplanation.slice(0, 32),
       englishDefinition: item.contextExplanation,
-      paraphrasing:
-        paraphrasingList.length > 0 ? paraphrasingList : [item.original],
+      paraphrasing: cleanSynonyms,
+      synonyms: cleanSynonyms,
       exampleSentence: modifiedSentence,
       exampleTranslation: `原句对比：${userSentence}（将 “${item.original}” 升级为 “${item.upgraded}”）`,
       topicTag: report.topicTag || '来自写作批改',
@@ -869,6 +882,22 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       corr.corrected
     ).trim();
 
+    const forbiddenOriginals = new Set(
+      [targetPhrase, corr.original, corr.originalError]
+        .filter(Boolean)
+        .map((s) => String(s).trim().toLowerCase())
+    );
+
+    const rawAiSynonyms = Array.isArray(corr.synonyms) ? corr.synonyms : [];
+    const cleanSynonyms = Array.from(
+      new Set(rawAiSynonyms.map((s) => String(s).trim()))
+    ).filter(
+      (s) =>
+        s.length > 0 &&
+        s.length <= 36 &&
+        !forbiddenOriginals.has(s.toLowerCase())
+    );
+
     const rawPhonetic = (corr.phonetic || '').trim();
     const cleanPhonetic =
       rawPhonetic && !/academic|phrase|collocation/i.test(rawPhonetic)
@@ -888,13 +917,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       partOfSpeech: cleanPos,
       chineseMeaning: corr.meaning || corr.chineseMeaning || corr.errorType,
       englishDefinition: corr.explanation,
-      paraphrasing: [corr.original.slice(0, 48)],
+      paraphrasing: cleanSynonyms,
+      synonyms: cleanSynonyms,
       exampleSentence: corr.corrected,
       exampleTranslation: `原句对比：${corr.original}`,
       topicTag: report.topicTag || '来自写作批改',
       isCustom: true,
       fromWriting: true,
-      originalError: (corr.originalError || corr.original || '').trim(),
+      originalError: (corr.originalError || '').trim(),
     });
   };
 
