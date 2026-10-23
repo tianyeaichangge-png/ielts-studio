@@ -1948,31 +1948,30 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
             </div>
 
-            {/* Drawer Header */}
-            <div className="flex items-center justify-between border-b border-[#E2DFD5] px-6 py-4">
-              <div className="flex items-center gap-2.5">
-                <span className="h-2 w-2 rounded-full bg-[#EA5B25]" />
-                <h2
-                  id="history-drawer-title"
-                  className="font-mono text-sm font-bold tracking-wider text-[#262523]"
+            {/* Symmetrical Drawer Header Bar: Left [ ← 返回 ] Tactile Key | Center Pure Ink Title */}
+            <div className="grid grid-cols-3 items-center border-b border-[#E6E2D8] px-6 py-4 select-none">
+              <div className="flex items-center justify-start">
+                <button
+                  type="button"
+                  onClick={() => setIsHistoryDrawerOpen(false)}
+                  className="skeuo-switch-thumb inline-flex h-7 items-center gap-1 rounded-lg px-3 text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
                 >
-                  {activeTaskType === 'task1'
-                    ? 'TASK 1 · 小作文历史档案'
-                    : 'TASK 2 · 大作文历史档案'}
-                </h2>
-                <span className="rounded-md border border-[#D8D4C8] bg-[#EFECE3] px-2 py-0.5 font-mono text-[11px] font-semibold text-[#7A7873]">
-                  {activeTaskReports.length} 篇
-                </span>
+                  <span className="leading-none">← 返回</span>
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setIsHistoryDrawerOpen(false)}
-                className="skeuo-btn-light flex h-7 w-7 items-center justify-center rounded-lg text-[#7A7873] hover:text-[#262523]"
-                aria-label="关闭历史档案"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center justify-center text-center">
+                <h2
+                  id="history-drawer-title"
+                  className="truncate font-mono text-xs font-medium tracking-[0.14em] text-[#7A7873] leading-none translate-y-[1px]"
+                >
+                  {activeTaskType === 'task1'
+                    ? '小作文历史记录'
+                    : '大作文历史记录'}
+                </h2>
+              </div>
+
+              <div />
             </div>
 
             {/* Drawer Body: Filtered History List for Current Task Only */}
@@ -1983,10 +1982,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 </div>
               ) : (
                 activeTaskReports.map((item, idx) => {
-                  const seqNo = String(activeTaskReports.length - idx).padStart(
-                    2,
-                    '0'
-                  );
                   const itemImage =
                     item.image || item.chartImageDataUrl || null;
                   const isCurrentlySelected =
@@ -1998,22 +1993,22 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                       onClick={() => handleSelectHistoryRecord(idx)}
                       className={`group relative cursor-pointer rounded-xl border p-4 transition-all ${
                         isCurrentlySelected
-                          ? 'border-[#EA5B25] bg-[#F7F3EA] shadow-sm'
-                          : 'border-[#E2DFD5] bg-[#FAF8F2] hover:border-[#C5C0B2] hover:bg-[#F5F2EA]'
+                          ? 'border-[#EA5B25]/60 bg-[#FAF6EE] shadow-[0_3px_10px_rgba(38,37,35,0.04),inset_0_1px_0_rgba(255,255,255,0.9)]'
+                          : 'border-[#E4E0D6] bg-[#FAF8F3] hover:border-[#C8C3B5] hover:bg-[#FCFBF7] hover:shadow-[0_3px_10px_rgba(38,37,35,0.04),inset_0_1px_0_rgba(255,255,255,0.9)]'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 font-mono text-xs">
-                          <span className="font-semibold text-[#7A7873]">
-                            #{seqNo}
-                          </span>
-                          <span className="rounded bg-[#262523] px-2 py-0.5 text-[11px] font-bold text-[#FAF8F2]">
-                            BAND {item.overallBand.toFixed(1)}
+                        {/* Vintage Printed Score: 6px Braun Orange Dot + Serif/Mono Bold Band X.X */}
+                        <div className="inline-flex items-center gap-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
+                          <span className="font-serif text-sm font-bold tracking-wide text-[#EA5B25]">
+                            Band {item.overallBand.toFixed(1)}
                           </span>
                         </div>
 
+                        {/* Top-Right: Quiet Timestamp + Hover-Only Borderless Delete Icon */}
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-[11px] text-[#7A7873]">
+                          <span className="font-mono text-[11px] text-[#9E988E]">
                             {new Date(item.createdAt).toLocaleString('zh-CN', {
                               month: '2-digit',
                               day: '2-digit',
@@ -2022,18 +2017,17 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                             })}
                           </span>
 
-                          {/* Single-Record Delete Button [ 🗑️ 删除 ] */}
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDeleteHistoryRecord(item.id, item.taskType);
                             }}
-                            className="skeuo-btn-light inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10px] font-medium text-[#7A7873] hover:text-[#EA5B25]"
+                            className="p-0.5 text-[#B5B0A4] opacity-0 transition-all hover:text-[#EA5B25] group-hover:opacity-100"
                             title="删除此条批改记录"
+                            aria-label="删除此条批改记录"
                           >
-                            <Trash2 className="h-3 w-3" />
-                            <span>删除</span>
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       </div>
@@ -2047,11 +2041,11 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                           />
                         )}
                         <div className="min-w-0 flex-1">
-                          <p className="line-clamp-2 font-serif text-xs font-medium leading-relaxed text-[#262523]">
+                          <p className="line-clamp-1 font-serif text-xs font-semibold leading-relaxed text-[#262523]">
                             {item.prompt}
                           </p>
-                          <p className="mt-1 line-clamp-1 font-serif text-[11px] text-[#7A7873]">
-                            {item.essay} ({item.wordCount} words)
+                          <p className="mt-1 line-clamp-2 font-serif text-xs italic leading-relaxed text-[#8C887F]">
+                            {item.essay}
                           </p>
                         </div>
                       </div>
