@@ -7,6 +7,7 @@ import {
   Loader2,
   Search,
   RotateCcw,
+  ChevronDown,
 } from 'lucide-react';
 import {
   DeepSeekConfig,
@@ -298,12 +299,12 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
   const [hasRecordedMistakeThisCard, setHasRecordedMistakeThisCard] =
     useState(false);
 
-  // List View Search & AI Smart Word Ingestion states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [aiRawInput, setAiRawInput] = useState('');
+  // Unified single-line Search & AI Smart Word Ingestion states
+  const [unifiedInput, setUnifiedInput] = useState('');
   const [aiTargetCategory, setAiTargetCategory] = useState<
     'writing' | 'task1' | 'task2'
   >('writing');
+  const [isTargetDropdownOpen, setIsTargetDropdownOpen] = useState(false);
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [aiFeedbackMsg, setAiFeedbackMsg] = useState<{
     type: 'success' | 'error';
@@ -311,8 +312,24 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
   } | null>(null);
 
   const spellInputRef = useRef<HTMLInputElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const autoAdvanceTimerRef = useRef<number | null>(null);
   const pulseTimerRef = useRef<number | null>(null);
+
+  // Close custom target category dropdown when clicking outside
+  useEffect(() => {
+    if (!isTargetDropdownOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsTargetDropdownOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', handleOutsideClick);
+    return () => window.removeEventListener('mousedown', handleOutsideClick);
+  }, [isTargetDropdownOpen]);
 
   // Real-time counts per word-box category
   const categoryCounts = useMemo(() => {
@@ -366,10 +383,10 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
     return unmasteredInBox.length > 0 ? unmasteredInBox : categoryCards;
   }, [categoryCards, selectedCategory]);
 
-  // Filtered cards for the stationery list view (with search query)
+  // Filtered cards for the stationery list view (real-time filtering via unifiedInput)
   const listFilteredCards = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return categoryCards;
+    const q = unifiedInput.trim().toLowerCase();
+    if (!q || q.includes(',') || q.includes('，')) return categoryCards;
     return categoryCards.filter(
       (c) =>
         c.word.toLowerCase().includes(q) ||
@@ -378,7 +395,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
           s.toLowerCase().includes(q)
         )
     );
-  }, [categoryCards, searchQuery]);
+  }, [categoryCards, unifiedInput]);
 
   // Sync AI target category when user switches to a thematic word-box
   useEffect(() => {
@@ -703,14 +720,14 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [viewStep, studyMode, activeCard, handleDecision, handleToggleFlip]);
 
-  // AI Smart Word Ingestion handler
+  // AI Smart Word Ingestion handler (uses unifiedInput)
   const handleAiIngestWords = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const trimmed = aiRawInput.trim();
+    const trimmed = unifiedInput.trim();
     if (!trimmed) {
       setAiFeedbackMsg({
         type: 'error',
-        text: '请先输入英文生词或词组（多个词用逗号分隔）。',
+        text: '请先在左侧输入框填入需要入库的英文生词（多个词可用逗号分隔）。',
       });
       return;
     }
@@ -726,6 +743,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
 
     setIsAiGenerating(true);
     setAiFeedbackMsg(null);
+    setIsTargetDropdownOpen(false);
     try {
       const generatedCards = await generateVocabularyCardsWithAI({
         rawInput: trimmed,
@@ -736,7 +754,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
       });
 
       const addedCount = onAddCards(generatedCards);
-      setAiRawInput('');
+      setUnifiedInput('');
 
       if (addedCount > 0) {
         setAiFeedbackMsg({
@@ -760,6 +778,13 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
     }
   };
 
+  const targetCategoryLabel =
+    aiTargetCategory === 'writing'
+      ? '写作积累'
+      : aiTargetCategory === 'task1'
+      ? 'Task 1 核心'
+      : 'Task 2 学术';
+
   const targetWord = activeCard ? activeCard.word.trim() : '';
   const isLongPhrase = targetWord.length > 16;
   const maskedSentence = activeCard
@@ -769,96 +794,144 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
   return (
     <div className="mx-auto w-[92vw] max-w-[1000px] pb-16 pt-1 select-none">
       {/* =====================================================================
-          TOP WORD-BOX CATEGORY FILTER BAR (6 Clear Dimensions)
+          TOP WORD-BOX CATEGORY FILTER BAR (Automatically Hidden in Deck View!)
          ===================================================================== */}
-      <div className="mb-5 flex flex-wrap items-center justify-center gap-1.5 font-sans">
-        {WORD_BOX_TABS.map((tab) => {
-          const isActive = selectedCategory === tab.id;
-          const count = categoryCounts[tab.id];
-          const isLearningTab = tab.id === 'learning';
+      {viewStep === 'list' && (
+        <div className="mb-5 flex flex-wrap items-center justify-center gap-1.5 font-sans">
+          {WORD_BOX_TABS.map((tab) => {
+            const isActive = selectedCategory === tab.id;
+            const count = categoryCounts[tab.id];
+            const isLearningTab = tab.id === 'learning';
 
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                setSelectedCategory(tab.id);
-                setViewStep('list');
-              }}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-all duration-200 ${
-                isLearningTab && learningPulse
-                  ? 'scale-105 bg-[#FAF0EC] font-semibold text-[#EA5B25] ring-2 ring-[#EA5B25]/50'
-                  : isActive
-                  ? 'skeuo-switch-thumb font-semibold text-[#262523]'
-                  : 'text-[#7A7873] hover:text-[#262523]'
-              }`}
-            >
-              {isLearningTab && count > 0 && (
-                <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
-              )}
-              <span>{tab.label}</span>
-              <span
-                className={`font-mono text-[11px] ${
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setSelectedCategory(tab.id);
+                  setViewStep('list');
+                }}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-all duration-200 ${
                   isLearningTab && learningPulse
-                    ? 'font-bold text-[#EA5B25]'
+                    ? 'scale-105 bg-[#FAF0EC] font-semibold text-[#EA5B25] ring-2 ring-[#EA5B25]/50'
                     : isActive
-                    ? 'text-[#262523]'
-                    : 'text-[#9B978E]'
+                    ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                    : 'text-[#7A7873] hover:text-[#262523]'
                 }`}
               >
-                ({count})
-              </span>
-            </button>
-          );
-        })}
-      </div>
+                {isLearningTab && count > 0 && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
+                )}
+                <span>{tab.label}</span>
+                <span
+                  className={`font-mono text-[11px] ${
+                    isLearningTab && learningPulse
+                      ? 'font-bold text-[#EA5B25]'
+                      : isActive
+                      ? 'text-[#262523]'
+                      : 'text-[#9B978E]'
+                  }`}
+                >
+                  ({count})
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* =====================================================================
           LEVEL 1 (DEFAULT VIEW): 道林纸「词书手账列表页」（自然学词与管理态）
          ===================================================================== */}
       {viewStep === 'list' ? (
         <div className="mx-auto max-w-[900px]">
-          <section className="skeuo-paper overflow-hidden rounded-2xl">
+          <section className="skeuo-paper rounded-2xl">
             {/* Smartisan Vintage Double Crimson Header Rule */}
-            <div className="pt-4">
+            <div className="overflow-hidden rounded-t-2xl pt-4">
               <div className="h-[2px] w-full bg-[#C97A63]/35" />
               <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
             </div>
 
-            {/* Paper Top Header Bar: Left AI Smart Add / Search Input | Right [ 开始背词 (x) → ] */}
+            {/* Pure Single-Row Top Toolbar: Unified Search/AI Slot + Custom Dropdown + [ + AI 入库 ] + [ 开始背词 (x) → ] */}
             <div className="border-b border-[#E6E3DA] px-6 py-4 sm:px-8">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                {/* Left: One-line AI Smart Word Ingestion Input */}
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
                 <form
                   onSubmit={handleAiIngestWords}
                   className="flex min-w-[260px] flex-1 items-center gap-2"
                 >
-                  <input
-                    type="text"
-                    value={aiRawInput}
-                    onChange={(e) => {
-                      setAiRawInput(e.target.value);
-                      if (aiFeedbackMsg) setAiFeedbackMsg(null);
-                    }}
-                    placeholder="输入生词由 AI 自动补全音标释义入库（多个词用逗号分隔）..."
-                    className="w-full rounded-xl border border-[#DCD7CA] bg-[#F5F2EA] px-3.5 py-2 font-sans text-xs text-[#262523] placeholder-[#9E998E] focus:border-[#ABA598] focus:bg-[#FAF8F3] focus:outline-none"
-                  />
+                  {/* Unified Search + Embedded Custom Dropdown Input Slot */}
+                  <div className="relative flex flex-1 items-center rounded-xl border border-[#DCD7CA] bg-[#F5F2EA] pl-3.5 pr-1.5 py-1 transition-colors focus-within:border-[#B5B0A4] focus-within:bg-[#FAF8F3]">
+                    <Search className="h-3.5 w-3.5 shrink-0 text-[#A8A49B]" />
 
-                  <select
-                    value={aiTargetCategory}
-                    onChange={(e) =>
-                      setAiTargetCategory(
-                        e.target.value as 'writing' | 'task1' | 'task2'
-                      )
-                    }
-                    aria-label="新词归入分类"
-                    className="hidden shrink-0 rounded-xl border border-[#DCD7CA] bg-[#F5F2EA] px-2.5 py-2 font-sans text-xs text-[#7A7873] focus:outline-none sm:block"
-                  >
-                    <option value="writing">归入：写作积累</option>
-                    <option value="task1">归入：Task 1 核心</option>
-                    <option value="task2">归入：Task 2 学术</option>
-                  </select>
+                    <input
+                      type="text"
+                      value={unifiedInput}
+                      onChange={(e) => {
+                        setUnifiedInput(e.target.value);
+                        if (aiFeedbackMsg) setAiFeedbackMsg(null);
+                      }}
+                      placeholder="搜索当前词盒，或输入英文生词由 AI 自动入库..."
+                      className="w-full min-w-0 bg-transparent px-2.5 py-1 font-sans text-xs text-[#262523] placeholder-[#9E998E] focus:outline-none"
+                    />
 
+                    {/* Custom Light-Skeuomorphic Dropdown (Zero Native <select>!) */}
+                    <div ref={dropdownRef} className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setIsTargetDropdownOpen((prev) => !prev)
+                        }
+                        className="inline-flex items-center gap-1 rounded-lg border border-transparent bg-[#EAE6DC]/75 px-2.5 py-1 font-sans text-[11px] font-medium text-[#6E6B64] transition-colors hover:border-[#D5D0C3] hover:bg-[#FAF8F2] hover:text-[#262523]"
+                        title="选择 AI 新词归入的词盒"
+                      >
+                        <span className="text-[#9E998E]">归入:</span>
+                        <span className="font-semibold text-[#262523]">
+                          {targetCategoryLabel}
+                        </span>
+                        <ChevronDown
+                          className={`h-3 w-3 text-[#8E8A80] transition-transform duration-150 ${
+                            isTargetDropdownOpen ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </button>
+
+                      {isTargetDropdownOpen && (
+                        <div className=" absolute right-0 top-[calc(100%+6px)] z-40 w-36 rounded-xl border border-[#D8D3C6] bg-[#FAF8F2] p-1 shadow-[0_12px_28px_-6px_rgba(38,37,35,0.16),0_2px_6px_rgba(38,37,35,0.08)]">
+                          {(
+                            [
+                              { id: 'writing', label: '写作积累' },
+                              { id: 'task1', label: 'Task 1 核心' },
+                              { id: 'task2', label: 'Task 2 学术' },
+                            ] as const
+                          ).map((opt) => {
+                            const active = aiTargetCategory === opt.id;
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() => {
+                                  setAiTargetCategory(opt.id);
+                                  setIsTargetDropdownOpen(false);
+                                }}
+                                className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left font-sans text-xs transition-colors ${
+                                  active
+                                    ? 'bg-[#EFECE3] font-semibold text-[#262523]'
+                                    : 'text-[#6E6B64] hover:bg-[#F3F0E7] hover:text-[#262523]'
+                                }`}
+                              >
+                                <span>{opt.label}</span>
+                                {active && (
+                                  <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* [ + AI 入库 ] Tactile Ivory Button */}
                   <button
                     type="submit"
                     disabled={isAiGenerating}
@@ -875,7 +948,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                   </button>
                 </form>
 
-                {/* Right: Prominent Braun Signal Orange Primary Action Button [ 开始背词 (x) → ] */}
+                {/* Far Right: Prominent Braun Signal Orange Primary Action Button [ 开始背词 (x) → ] */}
                 <button
                   type="button"
                   disabled={categoryCards.length === 0}
@@ -894,39 +967,21 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                 </button>
               </div>
 
-              {/* Sub-row: Quiet Filter Search + AI Feedback Message */}
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="relative w-full sm:w-64">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#A8A49B]" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="检索当前词盒词条或中文释义..."
-                    className="w-full rounded-lg border border-[#E5E0D5] bg-[#F7F4EC] py-1.5 pl-8 pr-3 font-sans text-xs text-[#262523] placeholder-[#A8A49B] focus:border-[#C5BFB2] focus:bg-[#FAF8F3] focus:outline-none"
-                  />
+              {aiFeedbackMsg && (
+                <div
+                  className={`mt-2.5 font-sans text-xs ${
+                    aiFeedbackMsg.type === 'success'
+                      ? 'text-[#2E7D5B]'
+                      : 'text-[#EA5B25]'
+                  }`}
+                >
+                  {aiFeedbackMsg.text}
                 </div>
-
-                {aiFeedbackMsg ? (
-                  <span
-                    className={`font-sans text-xs ${
-                      aiFeedbackMsg.type === 'success'
-                        ? 'text-[#2E7D5B]'
-                        : 'text-[#EA5B25]'
-                    }`}
-                  >
-                    {aiFeedbackMsg.text}
-                  </span>
-                ) : (
-                  <span className="font-sans text-[11px] text-[#9B978E]">
-                    点击任意词条行即可朗读英式发音 · 点击右侧按钮进入 3D 抽认卡自测
-                  </span>
-                )}
-              </div>
+              )}
             </div>
 
-            {/* Paper Body: Dictionary Print List */}
-            <div className="max-h-[64vh] overflow-y-auto px-6 py-2 sm:px-8">
+            {/* Paper Body: Swiss 12-Column Grid Dictionary List */}
+            <div className="max-h-[66vh] overflow-y-auto px-6 py-2 sm:px-8">
               {listFilteredCards.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <p className="font-sans text-sm font-semibold text-[#262523]">
@@ -941,7 +996,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                       ? '在背词抽查时点击「没记住」或拼写出错的单词，会自动归入此处供重点强化。'
                       : selectedCategory === 'mastered'
                       ? '在背词抽查时点击「记住了」或拼写一次通过的单词，会自动归档至此。'
-                      : '可在上方输入框直接输入英文单词由 AI 自动生成音标与释义入库。'}
+                      : '可在上方输入框直接输入英文生词并点击「+ AI 入库」自动生成音标与释义。'}
                   </p>
                 </div>
               ) : (
@@ -959,117 +1014,108 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                         key={item.id}
                         onClick={(e) => handleSpeak(item.word, e)}
                         title="点击朗读英式发音 (en-GB)"
-                        className="group flex cursor-pointer items-center justify-between gap-4 py-3.5 transition-colors hover:bg-[#F4F1E8]/70"
+                        className="group grid cursor-pointer grid-cols-12 items-baseline gap-x-4 gap-y-1 py-3.5 transition-colors hover:bg-[#F4F1E8]/70"
                       >
-                        {/* Left & Center: Dictionary Entry Content */}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                            <span className="w-6 shrink-0 font-mono text-[11px] text-[#ACA79C]">
-                              {String(idx + 1).padStart(2, '0')}
+                        {/* Left Column (5 cols): Index + Bold Serif Headword + POS + IPA Phonetic */}
+                        <div className="col-span-12 flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0 sm:col-span-5">
+                          <span className="w-6 shrink-0 font-mono text-[11px] text-[#ACA79C]">
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
+
+                          <span className="font-serif text-base font-semibold tracking-tight text-[#262523]">
+                            {item.word}
+                          </span>
+
+                          {itemPos && (
+                            <span className="font-mono text-xs text-[#9E988E]">
+                              {itemPos}
                             </span>
-
-                            <span className="font-serif text-base font-semibold tracking-tight text-[#262523]">
-                              {item.word}
-                            </span>
-
-                            {itemPhonetic && (
-                              <span className="font-ipa text-xs text-[#7A7873]">
-                                {itemPhonetic}
-                              </span>
-                            )}
-
-                            {itemPos && (
-                              <span className="font-mono text-xs text-[#9E988E]">
-                                {itemPos}
-                              </span>
-                            )}
-
-                            <Volume2 className="h-3.5 w-3.5 shrink-0 translate-y-[1px] text-[#C2BDB2] transition-colors group-hover:text-[#EA5B25]" />
-
-                            {itemIsLearning && (
-                              <span className="inline-flex items-center gap-1 rounded bg-[#FAF0EC] px-1.5 py-0.5 font-sans text-[10px] font-medium text-[#EA5B25]">
-                                <span className="h-1 w-1 rounded-full bg-[#EA5B25]" />
-                                待攻克
-                              </span>
-                            )}
-
-                            {itemIsMastered && (
-                              <span className="inline-flex items-center gap-1 rounded bg-[#EEF5F1] px-1.5 py-0.5 font-sans text-[10px] font-medium text-[#2E7D5B]">
-                                ✓ 已掌握
-                              </span>
-                            )}
-
-                            {item.fromWriting && (
-                              <span className="font-sans text-[10px] text-[#9E988E]">
-                                · 来自写作批改
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Meaning + Synonyms + Original Error on second line */}
-                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 pl-8">
-                            <span className="font-sans text-xs font-medium text-[#262523]">
-                              {item.chineseMeaning}
-                            </span>
-
-                            {itemSyns.length > 0 && (
-                              <span className="font-sans text-[11px] text-[#7A7873]">
-                                同义替换：
-                                <span className="font-serif text-xs text-[#262523]">
-                                  {itemSyns.join(' / ')}
-                                </span>
-                              </span>
-                            )}
-
-                            {itemOrigErr && (
-                              <span className="font-sans text-[11px] text-[#EA5B25]">
-                                原词误写：
-                                <span className="font-mono line-through">
-                                  {itemOrigErr}
-                                </span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Right Hover Actions: Quick Status Toggle + Study From Here + Delete */}
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100"
-                        >
-                          {itemIsMastered ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onUpdateStatus(item.id, 'unlearned')
-                              }
-                              className="skeuo-btn-light rounded-md px-2 py-1 font-sans text-[11px] text-[#7A7873] hover:text-[#262523]"
-                              title="移回待背队列"
-                            >
-                              恢复待背
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onUpdateStatus(item.id, 'mastered')
-                              }
-                              className="skeuo-btn-light rounded-md px-2 py-1 font-sans text-[11px] text-[#7A7873] hover:text-[#2E7D5B]"
-                              title="直接标记为已掌握"
-                            >
-                              标为已掌握
-                            </button>
                           )}
 
-                          <button
-                            type="button"
-                            onClick={() => onDeleteCard(item.id)}
-                            className="p-1.5 text-[#B5B0A4] transition-colors hover:text-[#EA5B25]"
-                            title="删除该词条"
-                            aria-label="删除该词条"
+                          {itemPhonetic && (
+                            <span className="font-ipa text-xs text-[#7A7873]">
+                              {itemPhonetic}
+                            </span>
+                          )}
+
+                          <Volume2 className="h-3 w-3 shrink-0 translate-y-[1px] text-[#C8C3B8] transition-colors group-hover:text-[#EA5B25]" />
+
+                          {itemIsLearning && (
+                            <span className="inline-flex items-center gap-1 rounded bg-[#FAF0EC] px-1.5 py-0.2 font-sans text-[10px] font-medium text-[#EA5B25]">
+                              待攻克
+                            </span>
+                          )}
+
+                          {itemIsMastered && (
+                            <span className="inline-flex items-center gap-1 rounded bg-[#EEF5F1] px-1.5 py-0.2 font-sans text-[10px] font-medium text-[#2E7D5B]">
+                              ✓ 已掌握
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Middle Column (4 cols): Clean Chinese Meaning */}
+                        <div className="col-span-12 pl-8 sm:col-span-4 sm:pl-0 min-w-0">
+                          <span className="font-sans text-xs font-medium text-[#262523]">
+                            {item.chineseMeaning}
+                          </span>
+                          {itemOrigErr && (
+                            <span className="ml-2 font-mono text-[11px] text-[#EA5B25] line-through">
+                              {itemOrigErr}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Right Column (3 cols): Italic Synonyms (≈ ...) + Hover Actions */}
+                        <div className="col-span-12 flex items-baseline justify-between gap-2 pl-8 sm:col-span-3 sm:pl-0 min-w-0">
+                          <div className="min-w-0 flex-1 truncate">
+                            {itemSyns.length > 0 && (
+                              <span
+                                className="font-serif text-xs italic text-[#8A857C]"
+                                title={`同义替换: ${itemSyns.join(' / ')}`}
+                              >
+                                ≈ {itemSyns.slice(0, 2).join(' / ')}
+                              </span>
+                            )}
+                          </div>
+
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                            {itemIsMastered ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onUpdateStatus(item.id, 'unlearned')
+                                }
+                                className="rounded px-1.5 py-0.5 font-sans text-[10px] text-[#7A7873] hover:bg-[#EAE6DC] hover:text-[#262523]"
+                                title="移回待背队列"
+                              >
+                                恢复待背
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onUpdateStatus(item.id, 'mastered')
+                                }
+                                className="rounded px-1.5 py-0.5 font-sans text-[10px] text-[#7A7873] hover:bg-[#EAE6DC] hover:text-[#2E7D5B]"
+                                title="直接标记为已掌握"
+                              >
+                                标为掌握
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => onDeleteCard(item.id)}
+                              className="p-1 text-[#B5B0A4] transition-colors hover:text-[#EA5B25]"
+                              title="删除该词条"
+                              aria-label="删除该词条"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1082,41 +1128,28 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
       ) : (
         /* =====================================================================
             LEVEL 2 (FOCUSED QUIZ VIEW): 纯粹的「3D 叠纸抽认卡页」
+            (Top Category Bar Automatically Hidden; Symmetrical Left/Right Header)
            ===================================================================== */
-        <div className="flex flex-col items-center justify-center pt-1">
-          {/* Card Top Header Bar: Left [ ← 返回词表 ] | Center Progress ● 01 / xx | Right 待攻克 Counter */}
-          <div className="mb-4 grid w-full max-w-[540px] grid-cols-3 items-center">
-            <div className="flex justify-start">
-              <button
-                type="button"
-                onClick={() => setViewStep('list')}
-                className="skeuo-btn-light inline-flex items-center rounded-lg px-3 py-1.5 font-sans text-xs font-medium text-[#262523]"
-              >
-                ← 返回词表
-              </button>
-            </div>
+        <div className="flex flex-col items-center justify-center pt-2">
+          {/* Symmetrical Card Top Header Bar: Left [ ← 返回词表 ] | Right Progress ● 01 / 45 */}
+          <div className="mb-4 flex w-full max-w-[540px] items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setViewStep('list')}
+              className="skeuo-btn-light inline-flex items-center rounded-lg px-3.5 py-1.5 font-sans text-xs font-medium text-[#262523]"
+            >
+              ← 返回词表
+            </button>
 
-            <div className="flex items-center justify-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
+            <div className="flex items-center gap-2">
+              <span
+                className={`h-1.5 w-1.5 rounded-full bg-[#EA5B25] transition-transform duration-200 ${
+                  learningPulse ? 'scale-150' : ''
+                }`}
+              />
               <span className="font-mono text-xs font-medium tracking-[0.22em] text-[#7A7873]">
                 {remainingInQueue > 0 ? '01' : '00'} / {formattedRemaining}
               </span>
-            </div>
-
-            <div className="flex justify-end">
-              {categoryCounts.learning > 0 && (
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-sans text-[11px] transition-all duration-200 ${
-                    learningPulse
-                      ? 'scale-105 bg-[#FAF0EC] font-semibold text-[#EA5B25] ring-1 ring-[#EA5B25]/40'
-                      : 'text-[#7A7873]'
-                  }`}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
-                  <span>待攻克</span>
-                  <span className="font-mono">{categoryCounts.learning}</span>
-                </span>
-              )}
             </div>
           </div>
 

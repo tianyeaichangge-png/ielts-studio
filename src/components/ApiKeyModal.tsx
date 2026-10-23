@@ -127,23 +127,33 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
           </div>
 
           <div>
-            <label
-              htmlFor="deepseek-model"
-              className="block font-mono text-[11px] uppercase tracking-wider text-[#7A7873]"
-            >
+            <span className="block font-mono text-[11px] uppercase tracking-wider text-[#7A7873]">
               Model
-            </label>
-            <select
-              id="deepseek-model"
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="mt-1.5 w-full rounded-xl border border-[#D5D1C6] bg-[#F4F1EA] px-3.5 py-2 font-mono text-xs text-[#262523] focus:border-[#262523] focus:outline-none"
-            >
-              <option value="deepseek-chat">deepseek-chat (DeepSeek-V3)</option>
-              <option value="deepseek-reasoner">
-                deepseek-reasoner (DeepSeek-R1)
-              </option>
-            </select>
+            </span>
+            <div className="skeuo-groove mt-1.5 grid grid-cols-2 gap-1 rounded-xl p-1 font-mono text-xs">
+              <button
+                type="button"
+                onClick={() => setSelectedModel('deepseek-chat')}
+                className={`rounded-lg py-1.5 text-center transition-all ${
+                  selectedModel === 'deepseek-chat'
+                    ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                    : 'text-[#7A7873] hover:text-[#262523]'
+                }`}
+              >
+                deepseek-chat (V3)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedModel('deepseek-reasoner')}
+                className={`rounded-lg py-1.5 text-center transition-all ${
+                  selectedModel === 'deepseek-reasoner'
+                    ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                    : 'text-[#7A7873] hover:text-[#262523]'
+                }`}
+              >
+                deepseek-reasoner (R1)
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-3">
