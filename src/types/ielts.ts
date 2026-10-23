@@ -1,4 +1,4 @@
-export type MasteryStatus = 'unlearned' | 'vague' | 'mastered';
+export type MasteryStatus = 'unlearned' | 'learning' | 'vague' | 'mastered';
 
 export type ActiveTab = 'vocabulary' | 'writing';
 

@@ -24,6 +24,11 @@
     font-family: 'JetBrains Mono', monospace;
     font-variant-numeric: lining-nums tabular-nums;
   }
+
+  .font-ipa {
+    font-family: 'Inter', 'Lucida Sans Unicode', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.01em;
+  }
 }
 
 .desk-surface {
