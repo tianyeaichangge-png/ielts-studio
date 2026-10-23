@@ -4,10 +4,28 @@
 
 @layer base {
   body {
-    background-color: #E6E4DD;
+    background-color: #E8E4DC;
+    background-image: radial-gradient(
+      ellipse 80% 70% at 50% 38%,
+      #EFECE4 0%,
+      #E8E4DC 58%,
+      #DDD8CE 100%
+    );
+    background-attachment: fixed;
     color: #262523;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+}
+
+.desk-surface {
+  background-color: #E8E4DC;
+  background-image: radial-gradient(
+    ellipse 80% 70% at 50% 38%,
+    #EFECE4 0%,
+    #E8E4DC 58%,
+    #DDD8CE 100%
+  );
+  background-attachment: fixed;
 }
 
 /* 3D Card Flip Utilities */

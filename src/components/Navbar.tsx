@@ -16,43 +16,58 @@ export const Navbar: React.FC<NavbarProps> = ({
   hasApiKey,
 }) => {
   return (
-    <header className="w-full pt-7 pb-4 px-6 select-none">
-      <div className="mx-auto flex max-w-5xl items-center justify-between">
-        {/* Left balance spacer to keep Segmented Switch strictly centered */}
-        <div className="w-9" aria-hidden="true" />
+    <header className="w-full pt-6 pb-4 px-6 select-none">
+      <div className="mx-auto grid max-w-[1200px] grid-cols-3 items-center">
+        {/* Left: Braun Instrument Nameplate Anchor */}
+        <div className="flex items-center gap-2.5">
+          <span
+            className="h-2 w-2 shrink-0 rounded-full bg-[#EA5B25] shadow-[0_0_0_2px_rgba(234,91,37,0.14)]"
+            aria-hidden="true"
+          />
+          <div className="flex flex-col sm:flex-row sm:items-baseline sm:gap-2">
+            <span className="font-serif text-sm font-semibold tracking-tight text-[#262523]">
+              叶子的雅思小站
+            </span>
+            <span className="hidden font-mono text-[10px] tracking-[0.18em] text-[#9A958B] md:inline">
+              IELTS STUDIO
+            </span>
+          </div>
+        </div>
 
-        {/* Centered Braun Recessed Segmented Switch */}
-        <nav
-          aria-label="主导航"
-          className="skeuo-groove inline-flex items-center rounded-xl p-1"
-        >
-          <button
-            type="button"
-            onClick={() => onSelectTab('vocabulary')}
-            className={`relative rounded-lg px-6 py-1.5 text-xs font-medium tracking-wide transition-all duration-150 ${
-              activeTab === 'vocabulary'
-                ? 'skeuo-switch-thumb text-[#262523] font-semibold'
-                : 'text-[#7A7873] hover:text-[#262523]'
-            }`}
+        {/* Center: Core Module Switcher [ 背单词 | 写作 ] */}
+        <div className="flex justify-center">
+          <nav
+            aria-label="主导航"
+            className="skeuo-groove inline-flex items-center rounded-xl p-1"
           >
-            背单词
-          </button>
+            <button
+              type="button"
+              onClick={() => onSelectTab('vocabulary')}
+              className={`relative rounded-lg px-6 py-1.5 text-xs font-medium tracking-wide transition-all duration-150 ${
+                activeTab === 'vocabulary'
+                  ? 'skeuo-switch-thumb text-[#262523] font-semibold'
+                  : 'text-[#7A7873] hover:text-[#262523]'
+              }`}
+            >
+              背单词
+            </button>
 
-          <button
-            type="button"
-            onClick={() => onSelectTab('writing')}
-            className={`relative rounded-lg px-6 py-1.5 text-xs font-medium tracking-wide transition-all duration-150 ${
-              activeTab === 'writing'
-                ? 'skeuo-switch-thumb text-[#262523] font-semibold'
-                : 'text-[#7A7873] hover:text-[#262523]'
-            }`}
-          >
-            写作
-          </button>
-        </nav>
+            <button
+              type="button"
+              onClick={() => onSelectTab('writing')}
+              className={`relative rounded-lg px-6 py-1.5 text-xs font-medium tracking-wide transition-all duration-150 ${
+                activeTab === 'writing'
+                  ? 'skeuo-switch-thumb text-[#262523] font-semibold'
+                  : 'text-[#7A7873] hover:text-[#262523]'
+              }`}
+            >
+              写作
+            </button>
+          </nav>
+        </div>
 
-        {/* Right Tiny Mechanical Gear Button for DeepSeek API Key */}
-        <div className="flex w-9 justify-end">
+        {/* Right: Global Tools & Status ([ ⚙️ ] Settings Gear) */}
+        <div className="flex items-center justify-end">
           <button
             type="button"
             onClick={onOpenApiKeyModal}
@@ -63,7 +78,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Settings className="h-3.5 w-3.5" />
             {!hasApiKey && (
               <span
-                className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#EA5B25] ring-2 ring-[#E6E4DD]"
+                className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#EA5B25] ring-2 ring-[#E8E4DC]"
                 title="尚未配置 DeepSeek API Key，点击配置"
               />
             )}

@@ -761,9 +761,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     }
   };
 
-  // Open the task-specific History Archive Drawer ('TASK 1 · 小作文历史档案' or 'TASK 2 · 大作文历史档案')
+  // Open the task-specific History Archive Drawer ('小作文历史记录' or '大作文历史记录')
   const handleEnterHistoryMode = () => {
-    if (activeTaskReports.length === 0) return;
     setIsTimerRunning(false);
     setConfirmBackToCatalog(false);
     setErrorMsg(null);
@@ -1007,16 +1006,15 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 })}
               </div>
 
-              {/* Task 2 Exclusive History Archive Entry Button */}
-              {task2Reports.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleEnterHistoryMode}
-                  className="skeuo-btn-light rounded-lg px-3 py-1.5 font-mono text-xs text-[#262523]"
-                >
-                  历史批改 ({task2Reports.length})
-                </button>
-              )}
+              {/* Task 2 Exclusive History Archive Entry Button (Always Visible on Right of Top Filter Bar) */}
+              <button
+                type="button"
+                onClick={handleEnterHistoryMode}
+                className="skeuo-btn-light rounded-lg px-3.5 py-1.5 font-mono text-xs font-medium text-[#262523]"
+              >
+                历史批改
+                {task2Reports.length > 0 ? ` (${task2Reports.length})` : ''}
+              </button>
             </div>
 
             {/* Catalog Body: Pinned Custom Prompt Card + Built-in Master Prompts */}
@@ -1377,15 +1375,16 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   {errorMsg ? (
                     <span className="text-xs text-[#EA5B25]">{errorMsg}</span>
                   ) : (
-                    activeTaskReports.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleEnterHistoryMode}
-                        className="skeuo-btn-light rounded-lg px-3 py-1.5 font-mono text-xs text-[#262523]"
-                      >
-                        历史批改 ({activeTaskReports.length})
-                      </button>
-                    )
+                    <button
+                      type="button"
+                      onClick={handleEnterHistoryMode}
+                      className="skeuo-btn-light rounded-lg px-3.5 py-1.5 font-mono text-xs font-medium text-[#262523]"
+                    >
+                      历史批改
+                      {activeTaskReports.length > 0
+                        ? ` (${activeTaskReports.length})`
+                        : ''}
+                    </button>
                   )}
                 </div>
 
@@ -1400,13 +1399,16 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     </span>
                   )}
 
-                  {activeTaskReports.length > 0 && errorMsg && (
+                  {errorMsg && (
                     <button
                       type="button"
                       onClick={handleEnterHistoryMode}
-                      className="skeuo-btn-light rounded-lg px-3 py-1.5 font-mono text-xs text-[#262523]"
+                      className="skeuo-btn-light rounded-lg px-3.5 py-1.5 font-mono text-xs font-medium text-[#262523]"
                     >
-                      历史批改 ({activeTaskReports.length})
+                      历史批改
+                      {activeTaskReports.length > 0
+                        ? ` (${activeTaskReports.length})`
+                        : ''}
                     </button>
                   )}
 

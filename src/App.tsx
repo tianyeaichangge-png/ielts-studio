@@ -444,7 +444,7 @@ export function App() {
     activeTab === 'writing' ? 'writing' : 'vocabulary';
 
   return (
-    <div className="min-h-screen bg-[#E6E4DD] text-[#262523]">
+    <div className="desk-surface min-h-screen text-[#262523]">
       <Navbar
         activeTab={currentTab}
         onSelectTab={setActiveTab}

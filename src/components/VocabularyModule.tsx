@@ -611,7 +611,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
   return (
     <div className="relative flex min-h-[calc(100vh-120px)] flex-col items-center justify-center px-4 pb-16 pt-1 select-none">
       {/* =====================================================================
-          TOP CATEGORY WORD-BOX FILTER BAR (无 Emoji · 极简印刷感)
+          TOP CATEGORY WORD-BOX FILTER BAR + [ + 词表与添词 ] (无 Emoji · 极简印刷感)
          ===================================================================== */}
       <div className="mb-4 flex flex-wrap items-center justify-center gap-1.5">
         {WORD_BOX_TABS.map((tab) => {
@@ -642,6 +642,24 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
             </button>
           );
         })}
+
+        {/* Vertical Divider | */}
+        <span
+          className="mx-1.5 h-3.5 w-[1px] bg-[#D0CBC0]"
+          aria-hidden="true"
+        />
+
+        {/* Consolidated [ + 词表与添词 ] Button */}
+        <button
+          type="button"
+          onClick={() => {
+            setAiFeedbackMsg(null);
+            setIsDrawerOpen(true);
+          }}
+          className="skeuo-btn-light inline-flex items-center rounded-lg px-3 py-1 font-mono text-xs font-medium text-[#262523]"
+        >
+          + 词表与添词
+        </button>
       </div>
 
       {/* Tiny Braun Mechanical Counter */}
@@ -656,30 +674,54 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
           MAIN VOCABULARY CARD OR EMPTY WORD-BOX STATE
          ===================================================================== */}
       {!activeCard ? (
-        <div className="skeuo-paper flex min-h-[380px] w-full max-w-[540px] flex-col items-center justify-center rounded-2xl px-8 py-10 text-center">
-          <p className="font-serif text-lg font-medium text-[#262523]">
-            当前词盒暂无词条
-          </p>
-          <p className="mt-2 max-w-sm text-xs leading-relaxed text-[#7A7873]">
-            可在写作批改报告中点击「+ 入库」收集高分替换词，或打开右下方词表抽屉添加自定义生词。
-          </p>
-          <button
-            type="button"
-            onClick={() => setIsDrawerOpen(true)}
-            className="skeuo-btn-light mt-6 rounded-xl px-4 py-2 text-xs font-semibold text-[#262523]"
-          >
-            + 打开词表与添词
-          </button>
+        <div className="relative mb-3 w-full max-w-[540px]">
+          {/* Stacked Card Deck Bottom Layer 2 (10px down, 24px narrower) */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -bottom-[10px] inset-x-[12px] z-0 h-6 rounded-b-2xl border border-[#D8D3C6] bg-[#F1EDE3] shadow-[0_8px_18px_-4px_rgba(38,37,35,0.11)]"
+          />
+          {/* Stacked Card Deck Bottom Layer 1 (5px down, 12px narrower) */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -bottom-[5px] inset-x-[6px] z-[1] h-6 rounded-b-2xl border border-[#DAD5C9] bg-[#F6F3EA] shadow-[0_4px_10px_-2px_rgba(38,37,35,0.08)]"
+          />
+          <div className="skeuo-paper relative z-10 flex min-h-[380px] w-full flex-col items-center justify-center rounded-2xl px-8 py-10 text-center">
+            <p className="font-serif text-lg font-medium text-[#262523]">
+              当前词盒暂无词条
+            </p>
+            <p className="mt-2 max-w-sm text-xs leading-relaxed text-[#7A7873]">
+              可在写作批改报告中点击「+ 入库」收集高分替换词，或点击上方「+ 词表与添词」添加自定义生词。
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsDrawerOpen(true)}
+              className="skeuo-btn-light mt-6 rounded-xl px-4 py-2 text-xs font-semibold text-[#262523]"
+            >
+              + 词表与添词
+            </button>
+          </div>
         </div>
       ) : (
         <>
           {/* =====================================================================
-              3D PERSPECTIVE CONTAINER & FLIPPER (Front & Back Always Mounted)
+              STACKED CARD DECK + 3D PERSPECTIVE CONTAINER & FLIPPER
              ===================================================================== */}
-          <div
-            className="w-full max-w-[540px]"
-            style={{ perspective: '1200px' }}
-          >
+          <div className="relative mb-2.5 w-full max-w-[540px]">
+            {/* Stacked Card Deck Bottom Layer 2 (向下偏移 10px · 宽度缩窄 24px -> 左右各内缩 12px) */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -bottom-[10px] inset-x-[12px] z-0 h-7 rounded-b-2xl border border-[#D8D3C6] bg-[#F1EDE3] shadow-[0_10px_22px_-5px_rgba(38,37,35,0.13),0_2px_4px_rgba(38,37,35,0.06)]"
+            />
+            {/* Stacked Card Deck Bottom Layer 1 (向下偏移 5px · 宽度缩窄 12px -> 左右各内缩 6px) */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -bottom-[5px] inset-x-[6px] z-[1] h-7 rounded-b-2xl border border-[#DAD5C9] bg-[#F6F3EA] shadow-[0_5px_12px_-3px_rgba(38,37,35,0.09),0_1px_2px_rgba(38,37,35,0.06)]"
+            />
+
+            <div
+              className="relative z-10 w-full"
+              style={{ perspective: '1200px' }}
+            >
             <div
               onClick={() => {
                 if (studyMode === 'recognize') {
@@ -1041,6 +1083,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                 </p>
               </div>
             </div>
+            </div>
           </div>
 
           {/* Two Physical Mechanical Buttons — ONLY rendered in Recognize Mode */}
@@ -1067,22 +1110,6 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
           )}
         </>
       )}
-
-      {/* =====================================================================
-          BOTTOM-RIGHT [ 词表与添词 ] BUTTON (无 Emoji)
-         ===================================================================== */}
-      <div className="fixed bottom-5 right-5 z-30">
-        <button
-          type="button"
-          onClick={() => {
-            setAiFeedbackMsg(null);
-            setIsDrawerOpen(true);
-          }}
-          className="skeuo-btn-light rounded-xl px-3.5 py-2 font-mono text-xs font-medium text-[#262523]"
-        >
-          词表与添词
-        </button>
-      </div>
 
       {/* =====================================================================
           SLIDE-OVER DRAWER: 词典手账风词表与 AI 添词
