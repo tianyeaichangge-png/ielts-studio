@@ -25,7 +25,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             aria-hidden="true"
           />
           <div className="flex flex-col sm:flex-row sm:items-baseline sm:gap-2">
-            <span className="font-serif text-sm font-semibold tracking-tight text-[#262523]">
+            <span className="font-sans text-sm font-semibold tracking-tight text-[#262523]">
               叶子的雅思小站
             </span>
             <span className="hidden font-mono text-[10px] tracking-[0.18em] text-[#9A958B] md:inline">

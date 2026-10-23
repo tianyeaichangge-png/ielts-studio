@@ -62,7 +62,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             <span className="h-2 w-2 rounded-full bg-[#EA5B25]" />
             <h2
               id="api-key-modal-title"
-              className="text-sm font-semibold tracking-tight text-[#262523]"
+              className="font-sans text-sm font-semibold tracking-tight text-[#262523]"
             >
               DeepSeek API 设置
             </h2>
@@ -150,13 +150,13 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="skeuo-btn-light rounded-xl px-4 py-2 text-xs font-medium"
+              className="skeuo-btn-light rounded-xl px-4 py-2 font-sans text-xs font-medium"
             >
               取消
             </button>
             <button
               type="submit"
-              className="skeuo-btn-dark rounded-xl px-5 py-2 text-xs font-medium"
+              className="skeuo-btn-orange rounded-xl px-5 py-2 font-sans text-xs font-semibold text-white"
             >
               保存
             </button>

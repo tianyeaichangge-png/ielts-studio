@@ -942,11 +942,11 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       {/* TOP TASK SWITCHER BAR: [ Task 1 | Task 2 ] — Hidden during Task 2 immersive notepad writing */}
       {showTopTaskSwitcher && (
         <div className="mb-6 flex items-center justify-center select-none">
-          <div className="skeuo-groove inline-flex items-center rounded-xl p-1">
+          <div className="skeuo-groove inline-flex items-center rounded-xl p-1 font-sans">
             <button
               type="button"
               onClick={() => handleTopTaskTypeSwitch('task1')}
-              className={`rounded-lg px-5 py-1 text-xs font-mono tracking-wide transition-all ${
+              className={`rounded-lg px-5 py-1 text-xs font-medium tracking-wide transition-all ${
                 displayedTaskType === 'task1'
                   ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                   : 'text-[#7A7873] hover:text-[#262523]'
@@ -957,7 +957,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             <button
               type="button"
               onClick={() => handleTopTaskTypeSwitch('task2')}
-              className={`rounded-lg px-5 py-1 text-xs font-mono tracking-wide transition-all ${
+              className={`rounded-lg px-5 py-1 text-xs font-medium tracking-wide transition-all ${
                 displayedTaskType === 'task2'
                   ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                   : 'text-[#7A7873] hover:text-[#262523]'
@@ -1010,10 +1010,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               <button
                 type="button"
                 onClick={handleEnterHistoryMode}
-                className="skeuo-btn-light rounded-lg px-3.5 py-1.5 font-mono text-xs font-medium text-[#262523]"
+                className="skeuo-btn-light rounded-lg px-3.5 py-1.5 font-sans text-xs font-medium text-[#262523]"
               >
-                历史批改
-                {task2Reports.length > 0 ? ` (${task2Reports.length})` : ''}
+                <span>历史批改</span>
+                {task2Reports.length > 0 && (
+                  <span className="ml-1 font-mono">
+                    ({task2Reports.length})
+                  </span>
+                )}
               </button>
             </div>
 
@@ -1373,17 +1377,21 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               <div className="flex items-center justify-between gap-4 border-t border-[#ECE9E0] bg-[#F6F3EB]/60 px-8 py-4">
                 <div className="flex items-center gap-3">
                   {errorMsg ? (
-                    <span className="text-xs text-[#EA5B25]">{errorMsg}</span>
+                    <span className="font-sans text-xs text-[#EA5B25]">
+                      {errorMsg}
+                    </span>
                   ) : (
                     <button
                       type="button"
                       onClick={handleEnterHistoryMode}
-                      className="skeuo-btn-light rounded-lg px-3.5 py-1.5 font-mono text-xs font-medium text-[#262523]"
+                      className="skeuo-btn-light rounded-lg px-3.5 py-1.5 font-sans text-xs font-medium text-[#262523]"
                     >
-                      历史批改
-                      {activeTaskReports.length > 0
-                        ? ` (${activeTaskReports.length})`
-                        : ''}
+                      <span>历史批改</span>
+                      {activeTaskReports.length > 0 && (
+                        <span className="ml-1 font-mono">
+                          ({activeTaskReports.length})
+                        </span>
+                      )}
                     </button>
                   )}
                 </div>
@@ -1403,12 +1411,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     <button
                       type="button"
                       onClick={handleEnterHistoryMode}
-                      className="skeuo-btn-light rounded-lg px-3.5 py-1.5 font-mono text-xs font-medium text-[#262523]"
+                      className="skeuo-btn-light rounded-lg px-3.5 py-1.5 font-sans text-xs font-medium text-[#262523]"
                     >
-                      历史批改
-                      {activeTaskReports.length > 0
-                        ? ` (${activeTaskReports.length})`
-                        : ''}
+                      <span>历史批改</span>
+                      {activeTaskReports.length > 0 && (
+                        <span className="ml-1 font-mono">
+                          ({activeTaskReports.length})
+                        </span>
+                      )}
                     </button>
                   )}
 
@@ -1416,7 +1426,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     type="button"
                     disabled={isEvaluating}
                     onClick={handleEvaluateDraft}
-                    className="skeuo-btn-orange inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold tracking-wide disabled:opacity-60"
+                    className="skeuo-btn-orange inline-flex items-center gap-2 rounded-xl px-5 py-2.5 font-sans text-xs font-semibold tracking-wide text-white disabled:opacity-60"
                   >
                     {isEvaluating ? (
                       <>
@@ -1965,7 +1975,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               <div className="flex items-center justify-center text-center">
                 <h2
                   id="history-drawer-title"
-                  className="truncate font-mono text-xs font-medium tracking-[0.14em] text-[#7A7873] leading-none translate-y-[1px]"
+                  className="truncate font-sans text-xs font-semibold tracking-[0.12em] text-[#7A7873] leading-none translate-y-[1px]"
                 >
                   {activeTaskType === 'task1'
                     ? '小作文历史记录'

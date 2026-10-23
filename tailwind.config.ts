@@ -8,13 +8,13 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'sans-serif'],
-        serif: ['Georgia', 'Playfair Display', 'Cambria', 'Times New Roman', 'Songti SC', 'serif'],
-        mono: ['JetBrains Mono', 'SFMono-Regular', 'Consolas', 'Courier New', 'monospace'],
+        sans: ['Inter', 'PingFang SC', 'Noto Sans SC', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        serif: ['Newsreader', 'Georgia', 'Noto Serif SC', 'serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       colors: {
         braun: {
-          bg: '#E6E4DD',
+          bg: '#E8E4DC',
           groove: '#D8D5CC',
           paper: '#FAF8F2',
           ink: '#262523',

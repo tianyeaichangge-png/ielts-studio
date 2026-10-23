@@ -13,7 +13,16 @@
     );
     background-attachment: fixed;
     color: #262523;
+    font-family: 'Inter', 'PingFang SC', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  .font-mono,
+  code,
+  kbd,
+  pre {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: lining-nums tabular-nums;
   }
 }
 
@@ -96,28 +105,7 @@
     inset 0 1px 2px rgba(38, 37, 35, 0.08);
 }
 
-.skeuo-btn-dark {
-  background: linear-gradient(180deg, #33322F 0%, #262523 100%);
-  border: 1px solid #171615;
-  color: #FAF8F2;
-  box-shadow:
-    0 3px 6px rgba(38, 37, 35, 0.22),
-    0 1px 2px rgba(38, 37, 35, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16);
-  transition: all 0.08s ease;
-}
-
-.skeuo-btn-dark:hover {
-  background: linear-gradient(180deg, #3B3A37 0%, #2B2A27 100%);
-}
-
-.skeuo-btn-dark:active {
-  transform: translateY(1px);
-  box-shadow:
-    0 1px 2px rgba(38, 37, 35, 0.25),
-    inset 0 1px 3px rgba(0, 0, 0, 0.4);
-}
-
+.skeuo-btn-dark,
 .skeuo-btn-orange {
   background: linear-gradient(180deg, #F0642E 0%, #EA5B25 100%);
   border: 1px solid #C84312;
@@ -129,10 +117,12 @@
   transition: all 0.08s ease;
 }
 
+.skeuo-btn-dark:hover,
 .skeuo-btn-orange:hover {
   background: linear-gradient(180deg, #F46D38 0%, #EE602A 100%);
 }
 
+.skeuo-btn-dark:active,
 .skeuo-btn-orange:active {
   transform: translateY(1px);
   box-shadow:

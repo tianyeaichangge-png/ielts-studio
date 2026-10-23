@@ -26,7 +26,7 @@ interface VocabularyModuleProps {
   onOpenApiKeyModal: () => void;
 }
 
-type StudyMode = 'recognize' | 'spell';
+type StudyMode = 'learn' | 'recognize' | 'spell';
 type SpellCheckStatus = 'idle' | 'correct' | 'wrong';
 type WordBoxCategory = 'all' | 'writing' | 'task1' | 'task2';
 
@@ -254,7 +254,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
   const [selectedCategory, setSelectedCategory] =
     useState<WordBoxCategory>('all');
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [studyMode, setStudyMode] = useState<StudyMode>('recognize');
+  const [studyMode, setStudyMode] = useState<StudyMode>('learn');
 
   // Recognize Mode 3D flip state
   const [isFlipped, setIsFlipped] = useState(false);
@@ -408,6 +408,20 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
     setIsFlipped((prev) => !prev);
   }, [studyMode]);
 
+  const handlePrevCard = useCallback(() => {
+    if (total === 0) return;
+    setIsFlipTransitionEnabled(false);
+    setIsFlipped(false);
+    setCurrentIndex((prev) => (prev - 1 + total) % total);
+  }, [total]);
+
+  const handleNextCard = useCallback(() => {
+    if (total === 0) return;
+    setIsFlipTransitionEnabled(false);
+    setIsFlipped(false);
+    setCurrentIndex((prev) => (prev + 1) % total);
+  }, [total]);
+
   const handleDecision = useCallback(
     (status: MasteryStatus) => {
       if (!activeCard || total === 0) return;
@@ -502,7 +516,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
     }
   }, [activeCard, handleSpeak, spellStatus, typedInput]);
 
-  // Global keyboard shortcuts in Recognize Mode
+  // Global keyboard shortcuts in Learn & Recognize Modes
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isDrawerOpen || studyMode === 'spell') {
@@ -515,6 +529,18 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
       ) {
         return;
       }
+
+      if (studyMode === 'learn') {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          handlePrevCard();
+        } else if (e.key === 'ArrowRight' || e.code === 'Space') {
+          e.preventDefault();
+          handleNextCard();
+        }
+        return;
+      }
+
       if (e.code === 'Space') {
         e.preventDefault();
         handleToggleFlip();
@@ -528,7 +554,14 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawerOpen, studyMode, handleDecision, handleToggleFlip]);
+  }, [
+    isDrawerOpen,
+    studyMode,
+    handleDecision,
+    handleToggleFlip,
+    handlePrevCard,
+    handleNextCard,
+  ]);
 
   // AI Smart Word Ingestion handler
   const handleAiIngestWords = async () => {
@@ -656,18 +689,36 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
             setAiFeedbackMsg(null);
             setIsDrawerOpen(true);
           }}
-          className="skeuo-btn-light inline-flex items-center rounded-lg px-3 py-1 font-mono text-xs font-medium text-[#262523]"
+          className="skeuo-btn-light inline-flex items-center rounded-lg px-3 py-1 font-sans text-xs font-medium text-[#262523]"
         >
           + 词表与添词
         </button>
       </div>
 
-      {/* Tiny Braun Mechanical Counter */}
-      <div className="mb-4 flex items-center gap-2">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
-        <span className="font-mono text-xs font-medium tracking-[0.22em] text-[#7A7873]">
-          {formattedIndex} / {formattedTotal}
-        </span>
+      {/* Tiny Braun Mechanical Counter + [ 开始抽查 → ] Shortcut in Learn Mode */}
+      <div className="mb-4 flex items-center justify-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
+          <span className="font-mono text-xs font-medium tracking-[0.22em] text-[#7A7873]">
+            {formattedIndex} / {formattedTotal}
+          </span>
+        </div>
+
+        {studyMode === 'learn' && total > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setIsFlipTransitionEnabled(false);
+              setIsFlipped(false);
+              setCurrentIndex(0);
+              setStudyMode('recognize');
+            }}
+            className="skeuo-btn-light inline-flex items-center rounded-md px-2.5 py-0.5 font-sans text-[11px] font-medium text-[#262523] hover:text-[#EA5B25]"
+            title="从第 01 词开始认读抽查自测"
+          >
+            开始抽查 →
+          </button>
+        )}
       </div>
 
       {/* =====================================================================
@@ -693,16 +744,16 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
           </div>
 
           <div className="skeuo-paper relative z-10 flex min-h-[380px] w-full flex-col items-center justify-center rounded-2xl px-8 py-10 text-center">
-            <p className="font-serif text-lg font-medium text-[#262523]">
+            <p className="font-sans text-lg font-semibold text-[#262523]">
               当前词盒暂无词条
             </p>
-            <p className="mt-2 max-w-sm text-xs leading-relaxed text-[#7A7873]">
+            <p className="mt-2 max-w-sm font-sans text-xs leading-relaxed text-[#7A7873]">
               可在写作批改报告中点击「+ 入库」收集高分替换词，或点击上方「+ 词表与添词」添加自定义生词。
             </p>
             <button
               type="button"
               onClick={() => setIsDrawerOpen(true)}
-              className="skeuo-btn-light mt-6 rounded-xl px-4 py-2 text-xs font-semibold text-[#262523]"
+              className="skeuo-btn-light mt-6 rounded-xl px-4 py-2 font-sans text-xs font-semibold text-[#262523]"
             >
               + 词表与添词
             </button>
@@ -745,12 +796,16 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                   onClick={() => {
                     if (studyMode === 'recognize') {
                       handleToggleFlip();
-                    } else {
+                    } else if (studyMode === 'spell') {
                       spellInputRef.current?.focus();
                     }
                   }}
                   className={`relative h-[390px] w-full ${
-                    studyMode === 'recognize' ? 'cursor-pointer' : 'cursor-text'
+                    studyMode === 'recognize'
+                      ? 'cursor-pointer'
+                      : studyMode === 'spell'
+                      ? 'cursor-text'
+                      : 'cursor-default'
                   }`}
                   style={{
                     transformStyle: 'preserve-3d',
@@ -764,7 +819,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                   }}
                 >
               {/* =================================================================
-                  FRONT FACE (rotateY(0deg)) — Recognize Front OR Spelling Mode
+                  FRONT FACE (rotateY(0deg)) — Learn Mode, Recognize Front, OR Spelling Mode
                  ================================================================= */}
               <div
                 className="skeuo-paper absolute inset-0 flex flex-col justify-between rounded-2xl px-8 py-8 text-center sm:px-10"
@@ -776,23 +831,44 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                     studyMode === 'recognize' && isFlipped ? 'none' : 'auto',
                 }}
               >
-                {/* TOP HEADER ROW: Pure Ink POS + Stamp | Right Mode Switcher [ 认读 | 拼写 ] */}
+                {/* TOP HEADER ROW: Pure Ink POS + Stamp | Right Mode Switcher [ 学词 | 认读 | 拼写 ] */}
                 <div className="flex w-full items-center justify-between gap-2">
-                  <div className="font-mono text-xs tracking-wide text-[#9E988E]">
-                    {validPos}
-                    {activeCard.fromWriting
-                      ? `${validPos ? ' · ' : ''}来自写作批改`
-                      : ''}
+                  <div className="text-xs tracking-wide text-[#9E988E]">
+                    <span className="font-mono">{validPos}</span>
+                    {activeCard.fromWriting && (
+                      <span className="font-sans">
+                        {validPos ? ' · ' : ''}来自写作批改
+                      </span>
+                    )}
                   </div>
 
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="skeuo-groove inline-flex items-center rounded-lg p-0.5"
+                    className="skeuo-groove inline-flex items-center rounded-lg p-0.5 font-sans"
                   >
                     <button
                       type="button"
-                      onClick={() => setStudyMode('recognize')}
-                      className={`rounded-md px-3 py-1 text-[11px] transition-all ${
+                      onClick={() => {
+                        setIsFlipTransitionEnabled(false);
+                        setIsFlipped(false);
+                        setStudyMode('learn');
+                      }}
+                      className={`rounded-md px-2.5 py-1 text-[11px] transition-all ${
+                        studyMode === 'learn'
+                          ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                          : 'text-[#7A7873] hover:text-[#262523]'
+                      }`}
+                    >
+                      学词
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsFlipTransitionEnabled(false);
+                        setIsFlipped(false);
+                        setStudyMode('recognize');
+                      }}
+                      className={`rounded-md px-2.5 py-1 text-[11px] transition-all ${
                         studyMode === 'recognize'
                           ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                           : 'text-[#7A7873] hover:text-[#262523]'
@@ -807,7 +883,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                         setIsFlipped(false);
                         setStudyMode('spell');
                       }}
-                      className={`rounded-md px-3 py-1 text-[11px] transition-all ${
+                      className={`rounded-md px-2.5 py-1 text-[11px] transition-all ${
                         studyMode === 'spell'
                           ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                           : 'text-[#7A7873] hover:text-[#262523]'
@@ -818,7 +894,62 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                   </div>
                 </div>
 
-                {studyMode === 'recognize' ? (
+                {studyMode === 'learn' ? (
+                  /* LEARN MODE (学词模式) — Zero-Pressure Full Overview on Front Face */
+                  <div className="my-auto flex flex-col items-center py-2">
+                    <h1
+                      className={`font-serif font-normal tracking-tight text-[#262523] ${
+                        isLongPhrase
+                          ? 'text-3xl sm:text-4xl leading-snug'
+                          : 'text-4xl sm:text-5xl'
+                      }`}
+                    >
+                      {activeCard.word}
+                    </h1>
+
+                    <div className="mt-2.5 inline-flex items-center gap-2 text-[#7A7873]">
+                      {validPhonetic && (
+                        <span className="font-mono text-sm">
+                          {validPhonetic}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => handleSpeak(activeCard.word, e)}
+                        className="skeuo-btn-light flex h-7 w-7 items-center justify-center rounded-lg text-[#7A7873] hover:text-[#EA5B25]"
+                        title="朗读英式发音 (en-GB)"
+                        aria-label="朗读英式发音"
+                      >
+                        <Volume2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Prominent Chinese Meaning */}
+                    <h2 className="mt-3.5 font-sans text-xl font-semibold tracking-tight text-[#262523]">
+                      {activeCard.chineseMeaning}
+                    </h2>
+
+                    {/* Validated IELTS Synonyms */}
+                    {cleanSynonyms.length > 0 && (
+                      <p className="mt-2 font-sans text-xs text-[#7A7873]">
+                        同义替换：
+                        <span className="font-serif text-sm text-[#262523]">
+                          {cleanSynonyms.join(' / ')}
+                        </span>
+                      </p>
+                    )}
+
+                    {/* Original Error Warning (if ingested from writing) */}
+                    {originalErrorText && (
+                      <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[#E5C5B8] bg-[#FAF0EC] px-2.5 py-0.5 font-sans text-[11px] text-[#EA5B25]">
+                        <span>原词误写/原表达：</span>
+                        <span className="font-mono font-semibold line-through">
+                          {originalErrorText}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ) : studyMode === 'recognize' ? (
                   /* RECOGNIZE MODE — FRONT CENTER */
                   <div className="my-auto flex flex-col items-center py-6">
                     <h1
@@ -859,7 +990,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                   >
                     <div className="flex flex-col items-center gap-1.5">
                       <div className="inline-flex items-center gap-2">
-                        <span className="text-xl font-semibold tracking-tight text-[#262523]">
+                        <span className="font-sans text-xl font-semibold tracking-tight text-[#262523]">
                           {activeCard.chineseMeaning}
                         </span>
                         <button
@@ -874,9 +1005,9 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                       </div>
 
                       {originalErrorText && (
-                        <span className="font-mono text-[11px] text-[#7A7873]">
+                        <span className="font-sans text-[11px] text-[#7A7873]">
                           原词误写：
-                          <span className="ml-1 text-[#EA5B25] line-through">
+                          <span className="ml-1 font-mono text-[#EA5B25] line-through">
                             {originalErrorText}
                           </span>
                         </span>
@@ -961,14 +1092,14 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                     {/* Feedback Banner Below Slot */}
                     <div className="mt-2 min-h-[26px]">
                       {spellStatus === 'correct' && (
-                        <div className="inline-flex items-center gap-1.5 font-mono text-xs font-medium text-[#2E7D5B]">
+                        <div className="inline-flex items-center gap-1.5 font-sans text-xs font-medium text-[#2E7D5B]">
                           <Check className="h-3.5 w-3.5" />
                           <span>拼写正确</span>
                         </div>
                       )}
 
                       {spellStatus === 'wrong' && (
-                        <div className="inline-flex items-center gap-1.5 font-mono text-xs text-[#EA5B25]">
+                        <div className="inline-flex items-center gap-1.5 font-sans text-xs text-[#EA5B25]">
                           <AlertCircle className="h-3.5 w-3.5" />
                           <span>
                             正确拼写：
@@ -1005,23 +1136,40 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                     studyMode === 'recognize' && isFlipped ? 'auto' : 'none',
                 }}
               >
-                {/* BACK TOP HEADER ROW: Pure Ink POS + Stamp | Right Mode Switcher [ 认读 | 拼写 ] */}
+                {/* BACK TOP HEADER ROW: Pure Ink POS + Stamp | Right Mode Switcher [ 学词 | 认读 | 拼写 ] */}
                 <div className="flex w-full items-center justify-between gap-2">
-                  <div className="font-mono text-xs tracking-wide text-[#9E988E]">
-                    {validPos}
-                    {activeCard.fromWriting
-                      ? `${validPos ? ' · ' : ''}来自写作批改`
-                      : ''}
+                  <div className="text-xs tracking-wide text-[#9E988E]">
+                    <span className="font-mono">{validPos}</span>
+                    {activeCard.fromWriting && (
+                      <span className="font-sans">
+                        {validPos ? ' · ' : ''}来自写作批改
+                      </span>
+                    )}
                   </div>
 
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="skeuo-groove inline-flex items-center rounded-lg p-0.5"
+                    className="skeuo-groove inline-flex items-center rounded-lg p-0.5 font-sans"
                   >
                     <button
                       type="button"
+                      onClick={() => {
+                        setIsFlipTransitionEnabled(false);
+                        setIsFlipped(false);
+                        setStudyMode('learn');
+                      }}
+                      className={`rounded-md px-2.5 py-1 text-[11px] transition-all ${
+                        studyMode === 'learn'
+                          ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                          : 'text-[#7A7873] hover:text-[#262523]'
+                      }`}
+                    >
+                      学词
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setStudyMode('recognize')}
-                      className={`rounded-md px-3 py-1 text-[11px] transition-all ${
+                      className={`rounded-md px-2.5 py-1 text-[11px] transition-all ${
                         studyMode === 'recognize'
                           ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                           : 'text-[#7A7873] hover:text-[#262523]'
@@ -1036,7 +1184,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                         setIsFlipped(false);
                         setStudyMode('spell');
                       }}
-                      className={`rounded-md px-3 py-1 text-[11px] transition-all ${
+                      className={`rounded-md px-2.5 py-1 text-[11px] transition-all ${
                         studyMode === 'spell'
                           ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                           : 'text-[#7A7873] hover:text-[#262523]'
@@ -1071,15 +1219,15 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                   </div>
 
                   {/* 2. 中央醒目展示中文释义 */}
-                  <h2 className="mt-3.5 text-2xl font-semibold tracking-tight text-[#262523]">
+                  <h2 className="mt-3.5 font-sans text-2xl font-semibold tracking-tight text-[#262523]">
                     {activeCard.chineseMeaning}
                   </h2>
 
                   {/* 3. 下方展示真正的雅思同义替换（Synonyms，无则隐藏） */}
                   {cleanSynonyms.length > 0 && (
-                    <p className="mt-3 font-serif text-sm text-[#7A7873]">
+                    <p className="mt-3 font-sans text-xs text-[#7A7873]">
                       同义替换：
-                      <span className="text-[#262523]">
+                      <span className="font-serif text-sm text-[#262523]">
                         {cleanSynonyms.join(' / ')}
                       </span>
                     </p>
@@ -1087,9 +1235,9 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
 
                   {/* 4. 原词误写/原表达警示（若来自写作批改） */}
                   {originalErrorText && (
-                    <div className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-[#E5C5B8] bg-[#FAF0EC] px-3 py-1 font-mono text-xs text-[#EA5B25]">
+                    <div className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-[#E5C5B8] bg-[#FAF0EC] px-3 py-1 font-sans text-xs text-[#EA5B25]">
                       <span>原词误写/原表达：</span>
-                      <span className="font-semibold line-through">
+                      <span className="font-mono font-semibold line-through">
                         {originalErrorText}
                       </span>
                     </div>
@@ -1106,13 +1254,39 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
             </div>
           </div>
 
-          {/* Two Physical Mechanical Buttons — ONLY rendered in Recognize Mode */}
+          {/* =====================================================================
+              BOTTOM ACTION BUTTONS:
+              - Learn Mode (学词): [ ← 上一词 ] (米白键) | [ 下一词 → ] (博朗橙键)
+              - Recognize Mode (认读): [ 没记住 1 ] (米白键) | [ 记住了 2 ] (博朗橙键)
+             ===================================================================== */}
+          {studyMode === 'learn' && (
+            <div className="mt-6 flex w-full max-w-[540px] items-center justify-center gap-4 font-sans">
+              <button
+                type="button"
+                onClick={handlePrevCard}
+                className="skeuo-btn-light flex flex-1 items-center justify-between rounded-xl px-5 py-3.5 text-sm font-medium text-[#262523]"
+              >
+                <span>← 上一词</span>
+                <kbd className="font-mono text-[11px] text-[#7A7873]">←</kbd>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleNextCard}
+                className="skeuo-btn-orange flex flex-1 items-center justify-between rounded-xl px-5 py-3.5 text-sm font-semibold text-white"
+              >
+                <span>下一词 →</span>
+                <kbd className="font-mono text-[11px] text-white/85">→</kbd>
+              </button>
+            </div>
+          )}
+
           {studyMode === 'recognize' && (
-            <div className="mt-6 flex w-full max-w-[540px] items-center justify-center gap-4">
+            <div className="mt-6 flex w-full max-w-[540px] items-center justify-center gap-4 font-sans">
               <button
                 type="button"
                 onClick={() => handleDecision('unlearned')}
-                className="skeuo-btn-light flex flex-1 items-center justify-between rounded-xl px-5 py-3.5 text-sm font-medium"
+                className="skeuo-btn-light flex flex-1 items-center justify-between rounded-xl px-5 py-3.5 text-sm font-medium text-[#262523]"
               >
                 <span>没记住</span>
                 <kbd className="font-mono text-[11px] text-[#7A7873]">1</kbd>
@@ -1121,10 +1295,10 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
               <button
                 type="button"
                 onClick={() => handleDecision('mastered')}
-                className="skeuo-btn-dark flex flex-1 items-center justify-between rounded-xl px-5 py-3.5 text-sm font-medium"
+                className="skeuo-btn-orange flex flex-1 items-center justify-between rounded-xl px-5 py-3.5 text-sm font-semibold text-white"
               >
                 <span>记住了</span>
-                <kbd className="font-mono text-[11px] text-[#7A7873]">2</kbd>
+                <kbd className="font-mono text-[11px] text-white/85">2</kbd>
               </button>
             </div>
           )}
@@ -1145,7 +1319,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
           >
             {/* Drawer Header */}
             <div className="flex items-center justify-between border-b border-[#EBE6DF] px-5 py-3.5">
-              <h2 className="font-serif text-sm font-semibold tracking-wide text-[#262523]">
+              <h2 className="font-sans text-sm font-semibold tracking-wide text-[#262523]">
                 词表与添词
               </h2>
               <button
@@ -1165,11 +1339,11 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                 onChange={(e) => setAiRawInput(e.target.value)}
                 rows={2}
                 placeholder="输入英文单词或词组（逗号或换行分隔），AI 自动生成音标与例句..."
-                className="w-full resize-none rounded-lg border border-[#DCD7CA] bg-[#FAF8F3] px-3 py-2 font-mono text-xs text-[#262523] placeholder-[#A8A49B] focus:border-[#7A7873] focus:outline-none"
+                className="w-full resize-none rounded-lg border border-[#DCD7CA] bg-[#FAF8F3] px-3 py-2 font-sans text-xs text-[#262523] placeholder-[#A8A49B] focus:border-[#7A7873] focus:outline-none"
               />
 
               <div className="mt-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 font-mono text-[11px] text-[#7A7873]">
+                <div className="flex items-center gap-1.5 font-sans text-[11px] text-[#7A7873]">
                   <span>归入：</span>
                   <select
                     value={aiTargetCategory}
@@ -1178,7 +1352,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                         e.target.value as 'writing' | 'task1' | 'task2'
                       )
                     }
-                    className="rounded border border-[#DCD7CA] bg-[#FAF8F3] px-2 py-1 text-[11px] text-[#262523] focus:outline-none"
+                    className="rounded border border-[#DCD7CA] bg-[#FAF8F3] px-2 py-1 font-sans text-[11px] text-[#262523] focus:outline-none"
                   >
                     <option value="writing">写作积累</option>
                     <option value="task1">Task 1 核心</option>
@@ -1190,11 +1364,11 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                   type="button"
                   disabled={isAiGenerating}
                   onClick={handleAiIngestWords}
-                  className="skeuo-btn-light inline-flex items-center gap-1.5 rounded-lg px-3 py-1 font-mono text-[11px] font-semibold text-[#262523] disabled:opacity-60"
+                  className="skeuo-btn-orange inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 font-sans text-[11px] font-semibold text-white disabled:opacity-60"
                 >
                   {isAiGenerating ? (
                     <>
-                      <Loader2 className="h-3 w-3 animate-spin text-[#EA5B25]" />
+                      <Loader2 className="h-3 w-3 animate-spin text-white" />
                       <span>生成中...</span>
                     </>
                   ) : (
