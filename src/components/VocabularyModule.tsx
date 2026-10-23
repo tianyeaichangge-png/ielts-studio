@@ -674,17 +674,24 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
           MAIN VOCABULARY CARD OR EMPTY WORD-BOX STATE
          ===================================================================== */}
       {!activeCard ? (
-        <div className="relative mb-3 w-full max-w-[540px]">
-          {/* Stacked Card Deck Bottom Layer 2 (10px down, 24px narrower) */}
+        <div className="relative mb-4 w-full max-w-[540px]">
+          {/* Independent 2D Background Layer for Full-Size Stacked Deck Cards (z-index: 1) */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute -bottom-[10px] inset-x-[12px] z-0 h-6 rounded-b-2xl border border-[#D8D3C6] bg-[#F1EDE3] shadow-[0_8px_18px_-4px_rgba(38,37,35,0.11)]"
-          />
-          {/* Stacked Card Deck Bottom Layer 1 (5px down, 12px narrower) */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -bottom-[5px] inset-x-[6px] z-[1] h-6 rounded-b-2xl border border-[#DAD5C9] bg-[#F6F3EA] shadow-[0_4px_10px_-2px_rgba(38,37,35,0.08)]"
-          />
+            className="pointer-events-none absolute inset-0 z-[1]"
+          >
+            {/* Deck Layer 2: Full-Size Card (translateY(14px) scaleX(0.92), #F2EFE9) */}
+            <div
+              className="absolute inset-0 rounded-2xl border border-[#D7D2C6] bg-[#F2EFE9] shadow-[0_10px_24px_-6px_rgba(38,37,35,0.12),0_2px_6px_rgba(38,37,35,0.06)]"
+              style={{ transform: 'translateY(14px) scaleX(0.92)' }}
+            />
+            {/* Deck Layer 1: Full-Size Card (translateY(7px) scaleX(0.96), #F7F4EE) */}
+            <div
+              className="absolute inset-0 rounded-2xl border border-[#DCD7CB] bg-[#F7F4EE] shadow-[0_6px_16px_-4px_rgba(38,37,35,0.09),0_1px_3px_rgba(38,37,35,0.05)]"
+              style={{ transform: 'translateY(7px) scaleX(0.96)' }}
+            />
+          </div>
+
           <div className="skeuo-paper relative z-10 flex min-h-[380px] w-full flex-col items-center justify-center rounded-2xl px-8 py-10 text-center">
             <p className="font-serif text-lg font-medium text-[#262523]">
               当前词盒暂无词条
@@ -704,46 +711,58 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
       ) : (
         <>
           {/* =====================================================================
-              STACKED CARD DECK + 3D PERSPECTIVE CONTAINER & FLIPPER
+              STACKED CARD DECK (2D Layer z-1) + ISOLATED 3D FLIPPER (Layer z-10)
              ===================================================================== */}
-          <div className="relative mb-2.5 w-full max-w-[540px]">
-            {/* Stacked Card Deck Bottom Layer 2 (向下偏移 10px · 宽度缩窄 24px -> 左右各内缩 12px) */}
+          <div className="relative mb-4 w-full max-w-[540px]">
+            {/* 1. Independent 2D Background Layer: Two Full-Size Deck Cards (z-index: 1) */}
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute -bottom-[10px] inset-x-[12px] z-0 h-7 rounded-b-2xl border border-[#D8D3C6] bg-[#F1EDE3] shadow-[0_10px_22px_-5px_rgba(38,37,35,0.13),0_2px_4px_rgba(38,37,35,0.06)]"
-            />
-            {/* Stacked Card Deck Bottom Layer 1 (向下偏移 5px · 宽度缩窄 12px -> 左右各内缩 6px) */}
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -bottom-[5px] inset-x-[6px] z-[1] h-7 rounded-b-2xl border border-[#DAD5C9] bg-[#F6F3EA] shadow-[0_5px_12px_-3px_rgba(38,37,35,0.09),0_1px_2px_rgba(38,37,35,0.06)]"
-            />
+              className="pointer-events-none absolute inset-0 z-[1]"
+            >
+              {/* Deck Layer 2: Full-Size Cream Card (translateY(14px) scaleX(0.92), #F2EFE9) */}
+              <div
+                className="absolute inset-0 rounded-2xl border border-[#D7D2C6] bg-[#F2EFE9] shadow-[0_10px_24px_-6px_rgba(38,37,35,0.12),0_2px_6px_rgba(38,37,35,0.06)]"
+                style={{ transform: 'translateY(14px) scaleX(0.92)' }}
+              />
+              {/* Deck Layer 1: Full-Size Cream Card (translateY(7px) scaleX(0.96), #F7F4EE) */}
+              <div
+                className="absolute inset-0 rounded-2xl border border-[#DCD7CB] bg-[#F7F4EE] shadow-[0_6px_16px_-4px_rgba(38,37,35,0.09),0_1px_3px_rgba(38,37,35,0.05)]"
+                style={{ transform: 'translateY(7px) scaleX(0.96)' }}
+              />
+            </div>
 
+            {/* 2. Isolated Top 2D Compositing Boundary (z-index: 10, translateZ(0))
+                   Prevents the inner 3D perspective rotation from intersecting z-index: 1 in -Z space */}
             <div
               className="relative z-10 w-full"
-              style={{ perspective: '1200px' }}
-            >
-            <div
-              onClick={() => {
-                if (studyMode === 'recognize') {
-                  handleToggleFlip();
-                } else {
-                  spellInputRef.current?.focus();
-                }
-              }}
-              className={`relative h-[390px] w-full ${
-                studyMode === 'recognize' ? 'cursor-pointer' : 'cursor-text'
-              }`}
               style={{
-                transformStyle: 'preserve-3d',
-                transition: isFlipTransitionEnabled
-                  ? 'transform 0.55s cubic-bezier(0.22, 1, 0.36, 1)'
-                  : 'none',
-                transform:
-                  studyMode === 'recognize' && isFlipped
-                    ? 'rotateY(180deg)'
-                    : 'rotateY(0deg)',
+                isolation: 'isolate',
+                transform: 'translateZ(0)',
               }}
             >
+              <div className="w-full" style={{ perspective: '1200px' }}>
+                <div
+                  onClick={() => {
+                    if (studyMode === 'recognize') {
+                      handleToggleFlip();
+                    } else {
+                      spellInputRef.current?.focus();
+                    }
+                  }}
+                  className={`relative h-[390px] w-full ${
+                    studyMode === 'recognize' ? 'cursor-pointer' : 'cursor-text'
+                  }`}
+                  style={{
+                    transformStyle: 'preserve-3d',
+                    transition: isFlipTransitionEnabled
+                      ? 'transform 0.55s cubic-bezier(0.22, 1, 0.36, 1)'
+                      : 'none',
+                    transform:
+                      studyMode === 'recognize' && isFlipped
+                        ? 'rotateY(180deg)'
+                        : 'rotateY(0deg)',
+                  }}
+                >
               {/* =================================================================
                   FRONT FACE (rotateY(0deg)) — Recognize Front OR Spelling Mode
                  ================================================================= */}
@@ -1082,7 +1101,8 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                   “{activeCard.exampleSentence}”
                 </p>
               </div>
-            </div>
+                </div>
+              </div>
             </div>
           </div>
 
