@@ -598,36 +598,9 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       viewStep: 'catalog',
       customPrompt: prev.selectedTopicId === 'custom' ? '' : prev.customPrompt,
       content: '',
-      outline: '',
-      outlinesByTopic: {
-        ...(prev.outlinesByTopic || {}),
-        [prev.selectedTopicId || 'custom']: '',
-      },
       timer: 2400,
       gradedReportId: null,
     }));
-  };
-
-  // Task 2 Outline / Notes per-topic persistence
-  const activeTask2TopicKey = task2Draft.selectedTopicId || 'custom';
-  const activeTask2Outline =
-    task2Draft.outlinesByTopic?.[activeTask2TopicKey] ??
-    task2Draft.outline ??
-    '';
-
-  const handleTask2OutlineChange = (newOutlineText: string) => {
-    if (isHistoryMode) return;
-    setTask2Draft((prev) => {
-      const key = prev.selectedTopicId || 'custom';
-      return {
-        ...prev,
-        outline: newOutlineText,
-        outlinesByTopic: {
-          ...(prev.outlinesByTopic || {}),
-          [key]: newOutlineText,
-        },
-      };
-    });
   };
 
   // Strictly isolated prompt text change handler
@@ -1234,8 +1207,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 )}
               </div>
 
-              {/* Left Page Lower Half: Smartly allocated by Task 1 (HD Chart) vs Task 2 (Outline / Notes) */}
-              {displayedTaskType === 'task1' ? (
+              {/* Left Page Lower Half: Task 1 Exclusive High-Res Chart Area */}
+              {displayedTaskType === 'task1' && (
                 <div className="flex-1 border-t border-dashed border-[#DFDBD0] px-7 pt-4 pb-7">
                   <div className="mb-2.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
                     <span>CHART VISUAL · 图表原图</span>
@@ -1298,30 +1271,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                       </span>
                     </button>
                   )}
-                </div>
-              ) : (
-                /* Task 2 Lower Half: Elegant Outline & Notes Area (审题与提纲草稿区) */
-                <div className="flex flex-1 flex-col border-t border-dashed border-[#DFDBD0] px-7 pt-4 pb-7">
-                  <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
-                    <span>OUTLINE &amp; NOTES · 审题与提纲草稿</span>
-                    <span>自动保存</span>
-                  </div>
-
-                  <div className="relative flex-1 rounded-xl border border-[#E4E0D5] bg-[#F6F3EB]/75 px-4 py-3 shadow-[inset_0_1px_2px_rgba(38,37,35,0.03)]">
-                    <textarea
-                      value={activeTask2Outline}
-                      onChange={(e) => handleTask2OutlineChange(e.target.value)}
-                      placeholder="在此快速列下你的核心论点、分论点结构与计划使用的高分词汇..."
-                      aria-label="审题与提纲草稿"
-                      style={{
-                        backgroundImage:
-                          'linear-gradient(to bottom, transparent 27px, rgba(216, 211, 198, 0.55) 28px)',
-                        backgroundSize: '100% 28px',
-                        lineHeight: '28px',
-                      }}
-                      className="min-h-[336px] w-full resize-none bg-transparent font-serif text-[13.5px] text-[#4A4843] placeholder-[#B0ACA0] focus:outline-none"
-                    />
-                  </div>
                 </div>
               )}
             </div>
@@ -2038,9 +1987,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     2,
                     '0'
                   );
-                  const firstDimName =
-                    item.firstCriterionLabel ||
-                    (item.taskType === 'task1' ? 'TA' : 'TR');
                   const itemImage =
                     item.image || item.chartImageDataUrl || null;
                   const isCurrentlySelected =
@@ -2057,18 +2003,12 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+                        <div className="flex items-center gap-2 font-mono text-xs">
                           <span className="font-semibold text-[#7A7873]">
                             #{seqNo}
                           </span>
                           <span className="rounded bg-[#262523] px-2 py-0.5 text-[11px] font-bold text-[#FAF8F2]">
                             BAND {item.overallBand.toFixed(1)}
-                          </span>
-                          <span className="text-[11px] text-[#7A7873]">
-                            {firstDimName} {item.trTa.band.toFixed(1)} · CC{' '}
-                            {item.cc.band.toFixed(1)} · LR{' '}
-                            {item.lr.band.toFixed(1)} · GRA{' '}
-                            {item.gra.band.toFixed(1)}
                           </span>
                         </div>
 
