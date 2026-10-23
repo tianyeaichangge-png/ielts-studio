@@ -59,6 +59,50 @@ export interface GrammarCorrectionItem {
   explanation: string;
 }
 
+export interface DimensionDiagnosisItem {
+  score: number;
+  diagnosis: string;
+  strengths?: string[];
+  weaknesses?: string[];
+}
+
+export interface FourDimensionsEvaluation {
+  taOrTr: DimensionDiagnosisItem;
+  cc: DimensionDiagnosisItem;
+  lr: DimensionDiagnosisItem;
+  gra: DimensionDiagnosisItem;
+  overallSummary?: string;
+}
+
+export interface ParagraphKeyCorrection {
+  originalError: string;
+  upgradedWord: string;
+  phonetic: string;
+  pos: string;
+  meaning: string;
+  synonyms: string[];
+  example: string;
+}
+
+export interface ParagraphReviewItem {
+  paragraphIndex: string;
+  originalText: string;
+  logicAndLanguageCritique: string;
+  reconstructedParagraph: string;
+  keyCorrections: ParagraphKeyCorrection[];
+}
+
+export interface BreakthroughStrategyItem {
+  title: string;
+  actionableAdvice: string;
+}
+
+export interface ExaminerModelEssay {
+  bandScore: string;
+  paragraphs: string[];
+  highlights: string[];
+}
+
 export interface WritingEvaluationReport {
   id: string;
   createdAt: string;
@@ -72,6 +116,13 @@ export interface WritingEvaluationReport {
   essay: string;
   wordCount: number;
   overallBand: number;
+  // New 4-module structured evaluation fields
+  dimensions?: FourDimensionsEvaluation;
+  paragraphReviews?: ParagraphReviewItem[];
+  breakthroughStrategies?: BreakthroughStrategyItem[];
+  modelEssay?: ExaminerModelEssay;
+  vocabularyUpgrades?: ParagraphKeyCorrection[];
+  // Legacy fields retained for full backward compatibility
   trTa: CriterionEvaluation;
   cc: CriterionEvaluation;
   lr: CriterionEvaluation & {

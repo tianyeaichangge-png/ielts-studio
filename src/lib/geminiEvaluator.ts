@@ -1,4 +1,8 @@
 import {
+  BreakthroughStrategyItem,
+  ExaminerModelEssay,
+  ParagraphKeyCorrection,
+  ParagraphReviewItem,
   VocabularyCard,
   WritingEvaluationReport,
   WritingTaskType,
@@ -149,7 +153,11 @@ export function convertImageFileToDataUrl(file: File | Blob): Promise<string> {
 
 /**
  * 100% Real DeepSeek IELTS Writing Examiner Evaluation
- * Zero mock fallbacks, zero hardcoded scores or fake vocabulary lists.
+ * Outputs the 4 sequential Examiner Modules:
+ * 1. 雅思官方四维评分诊断 (overallBand + dimensions)
+ * 2. 逐段深度批改与逻辑重构 (paragraphReviews with keyCorrections for one-click Vocabulary ingestion)
+ * 3. 突破分数天花板的核心策略 (breakthroughStrategies - Top 3 actionable strategies)
+ * 4. 考官级完整范文 (modelEssay - Band 8.0+ full paragraphs & highlights)
  */
 export async function evaluateIeltsWriting({
   taskType,
@@ -172,93 +180,104 @@ export async function evaluateIeltsWriting({
   const minWords = isTask1 ? 150 : 250;
 
   const systemInstruction = `你是一位铁面无私、经验丰富的前雅思考官（Former Senior IELTS Writing Examiner）。
-请严格按照雅思官方评分标准（Task 1 要求 ≥150 词，Task 2 要求 ≥250 词）进行客观、铁面无私的评估，克服 AI 的讨好倾向。请自主判断考生的文章是否完整、是否覆盖核心要求（TA/TR）、逻辑是否连贯（CC）、词汇与语法是否准确（LR/GRA）。若文章存在未写完、字数严重不足、跑题或拼写语法错误，请严格按照真实雅思考场的扣分尺度如实给出低分与一针见血的批评！
+请严格按照雅思官方评分标准（Task 1 要求 ≥150 词，Task 2 要求 ≥250 词）进行客观、严谨的评估，克服 AI 的讨好倾向。若文章存在未写完、字数严重不足、跑题或拼写语法错误，请严格按照真实雅思考场的扣分尺度如实给出低分与一针见血的批评！
 
 【铁律要求 —— 严禁无中生有】：
-1. 你给出的所有分数（overallBand 以及四项小分）完全由你根据考生实际表现自主裁定（步长为 0.5 分，如 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0 等）。如果字数严重不足（例如仅几十词）、文章未写完或严重跑题，TA/TR 及总分必须如实大幅扣分（例如给出 3.0 - 4.5 分），绝不允许给安慰分或虚假好评！
-2. 评语中指出的所有优缺点，以及 LR 模块（paraphrasingUpgrades）和 GRA 模块（errorCorrections）列出的“原文错误/低分表达 -> 高分升级替换”，必须 **100% 逐字摘自考生实际提交的这篇作文原文**（例如精准揪出原文中的拼写错误、语法错误、未写完的残缺句或低幼表达），绝不允许编造原文中不存在的词汇或句子！
-3. 在 paraphrasingUpgrades 中：
-   - "original": 必须逐字摘自考生原文中的真实词汇或短语（包含拼写错误或低分口语表达）；
-   - "originalError": 考生原文中写错的原词或不当原词（如 "catogerise"）；
-   - "upgraded": 推荐替换的 1 个核心雅思高分单词或词组（不要用斜杠堆砌多个，以便考生一键入库背诵与默写）；
-   - "phonetic": 该推荐单词的真实国际音标（如 "/ˈkætəɡəriz/"；若为多词短语无单字音标则返回 "" 空字符串，严禁填写 "/academic/" 等假音标！）；
-   - "pos": 准确词性缩写（严格使用 "n." / "v." / "adj." / "adv." / "phrase"，严禁使用 "acad." 或 "expr."！）；
-   - "meaning": 该推荐词的精准中文释义（同 chineseMeaning）；
-   - "chineseMeaning": 该推荐词的精准中文释义；
-   - "synonyms": 额外提供 2~3 个与该推荐词同义的地道正确雅思学术词汇数组（如 ["classifications", "types"]，严禁把考生的错误原词 originalError 放进 synonyms！）；
-   - "upgradedSentence": 将考生包含该词的原句用该高分推荐词改写后的完整正确英文例句；
-   - "contextExplanation": 结合考生原句一针见血地说明原词存在的问题（如拼写错误、搭配不当、语体过口语）及升级理由。
-4. 在 errorCorrections 中：
-   - "original": 必须逐字摘自考生原文中含有语法错误、拼写错误、句子残缺或中式表达的真实原句/分句；
-   - "originalError": 该句中考生拼写错误或误用的具体原词（如有，如 "catogerise"）；
-   - "corrected": 修正并升级后的地道英文句子；
-   - "keyExpression": 该修正句中最值得收录背诵的 1 个核心高分单词或短语；
-   - "phonetic": keyExpression 的真实国际音标（若为单字则给真实音标如 "/ˈkætəɡəriz/"，若为多词短语则返回 "" 空字符串，严禁假音标！）；
-   - "pos": keyExpression 的准确词性缩写（"n." / "v." / "adj." / "adv." / "phrase"）；
-   - "meaning": 该核心表达的简明中文释义（同 chineseMeaning）；
-   - "chineseMeaning": 该核心表达的简明中文释义；
-   - "synonyms": 额外提供 2~3 个与 keyExpression 同义的地道正确雅思词汇数组（严禁把考生的错误原词放进 synonyms！）；
-   - "errorType": 具体错误类型（如：拼写错误 / 句子未写完残缺 / 主谓不一致 / 冠词与介词误用 / 句式单薄）；
-   - "explanation": 针对该原句的具体纠错解析。
+1. 你必须严格输出包含以下 **四大核心模块** 的结构化 JSON 数据：
+   - **模块一：雅思官方四维评分诊断（Band Descriptors）**：包含 overallBand（0.5分进制）和 dimensions（taOrTr、cc、lr、gra 四维的 score、diagnosis、strengths、weaknesses，以及 overallSummary 总体优缺点综述）。
+   - **模块二：逐段深度批改与逻辑重构（Paragraph-by-Paragraph Critique & Reconstruction）**：按考生原文的自然段切分为 paragraphReviews 数组。每一段必须包含：
+     * "paragraphIndex": 段落标识（如 "Paragraph 1 · 引言改写与总起"、"Paragraph 2 · 主体段一" 等）；
+     * "originalText": 100% 逐字摘录考生该段的原始英文段落；
+     * "logicAndLanguageCritique": 考官对该段逻辑推进、论证漏洞、衔接断层及语言错误的深度批注诊断（中文，一针见血）；
+     * "reconstructedParagraph": 考官在保留考生原本意图的基础上，示范如何用 Band 7.5+ 的严谨逻辑与学术衔接重写该段（纯正英文）；
+     * "keyCorrections": 从该段中提取 1~3 个核心词汇/短语纠错与高分升级项，供考生点击「+ 入库」直接存入背单词本。每项必须包含：
+       - "originalError": 100% 摘自考生该段原文的错误拼写或低分口语词（如 "catogerise"、"more and more"）；
+       - "upgradedWord": 升级后的 1 个地道雅思高分学术单词或词组（不要用斜杠堆砌多个，以便直接作为背单词词头）；
+       - "phonetic": 升级词的真实英式国际音标（IPA，如 "/ˈkætəɡəraɪz/"；若为多词短语无单字音标则必须填 "" 空字符串，严禁填写 "/academic/" 等假音标！）；
+       - "pos": 准确词性缩写（严格使用 "n." / "v." / "adj." / "adv." / "phrase"，严禁使用 "acad." 或 "expr."！）；
+       - "meaning": 简明精准的中文释义（12字以内）；
+       - "synonyms": 2~3 个地道的高分雅思同义替换词数组（严禁把考生的错误原词 originalError 放进 synonyms！）；
+       - "example": 包含该升级词的地道雅思学术完整英文例句（基于考生该句改写）。
+   - **模块三：突破分数天花板的核心策略（Top 3 Actionable Strategies）**：针对考生本文最致命的提分瓶颈，给出 3 条具体、可落地的突破策略 breakthroughStrategies（每条含 title 核心策略标题 与 actionableAdvice 结合原文正反对比的具体落地建议）。
+   - **模块四：考官级完整范文（Examiner's Band 8.0+ Model Essay）**：针对本题题目提供一篇结构严谨、用词考究的 Band 8.0+ 考官级完整范文 modelEssay（包含 bandScore 如 "Band 8.0"、paragraphs 完整分段英文正文数组、highlights 3~5个范文高分逻辑骨架或词伙亮点解析）。
 
-请严格返回符合以下结构的纯 JSON 对象（不要输出任何 Markdown 代码块包裹以外的额外解释）：
+请严格返回符合以下结构的纯 JSON 对象（不要输出任何额外解释）：
 {
-  "overallBand": number,
-  "trTa": {
-    "band": number,
-    "summary": "对考生 ${isTask1 ? 'TA (Task Achievement 任务完成度)' : 'TR (Task Response 任务回应度)'} 的一针见血中文评语（明确结合考生实际字数 ${wordCount} 词、是否写完、是否扣题进行真实点评）",
-    "strengths": ["基于原文的真实亮点（若无明显亮点可写空数组 []）"],
-    "improvements": ["一针见血的改进建议1", "一针见血的改进建议2"]
+  "overallBand": 6.0,
+  "dimensions": {
+    "taOrTr": {
+      "score": 6.0,
+      "diagnosis": "针对考生 ${isTask1 ? 'TA (Task Achievement 任务完成度，含 Overview 概述与关键数据特征涵盖)' : 'TR (Task Response 任务回应度，含审题扣题与论证深度)'} 的深度中文诊断（明确结合考生实际字数 ${wordCount} 词点评）",
+      "strengths": ["基于原文的真实亮点（若无明显亮点可填 []）"],
+      "weaknesses": ["一针见血的失分点1", "失分点2"]
+    },
+    "cc": {
+      "score": 6.0,
+      "diagnosis": "针对 CC (Coherence & Cohesion 逻辑连贯与衔接手段) 的深度中文诊断",
+      "strengths": [],
+      "weaknesses": ["失分点"]
+    },
+    "lr": {
+      "score": 6.0,
+      "diagnosis": "针对 LR (Lexical Resource 词汇丰富度、学术搭配与拼写准确度) 的深度中文诊断",
+      "strengths": [],
+      "weaknesses": ["失分点"]
+    },
+    "gra": {
+      "score": 6.0,
+      "diagnosis": "针对 GRA (Grammatical Range & Accuracy 句式多样性与语法准确度) 的深度中文诊断",
+      "strengths": [],
+      "weaknesses": ["失分点"]
+    },
+    "overallSummary": "考官对考生作文整体优缺点、致命硬伤与核心诊断的总结陈词（中文）"
   },
-  "cc": {
-    "band": number,
-    "summary": "对考生 CC (Coherence and Cohesion 逻辑连贯与衔接) 的真实中文评语",
-    "strengths": [],
-    "improvements": ["改进建议"]
-  },
-  "lr": {
-    "band": number,
-    "summary": "对考生 LR (Lexical Resource 词汇丰富度、拼写准确度与搭配) 的真实中文评语",
-    "strengths": [],
-    "improvements": ["改进建议"],
-    "paraphrasingUpgrades": [
-      {
-        "original": "100%摘自考生原文的词或短语",
-        "originalError": "考生原文误写或低分原词",
-        "upgraded": "地道高分替换词/短语",
-        "phonetic": "/ˈkætəɡəriz/（多词短语填 \"\"）",
-        "pos": "n. / v. / adj. / adv. / phrase",
-        "meaning": "精准中文释义",
-        "chineseMeaning": "精准中文释义",
-        "synonyms": ["地道雅思同义词1", "地道雅思同义词2"],
-        "upgradedSentence": "基于考生原句改写后的完整正确英文例句",
-        "contextExplanation": "为什么原词不妥及替换解析"
-      }
+  "paragraphReviews": [
+    {
+      "paragraphIndex": "Paragraph 1 · 引言改写与总起",
+      "originalText": "考生第一段完整原文",
+      "logicAndLanguageCritique": "考官对该段逻辑推进与语言错误的深度批注诊断（中文）",
+      "reconstructedParagraph": "Band 7.5+ 考官逻辑重构后的英文段落",
+      "keyCorrections": [
+        {
+          "originalError": "100%摘自该段原文的错误或低分表达",
+          "upgradedWord": "地道高分替换词或词组",
+          "phonetic": "/.../（多词短语填 \"\"）",
+          "pos": "n. | v. | adj. | adv. | phrase",
+          "meaning": "简明精准中文释义",
+          "synonyms": ["地道雅思同义词1", "地道雅思同义词2"],
+          "example": "包含该升级词的完整正确雅思学术英文例句"
+        }
+      ]
+    }
+  ],
+  "breakthroughStrategies": [
+    {
+      "title": "核心策略一标题（如：用名词化短语替代松散的口语化从句）",
+      "actionableAdvice": "结合考生原文句子，给出具体的正反对比与可落地的提分操作指南"
+    },
+    {
+      "title": "核心策略二标题",
+      "actionableAdvice": "具体可落地的提分建议"
+    },
+    {
+      "title": "核心策略三标题",
+      "actionableAdvice": "具体可落地的提分建议"
+    }
+  ],
+  "modelEssay": {
+    "bandScore": "Band 8.0",
+    "paragraphs": [
+      "考官范文第一段完整英文...",
+      "考官范文第二段完整英文...",
+      "考官范文第三段完整英文...",
+      "考官范文第四段完整英文..."
+    ],
+    "highlights": [
+      "【高分词伙 / 逻辑骨架 1】：具体解析说明",
+      "【高分词伙 / 逻辑骨架 2】：具体解析说明",
+      "【高分词伙 / 逻辑骨架 3】：具体解析说明"
     ]
-  },
-  "gra": {
-    "band": number,
-    "summary": "对考生 GRA (Grammatical Range and Accuracy 语法结构与准确性) 的真实中文评语",
-    "strengths": [],
-    "improvements": ["改进建议"],
-    "errorCorrections": [
-      {
-        "original": "100%摘自考生原文的错误或残缺原句",
-        "originalError": "原文中写错的具体单词（如有）",
-        "corrected": "修正并升级后的完整英文句",
-        "keyExpression": "修正句中的核心可背诵单词/短语",
-        "phonetic": "单字填真实国际音标，短语填 \"\"",
-        "pos": "n. / v. / adj. / adv. / phrase",
-        "meaning": "该核心词/短语的中文释义",
-        "chineseMeaning": "该核心词/短语的中文释义",
-        "synonyms": ["地道雅思同义词1", "地道雅思同义词2"],
-        "errorType": "错误类型",
-        "explanation": "具体语法/拼写纠错说明"
-      }
-    ]
-  },
-  "improvedSampleParagraph": "针对考生原文内容重写或续写的一段地道雅思高分示范段落（全英文）",
-  "examinerSummary": "考官总结陈词与下一步核心改进方向（中文）"
+  }
 }`;
 
   const userContent = `【任务类型】：IELTS Academic Writing ${
@@ -348,15 +367,158 @@ ${essay}`;
     throw new Error('DeepSeek 返回的数据格式解析失败，请重新点击交卷批改。');
   }
 
-  const trBand = roundToHalfBand(Number(parsed?.trTa?.band));
-  const ccBand = roundToHalfBand(Number(parsed?.cc?.band));
-  const lrBand = roundToHalfBand(Number(parsed?.lr?.band));
-  const graBand = roundToHalfBand(Number(parsed?.gra?.band));
+  // Parse Module 1: dimensions (with fallback to legacy fields if model outputs them)
+  const rawDim = parsed?.dimensions || {};
+  const rawTaOrTr = rawDim?.taOrTr || parsed?.trTa || {};
+  const rawCc = rawDim?.cc || parsed?.cc || {};
+  const rawLr = rawDim?.lr || parsed?.lr || {};
+  const rawGra = rawDim?.gra || parsed?.gra || {};
+
+  const trBand = roundToHalfBand(
+    Number(rawTaOrTr?.score ?? rawTaOrTr?.band ?? 5.5)
+  );
+  const ccBand = roundToHalfBand(
+    Number(rawCc?.score ?? rawCc?.band ?? 5.5)
+  );
+  const lrBand = roundToHalfBand(
+    Number(rawLr?.score ?? rawLr?.band ?? 5.5)
+  );
+  const graBand = roundToHalfBand(
+    Number(rawGra?.score ?? rawGra?.band ?? 5.5)
+  );
   const calculatedOverall = roundToHalfBand(
     parsed?.overallBand !== undefined
       ? Number(parsed.overallBand)
       : (trBand + ccBand + lrBand + graBand) / 4
   );
+
+  const normalizeStrArray = (arr: any): string[] =>
+    Array.isArray(arr) ? arr.map((s) => String(s).trim()).filter(Boolean) : [];
+
+  const cleanCorrectionItem = (raw: any): ParagraphKeyCorrection | null => {
+    const upgradedWord = String(
+      raw?.upgradedWord || raw?.upgraded || raw?.keyExpression || ''
+    ).trim();
+    if (!upgradedWord) return null;
+    const originalError = String(
+      raw?.originalError || raw?.original || ''
+    ).trim();
+    const isPhrase = upgradedWord.includes(' ');
+    const rawPhonetic = String(raw?.phonetic || '').trim();
+    const phonetic =
+      /academic|phrase|collocation|expr/i.test(rawPhonetic) || isPhrase
+        ? ''
+        : rawPhonetic;
+    const rawPos = String(raw?.pos || '').trim();
+    const pos =
+      !rawPos || /^(acad\.|expr\.)$/i.test(rawPos)
+        ? isPhrase
+          ? 'phrase'
+          : 'n.'
+        : rawPos;
+    const meaning = String(
+      raw?.meaning || raw?.chineseMeaning || '高分学术表达'
+    ).trim();
+    const synonyms = normalizeStrArray(raw?.synonyms).filter(
+      (s) => s.toLowerCase() !== originalError.toLowerCase()
+    );
+    const example = String(
+      raw?.example || raw?.upgradedSentence || raw?.corrected || ''
+    ).trim();
+
+    return {
+      originalError,
+      upgradedWord,
+      phonetic,
+      pos,
+      meaning,
+      synonyms,
+      example,
+    };
+  };
+
+  // Parse Module 2: paragraphReviews
+  const paragraphReviews: ParagraphReviewItem[] = Array.isArray(
+    parsed?.paragraphReviews
+  )
+    ? parsed.paragraphReviews
+        .map((p: any, idx: number): ParagraphReviewItem => {
+          const keyCorrections = Array.isArray(p?.keyCorrections)
+            ? p.keyCorrections
+                .map(cleanCorrectionItem)
+                .filter(
+                  (c: ParagraphKeyCorrection | null): c is ParagraphKeyCorrection =>
+                    c !== null
+                )
+            : [];
+          return {
+            paragraphIndex: String(
+              p?.paragraphIndex || `Paragraph ${idx + 1}`
+            ).trim(),
+            originalText: String(p?.originalText || '').trim(),
+            logicAndLanguageCritique: String(
+              p?.logicAndLanguageCritique || ''
+            ).trim(),
+            reconstructedParagraph: String(
+              p?.reconstructedParagraph || ''
+            ).trim(),
+            keyCorrections,
+          };
+        })
+        .filter(
+          (p: ParagraphReviewItem) =>
+            Boolean(p.originalText) ||
+            Boolean(p.logicAndLanguageCritique) ||
+            Boolean(p.reconstructedParagraph)
+        )
+    : [];
+
+  // Aggregate all keyCorrections into vocabularyUpgrades + legacy lr.paraphrasingUpgrades
+  const allKeyCorrections: ParagraphKeyCorrection[] = paragraphReviews.flatMap(
+    (p) => p.keyCorrections
+  );
+
+  // Parse Module 3: breakthroughStrategies
+  const breakthroughStrategies: BreakthroughStrategyItem[] = Array.isArray(
+    parsed?.breakthroughStrategies
+  )
+    ? parsed.breakthroughStrategies
+        .map((s: any) => ({
+          title: String(s?.title || '').trim(),
+          actionableAdvice: String(s?.actionableAdvice || '').trim(),
+        }))
+        .filter(
+          (s: BreakthroughStrategyItem) =>
+            Boolean(s.title) || Boolean(s.actionableAdvice)
+        )
+    : [];
+
+  // Parse Module 4: modelEssay
+  const rawModelEssay = parsed?.modelEssay || {};
+  const modelParagraphs = normalizeStrArray(rawModelEssay?.paragraphs);
+  const modelEssay: ExaminerModelEssay = {
+    bandScore: String(rawModelEssay?.bandScore || 'Band 8.0').trim(),
+    paragraphs:
+      modelParagraphs.length > 0
+        ? modelParagraphs
+        : parsed?.improvedSampleParagraph
+        ? [String(parsed.improvedSampleParagraph).trim()]
+        : [],
+    highlights: normalizeStrArray(rawModelEssay?.highlights),
+  };
+
+  const overallSummary = String(
+    rawDim?.overallSummary || parsed?.examinerSummary || ''
+  ).trim();
+
+  const taDiagnosis = String(
+    rawTaOrTr?.diagnosis || rawTaOrTr?.summary || ''
+  ).trim();
+  const ccDiagnosis = String(rawCc?.diagnosis || rawCc?.summary || '').trim();
+  const lrDiagnosis = String(rawLr?.diagnosis || rawLr?.summary || '').trim();
+  const graDiagnosis = String(
+    rawGra?.diagnosis || rawGra?.summary || ''
+  ).trim();
 
   return {
     id: `report-${Date.now()}`,
@@ -366,54 +528,88 @@ ${essay}`;
     essay,
     wordCount,
     overallBand: calculatedOverall,
+    dimensions: {
+      taOrTr: {
+        score: trBand,
+        diagnosis: taDiagnosis,
+        strengths: normalizeStrArray(rawTaOrTr?.strengths),
+        weaknesses: normalizeStrArray(
+          rawTaOrTr?.weaknesses ?? rawTaOrTr?.improvements
+        ),
+      },
+      cc: {
+        score: ccBand,
+        diagnosis: ccDiagnosis,
+        strengths: normalizeStrArray(rawCc?.strengths),
+        weaknesses: normalizeStrArray(rawCc?.weaknesses ?? rawCc?.improvements),
+      },
+      lr: {
+        score: lrBand,
+        diagnosis: lrDiagnosis,
+        strengths: normalizeStrArray(rawLr?.strengths),
+        weaknesses: normalizeStrArray(rawLr?.weaknesses ?? rawLr?.improvements),
+      },
+      gra: {
+        score: graBand,
+        diagnosis: graDiagnosis,
+        strengths: normalizeStrArray(rawGra?.strengths),
+        weaknesses: normalizeStrArray(
+          rawGra?.weaknesses ?? rawGra?.improvements
+        ),
+      },
+      overallSummary,
+    },
+    paragraphReviews,
+    breakthroughStrategies,
+    modelEssay,
+    vocabularyUpgrades: allKeyCorrections,
+    // Populate legacy fields so all backward-compatible helpers continue working seamlessly
     trTa: {
       band: trBand,
-      summary: String(parsed?.trTa?.summary || ''),
-      strengths: Array.isArray(parsed?.trTa?.strengths)
-        ? parsed.trTa.strengths
-        : [],
-      improvements: Array.isArray(parsed?.trTa?.improvements)
-        ? parsed.trTa.improvements
-        : [],
+      summary: taDiagnosis,
+      strengths: normalizeStrArray(rawTaOrTr?.strengths),
+      improvements: normalizeStrArray(
+        rawTaOrTr?.weaknesses ?? rawTaOrTr?.improvements
+      ),
     },
     cc: {
       band: ccBand,
-      summary: String(parsed?.cc?.summary || ''),
-      strengths: Array.isArray(parsed?.cc?.strengths)
-        ? parsed.cc.strengths
-        : [],
-      improvements: Array.isArray(parsed?.cc?.improvements)
-        ? parsed.cc.improvements
-        : [],
+      summary: ccDiagnosis,
+      strengths: normalizeStrArray(rawCc?.strengths),
+      improvements: normalizeStrArray(rawCc?.weaknesses ?? rawCc?.improvements),
     },
     lr: {
       band: lrBand,
-      summary: String(parsed?.lr?.summary || ''),
-      strengths: Array.isArray(parsed?.lr?.strengths)
-        ? parsed.lr.strengths
-        : [],
-      improvements: Array.isArray(parsed?.lr?.improvements)
-        ? parsed.lr.improvements
-        : [],
-      paraphrasingUpgrades: Array.isArray(parsed?.lr?.paraphrasingUpgrades)
-        ? parsed.lr.paraphrasingUpgrades
-        : [],
+      summary: lrDiagnosis,
+      strengths: normalizeStrArray(rawLr?.strengths),
+      improvements: normalizeStrArray(rawLr?.weaknesses ?? rawLr?.improvements),
+      paraphrasingUpgrades: allKeyCorrections.map((c) => ({
+        original: c.originalError,
+        originalError: c.originalError,
+        upgraded: c.upgradedWord,
+        phonetic: c.phonetic,
+        pos: c.pos,
+        meaning: c.meaning,
+        chineseMeaning: c.meaning,
+        synonyms: c.synonyms,
+        upgradedSentence: c.example,
+        contextExplanation: '',
+      })),
     },
     gra: {
       band: graBand,
-      summary: String(parsed?.gra?.summary || ''),
-      strengths: Array.isArray(parsed?.gra?.strengths)
-        ? parsed.gra.strengths
-        : [],
-      improvements: Array.isArray(parsed?.gra?.improvements)
-        ? parsed.gra.improvements
-        : [],
-      errorCorrections: Array.isArray(parsed?.gra?.errorCorrections)
-        ? parsed.gra.errorCorrections
-        : [],
+      summary: graDiagnosis,
+      strengths: normalizeStrArray(rawGra?.strengths),
+      improvements: normalizeStrArray(
+        rawGra?.weaknesses ?? rawGra?.improvements
+      ),
+      errorCorrections: [],
     },
-    improvedSampleParagraph: String(parsed?.improvedSampleParagraph || ''),
-    examinerSummary: String(parsed?.examinerSummary || ''),
+    improvedSampleParagraph:
+      modelEssay.paragraphs.join('\n\n') ||
+      paragraphReviews[0]?.reconstructedParagraph ||
+      '',
+    examinerSummary: overallSummary,
     reasoningSummary: reasoningContent,
     sourceMode: 'deepseek',
   };

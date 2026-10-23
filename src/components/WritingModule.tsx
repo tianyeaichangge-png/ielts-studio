@@ -13,11 +13,14 @@ import {
   PenLine,
   RotateCcw,
   Trash2,
+  Copy,
+  Volume2,
 } from 'lucide-react';
 import {
   DeepSeekConfig,
   GrammarCorrectionItem,
   LexicalUpgradeItem,
+  ParagraphKeyCorrection,
   Task1DraftState,
   Task2DraftState,
   VocabularyCard,
@@ -932,6 +935,103 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     });
   };
 
+  // Vocabulary Ingestion from Module 2 Paragraph Key Correction Item
+  const handleIngestParagraphKeyCorrection = (
+    item: ParagraphKeyCorrection,
+    report: WritingEvaluationReport
+  ) => {
+    const { headword, extraSynonyms } = parseUpgradedParts(item.upgradedWord);
+    const forbiddenOriginals = new Set(
+      [
+        headword,
+        item.originalError,
+        ...item.originalError.split(/\s*[/|]\s*/),
+      ]
+        .filter(Boolean)
+        .map((s) => String(s).trim().toLowerCase())
+    );
+
+    const rawAiSynonyms = Array.isArray(item.synonyms) ? item.synonyms : [];
+    const cleanSynonyms = Array.from(
+      new Set([...rawAiSynonyms, ...extraSynonyms].map((s) => String(s).trim()))
+    ).filter(
+      (s) =>
+        s.length > 0 &&
+        s.length <= 36 &&
+        !forbiddenOriginals.has(s.toLowerCase())
+    );
+
+    const rawPhonetic = (item.phonetic || '').trim();
+    const cleanPhonetic =
+      rawPhonetic && !/academic|phrase|collocation|expr/i.test(rawPhonetic)
+        ? rawPhonetic
+        : '';
+    const rawPos = (item.pos || '').trim();
+    const cleanPos =
+      rawPos && !/^(acad\.|expr\.)$/i.test(rawPos)
+        ? rawPos
+        : headword.includes(' ')
+        ? 'phrase'
+        : 'n.';
+
+    const userSentence = findMatchingSentenceInEssay(
+      report.essay,
+      item.originalError
+    );
+
+    onIngestVocab({
+      word: headword,
+      phonetic: cleanPhonetic,
+      partOfSpeech: cleanPos,
+      chineseMeaning: item.meaning || '高分学术表达',
+      englishDefinition: `Upgraded from "${item.originalError}" in IELTS Writing.`,
+      paraphrasing: cleanSynonyms,
+      synonyms: cleanSynonyms,
+      exampleSentence: item.example || userSentence,
+      exampleTranslation: item.originalError
+        ? `将原文中的 “${item.originalError}” 升级为 “${headword}”`
+        : '',
+      topicTag: report.topicTag || '来自写作批改',
+      isCustom: true,
+      fromWriting: true,
+      vocabCategory: 'writing',
+      originalError: (item.originalError || '').trim(),
+    });
+  };
+
+  const [copiedModelEssayId, setCopiedModelEssayId] = useState<string | null>(
+    null
+  );
+  const [speakingModelEssayId, setSpeakingModelEssayId] = useState<
+    string | null
+  >(null);
+
+  const handleCopyModelEssay = (reportId: string, fullText: string) => {
+    if (!fullText.trim()) return;
+    navigator.clipboard?.writeText(fullText.trim()).catch(() => {});
+    setCopiedModelEssayId(reportId);
+    window.setTimeout(() => {
+      setCopiedModelEssayId((prev) => (prev === reportId ? null : prev));
+    }, 2000);
+  };
+
+  const handleSpeakModelEssay = (reportId: string, fullText: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    if (speakingModelEssayId === reportId) {
+      window.speechSynthesis.cancel();
+      setSpeakingModelEssayId(null);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(fullText);
+    utterance.lang = 'en-GB';
+    utterance.rate = 0.94;
+    utterance.onend = () => setSpeakingModelEssayId(null);
+    utterance.onerror = () => setSpeakingModelEssayId(null);
+    setSpeakingModelEssayId(reportId);
+    window.speechSynthesis.speak(utterance);
+  };
+
   const isFinalFiveMinutes = secondsLeft > 0 && secondsLeft <= 300;
   const hasComparisonReport = Boolean(activeRightReport);
   const showTopTaskSwitcher =
@@ -1674,19 +1774,29 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               )}
 
               {/* Top Printed Mechanical Score Header */}
-              <div className="border-b border-[#E2DFD5] bg-[#F5F2EA]/70 px-8 py-5">
+              <div className="border-b border-[#E6E1D8] bg-[#F5F2EA]/75 px-8 py-5">
                 <div className="flex items-baseline justify-between">
                   <div>
                     <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#7A7873]">
                       IELTS OFFICIAL DIAGNOSTIC SHEET
                     </div>
-                    <div className="mt-1 font-mono text-3xl font-bold tracking-tight text-[#262523]">
+                    <div
+                      style={{
+                        fontVariantNumeric: 'lining-nums tabular-nums',
+                      }}
+                      className="mt-1 font-mono text-3xl font-bold tracking-tight text-[#262523]"
+                    >
                       BAND {activeRightReport.overallBand.toFixed(1)}
                     </div>
                   </div>
 
-                  {/* 4 Sub-scores Mechanical Stamp (First dimension fixed as TA for Task 1, TR for Task 2) */}
-                  <div className="flex items-center gap-4 font-mono">
+                  {/* 4 Sub-scores Mechanical Stamp */}
+                  <div
+                    style={{
+                      fontVariantNumeric: 'lining-nums tabular-nums',
+                    }}
+                    className="flex items-center gap-4 font-mono"
+                  >
                     <div className="text-right">
                       <div className="text-[10px] text-[#7A7873]">
                         {activeRightReport.firstCriterionLabel ||
@@ -1695,220 +1805,663 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                             : 'TR')}
                       </div>
                       <div className="text-sm font-semibold text-[#262523]">
-                        {activeRightReport.trTa.band.toFixed(1)}
+                        {(
+                          activeRightReport.dimensions?.taOrTr?.score ??
+                          activeRightReport.trTa.band
+                        ).toFixed(1)}
                       </div>
                     </div>
                     <div className="h-6 w-[1px] bg-[#DCD8CE]" />
                     <div className="text-right">
                       <div className="text-[10px] text-[#7A7873]">CC</div>
                       <div className="text-sm font-semibold text-[#262523]">
-                        {activeRightReport.cc.band.toFixed(1)}
+                        {(
+                          activeRightReport.dimensions?.cc?.score ??
+                          activeRightReport.cc.band
+                        ).toFixed(1)}
                       </div>
                     </div>
                     <div className="h-6 w-[1px] bg-[#DCD8CE]" />
                     <div className="text-right">
                       <div className="text-[10px] text-[#7A7873]">LR</div>
                       <div className="text-sm font-semibold text-[#262523]">
-                        {activeRightReport.lr.band.toFixed(1)}
+                        {(
+                          activeRightReport.dimensions?.lr?.score ??
+                          activeRightReport.lr.band
+                        ).toFixed(1)}
                       </div>
                     </div>
                     <div className="h-6 w-[1px] bg-[#DCD8CE]" />
                     <div className="text-right">
                       <div className="text-[10px] text-[#7A7873]">GRA</div>
                       <div className="text-sm font-semibold text-[#262523]">
-                        {activeRightReport.gra.band.toFixed(1)}
+                        {(
+                          activeRightReport.dimensions?.gra?.score ??
+                          activeRightReport.gra.band
+                        ).toFixed(1)}
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Printed Examiner Feedback Body */}
-              <div className="max-h-[580px] flex-1 space-y-6 overflow-y-auto px-8 py-6 text-xs leading-relaxed text-[#262523]">
-                {/* Four Criteria Summaries */}
-                <div className="space-y-3.5">
-                  <div>
-                    <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#7A7873]">
-                      01 ·{' '}
-                      {activeRightReport.taskType === 'task1'
-                        ? 'TA 任务完成度与总体趋势概括'
-                        : 'TR 审题扣题与任务回应'}{' '}
-                      ({activeRightReport.trTa.band.toFixed(1)})
-                    </div>
-                    <p className="mt-1 text-[#262523]">
-                      {activeRightReport.trTa.summary}
-                    </p>
-                  </div>
+              {/* Four-Module Examiner Report Body on Cream Paper */}
+              <div className="max-h-[680px] flex-1 divide-y divide-[#E6E1D8] overflow-y-auto px-8 py-6 text-xs leading-relaxed text-[#262523]">
+                {/* ============================================================
+                    模块一：一、 雅思官方四维评分诊断 (Band Descriptors)
+                   ============================================================ */}
+                <section className="pb-6">
+                  <h3 className="font-sans text-[13px] font-bold tracking-[0.06em] text-[#262523]">
+                    一、 雅思官方四维评分诊断
+                  </h3>
 
-                  <div>
-                    <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#7A7873]">
-                      02 · CC 逻辑连贯与衔接 (
-                      {activeRightReport.cc.band.toFixed(1)})
-                    </div>
-                    <p className="mt-1 text-[#262523]">
-                      {activeRightReport.cc.summary}
-                    </p>
-                  </div>
+                  {/* 2x2 Grid of 4 Official Dimensions */}
+                  <div className="mt-3.5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {[
+                      {
+                        code:
+                          activeRightReport.taskType === 'task1' ? 'TA' : 'TR',
+                        name:
+                          activeRightReport.taskType === 'task1'
+                            ? 'Task Achievement · 任务完成'
+                            : 'Task Response · 任务回应',
+                        score:
+                          activeRightReport.dimensions?.taOrTr?.score ??
+                          activeRightReport.trTa.band,
+                        diagnosis:
+                          activeRightReport.dimensions?.taOrTr?.diagnosis ||
+                          activeRightReport.trTa.summary,
+                        strengths:
+                          activeRightReport.dimensions?.taOrTr?.strengths ??
+                          activeRightReport.trTa.strengths ??
+                          [],
+                        weaknesses:
+                          activeRightReport.dimensions?.taOrTr?.weaknesses ??
+                          activeRightReport.trTa.improvements ??
+                          [],
+                      },
+                      {
+                        code: 'CC',
+                        name: 'Coherence & Cohesion · 连贯与衔接',
+                        score:
+                          activeRightReport.dimensions?.cc?.score ??
+                          activeRightReport.cc.band,
+                        diagnosis:
+                          activeRightReport.dimensions?.cc?.diagnosis ||
+                          activeRightReport.cc.summary,
+                        strengths:
+                          activeRightReport.dimensions?.cc?.strengths ??
+                          activeRightReport.cc.strengths ??
+                          [],
+                        weaknesses:
+                          activeRightReport.dimensions?.cc?.weaknesses ??
+                          activeRightReport.cc.improvements ??
+                          [],
+                      },
+                      {
+                        code: 'LR',
+                        name: 'Lexical Resource · 词汇资源',
+                        score:
+                          activeRightReport.dimensions?.lr?.score ??
+                          activeRightReport.lr.band,
+                        diagnosis:
+                          activeRightReport.dimensions?.lr?.diagnosis ||
+                          activeRightReport.lr.summary,
+                        strengths:
+                          activeRightReport.dimensions?.lr?.strengths ??
+                          activeRightReport.lr.strengths ??
+                          [],
+                        weaknesses:
+                          activeRightReport.dimensions?.lr?.weaknesses ??
+                          activeRightReport.lr.improvements ??
+                          [],
+                      },
+                      {
+                        code: 'GRA',
+                        name: 'Grammatical Range · 语法多样性',
+                        score:
+                          activeRightReport.dimensions?.gra?.score ??
+                          activeRightReport.gra.band,
+                        diagnosis:
+                          activeRightReport.dimensions?.gra?.diagnosis ||
+                          activeRightReport.gra.summary,
+                        strengths:
+                          activeRightReport.dimensions?.gra?.strengths ??
+                          activeRightReport.gra.strengths ??
+                          [],
+                        weaknesses:
+                          activeRightReport.dimensions?.gra?.weaknesses ??
+                          activeRightReport.gra.improvements ??
+                          [],
+                      },
+                    ].map((dim) => (
+                      <div
+                        key={dim.code}
+                        className="rounded-xl border border-[#E6E1D8] bg-[#FAF8F3] p-3.5"
+                      >
+                        <div className="flex items-center justify-between border-b border-[#ECE8DF] pb-2">
+                          <span className="font-mono text-[11px] font-semibold tracking-wider text-[#595650]">
+                            {dim.code} · {dim.name}
+                          </span>
+                          <span
+                            style={{
+                              fontVariantNumeric: 'lining-nums tabular-nums',
+                            }}
+                            className="font-mono text-xs font-bold text-[#EA5B25]"
+                          >
+                            {dim.score.toFixed(1)}
+                          </span>
+                        </div>
 
-                  {/* 03 · LR with One-Click [ + 入库 ] Vocabulary Ingestion */}
-                  <div>
-                    <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#7A7873]">
-                      03 · LR{' '}
-                      {activeRightReport.taskType === 'task1'
-                        ? '趋势词汇与静态对比表达'
-                        : '词汇丰富度与同义替换'}{' '}
-                      ({activeRightReport.lr.band.toFixed(1)})
-                    </div>
-                    <p className="mt-1 text-[#262523]">
-                      {activeRightReport.lr.summary}
-                    </p>
-                    {activeRightReport.lr.paraphrasingUpgrades.length > 0 && (
-                      <div className="mt-2.5 space-y-2 rounded-lg border border-[#E2DFD5] bg-[#F5F2EA]/70 p-3">
-                        {activeRightReport.lr.paraphrasingUpgrades.map(
-                          (item, i) => {
-                            const { headword } = parseUpgradedParts(
-                              item.upgraded
-                            );
-                            const isCollected = existingVocabSet.has(
-                              headword.trim().toLowerCase()
-                            );
+                        <p className="mt-2 font-sans text-xs leading-relaxed text-[#262523]">
+                          {dim.diagnosis}
+                        </p>
 
-                            return (
+                        {(dim.strengths.length > 0 ||
+                          dim.weaknesses.length > 0) && (
+                          <div className="mt-2.5 space-y-1 border-t border-dashed border-[#E6E1D8] pt-2 text-[11px]">
+                            {dim.strengths.slice(0, 2).map((s, idx) => (
                               <div
-                                key={i}
-                                className="flex items-center justify-between gap-2 border-b border-[#E7E4DA] pb-2 last:border-b-0 last:pb-0"
+                                key={`s-${idx}`}
+                                className="text-[#5E5B54] leading-snug"
                               >
-                                <div className="min-w-0 flex-1 font-serif text-xs">
-                                  <span className="text-[#7A7873] line-through">
-                                    {item.original}
-                                  </span>
-                                  <span className="mx-2 text-[#7A7873]">→</span>
-                                  <span className="font-semibold text-[#262523]">
-                                    {item.upgraded}
-                                  </span>
-                                  {item.chineseMeaning && (
-                                    <span className="ml-2 font-sans text-[11px] text-[#7A7873]">
-                                      ({item.chineseMeaning})
-                                    </span>
-                                  )}
-                                </div>
-
-                                <button
-                                  type="button"
-                                  disabled={isCollected}
-                                  onClick={() =>
-                                    handleIngestLexicalItem(
-                                      item,
-                                      activeRightReport
-                                    )
-                                  }
-                                  className={`shrink-0 rounded-md px-2 py-0.5 font-mono text-[10px] font-medium transition-all ${
-                                    isCollected
-                                      ? 'border border-[#D5D1C6] bg-[#EAE7DE] text-[#7A7873] cursor-default'
-                                      : 'skeuo-btn-light text-[#262523] hover:text-[#EA5B25]'
-                                  }`}
-                                  title={
-                                    isCollected
-                                      ? '已收录至背单词卡片库'
-                                      : '一键加入背单词生词库'
-                                  }
-                                >
-                                  {isCollected ? (
-                                    <span className="inline-flex items-center gap-0.5">
-                                      <Check className="h-2.5 w-2.5 text-[#EA5B25]" />
-                                      <span>已收录</span>
-                                    </span>
-                                  ) : (
-                                    <span>+ 入库</span>
-                                  )}
-                                </button>
+                                <span className="font-mono font-semibold text-[#262523]">
+                                  + 亮点：
+                                </span>
+                                {s}
                               </div>
-                            );
-                          }
+                            ))}
+                            {dim.weaknesses.slice(0, 2).map((w, idx) => (
+                              <div
+                                key={`w-${idx}`}
+                                className="text-[#5E5B54] leading-snug"
+                              >
+                                <span className="font-mono font-semibold text-[#EA5B25]">
+                                  - 失分：
+                                </span>
+                                {w}
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
-                    )}
+                    ))}
                   </div>
 
-                  <div>
-                    <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#7A7873]">
-                      04 · GRA 语法多样性与句子修正 (
-                      {activeRightReport.gra.band.toFixed(1)})
+                  {/* Overall Diagnostic Summary */}
+                  {(activeRightReport.dimensions?.overallSummary ||
+                    activeRightReport.examinerSummary) && (
+                    <div className="mt-3.5 rounded-xl border border-[#E6E1D8] bg-[#F6F3EB]/80 px-4 py-3">
+                      <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7A7873]">
+                        OVERALL SUMMARY · 考官总体优缺点综述
+                      </div>
+                      <p className="mt-1 font-sans text-xs leading-relaxed text-[#262523]">
+                        {activeRightReport.dimensions?.overallSummary ||
+                          activeRightReport.examinerSummary}
+                      </p>
                     </div>
-                    <p className="mt-1 text-[#262523]">
-                      {activeRightReport.gra.summary}
-                    </p>
-                  </div>
-                </div>
+                  )}
+                </section>
 
-                {/* Sentence Corrections Comparison with One-Click [ + 入库 ] */}
-                {activeRightReport.gra.errorCorrections.length > 0 && (
-                  <div className="space-y-3 border-t border-dashed border-[#D5D1C6] pt-4">
-                    <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#7A7873]">
-                      SENTENCE CORRECTIONS · 句子修改对照
-                    </div>
-                    {activeRightReport.gra.errorCorrections.map((corr, idx) => {
-                      const targetPhrase = (
-                        corr.keyExpression ||
-                        corr.corrected.split(',')[0] ||
-                        corr.corrected
-                      ).trim();
-                      const isCollected = existingVocabSet.has(
-                        targetPhrase.toLowerCase()
-                      );
+                {/* ============================================================
+                    模块二：二、 逐段深度批改与逻辑重构 (Paragraph Critique & Reconstruction)
+                   ============================================================ */}
+                <section className="py-6">
+                  <h3 className="font-sans text-[13px] font-bold tracking-[0.06em] text-[#262523]">
+                    二、 逐段深度批改与逻辑重构
+                  </h3>
 
-                      return (
+                  {activeRightReport.paragraphReviews &&
+                  activeRightReport.paragraphReviews.length > 0 ? (
+                    <div className="mt-4 space-y-5">
+                      {activeRightReport.paragraphReviews.map((para, pIdx) => (
                         <div
-                          key={idx}
-                          className="space-y-1.5 rounded-lg border border-[#E2DFD5] bg-[#F5F2EA]/60 p-3.5"
+                          key={pIdx}
+                          className="rounded-xl border border-[#E6E1D8] bg-[#FAF8F3] p-4 space-y-3.5"
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="font-serif text-xs text-[#EA5B25] line-through">
-                              {corr.original}
-                            </p>
-
-                            <button
-                              type="button"
-                              disabled={isCollected}
-                              onClick={() =>
-                                handleIngestCorrectionItem(
-                                  corr,
-                                  activeRightReport
-                                )
-                              }
-                              className={`shrink-0 rounded-md px-2 py-0.5 font-mono text-[10px] font-medium transition-all ${
-                                isCollected
-                                  ? 'border border-[#D5D1C6] bg-[#EAE7DE] text-[#7A7873] cursor-default'
-                                  : 'skeuo-btn-light text-[#262523] hover:text-[#EA5B25]'
-                              }`}
-                              title={
-                                isCollected
-                                  ? '已收录至背单词卡片库'
-                                  : `将核心高分表达 "${targetPhrase}" 加入生词库`
-                              }
-                            >
-                              {isCollected ? (
-                                <span className="inline-flex items-center gap-0.5">
-                                  <Check className="h-2.5 w-2.5 text-[#EA5B25]" />
-                                  <span>已收录</span>
-                                </span>
-                              ) : (
-                                <span>+ 入库</span>
-                              )}
-                            </button>
+                          {/* Paragraph Index Header */}
+                          <div className="flex items-center justify-between border-b border-[#ECE8DF] pb-2">
+                            <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#262523]">
+                              {para.paragraphIndex || `Paragraph ${pIdx + 1}`}
+                            </span>
+                            <span className="font-mono text-[10px] tracking-widest text-[#9E988E]">
+                              PARAGRAPH CRITIQUE
+                            </span>
                           </div>
 
-                          <p className="font-serif text-xs font-medium text-[#262523]">
-                            {corr.corrected}
-                          </p>
-                          <p className="text-[11px] text-[#7A7873]">
-                            {corr.explanation}
+                          {/* Original Paragraph Reference (subtle quote) */}
+                          {para.originalText && (
+                            <div className="border-l-2 border-[#DCD7CC] pl-3 font-serif text-xs italic leading-relaxed text-[#7A7873]">
+                              {para.originalText}
+                            </div>
+                          )}
+
+                          {/* 1. 【批注诊断】 */}
+                          {para.logicAndLanguageCritique && (
+                            <div>
+                              <div className="font-sans text-[11px] font-semibold text-[#595650]">
+                                【批注诊断】
+                              </div>
+                              <p className="mt-1 font-sans text-xs leading-relaxed text-[#262523]">
+                                {para.logicAndLanguageCritique}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* 2. 【考官逻辑重构段】 */}
+                          {para.reconstructedParagraph && (
+                            <div className="rounded-lg border border-[#E6E1D8] bg-[#F5F2EA]/75 p-3">
+                              <div className="font-sans text-[11px] font-semibold text-[#262523]">
+                                【考官逻辑重构段 · Band 7.5+】
+                              </div>
+                              <p className="mt-1.5 font-serif text-[13px] leading-[1.75] text-[#262523]">
+                                {para.reconstructedParagraph}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* 3. 【核心词汇纠错与升级】 + [ + 入库 ] */}
+                          {para.keyCorrections &&
+                            para.keyCorrections.length > 0 && (
+                              <div className="space-y-2 pt-0.5">
+                                <div className="font-sans text-[11px] font-semibold text-[#595650]">
+                                  【核心词汇纠错与升级】
+                                </div>
+                                <div className="divide-y divide-[#ECE8DF] rounded-lg border border-[#E6E1D8] bg-[#FCFBF8] px-3.5 py-2">
+                                  {para.keyCorrections.map((item, kIdx) => {
+                                    const { headword } = parseUpgradedParts(
+                                      item.upgradedWord
+                                    );
+                                    const isCollected = existingVocabSet.has(
+                                      headword.trim().toLowerCase()
+                                    );
+
+                                    return (
+                                      <div
+                                        key={kIdx}
+                                        className="flex items-start justify-between gap-3 py-2.5 first:pt-1 last:pb-1"
+                                      >
+                                        <div className="min-w-0 flex-1 space-y-1">
+                                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                            {item.originalError && (
+                                              <>
+                                                <span className="font-serif text-xs text-[#9E988E] line-through">
+                                                  {item.originalError}
+                                                </span>
+                                                <span className="font-mono text-[11px] text-[#9E988E]">
+                                                  →
+                                                </span>
+                                              </>
+                                            )}
+                                            <span className="font-serif text-[13px] font-bold text-[#262523]">
+                                              {item.upgradedWord}
+                                            </span>
+                                            {item.phonetic && (
+                                              <span className="font-ipa text-[11px] text-[#8C867B]">
+                                                {item.phonetic}
+                                              </span>
+                                            )}
+                                            {item.pos && (
+                                              <span className="font-mono text-[10px] text-[#8C867B]">
+                                                {item.pos}
+                                              </span>
+                                            )}
+                                            {item.meaning && (
+                                              <span className="font-sans text-xs font-medium text-[#262523]">
+                                                {item.meaning}
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          {item.synonyms &&
+                                            item.synonyms.length > 0 && (
+                                              <div className="font-mono text-[10px] text-[#7A7873]">
+                                                同义替换：
+                                                <span className="font-serif text-[11px] text-[#595650]">
+                                                  {item.synonyms.join(' / ')}
+                                                </span>
+                                              </div>
+                                            )}
+
+                                          {item.example && (
+                                            <p className="font-serif text-[11.5px] italic leading-relaxed text-[#5E5B54]">
+                                              “{item.example}”
+                                            </p>
+                                          )}
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          disabled={isCollected}
+                                          onClick={() =>
+                                            handleIngestParagraphKeyCorrection(
+                                              item,
+                                              activeRightReport
+                                            )
+                                          }
+                                          className={`mt-0.5 shrink-0 rounded-md px-2.5 py-1 font-sans text-[11px] font-medium transition-all ${
+                                            isCollected
+                                              ? 'border border-[#D5D1C6] bg-[#EAE7DE] text-[#7A7873] cursor-default'
+                                              : 'skeuo-btn-light text-[#262523] hover:text-[#EA5B25]'
+                                          }`}
+                                          title={
+                                            isCollected
+                                              ? '已入库至「写作积累」词盒'
+                                              : '一键存入背单词「写作积累」词盒'
+                                          }
+                                        >
+                                          {isCollected ? '✓ 已入库' : '+ 入库'}
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    /* Fallback for legacy historical reports without paragraphReviews */
+                    <div className="mt-3.5 space-y-3">
+                      {activeRightReport.lr.paraphrasingUpgrades.length > 0 && (
+                        <div className="space-y-2 rounded-xl border border-[#E6E1D8] bg-[#FAF8F3] p-3.5">
+                          <div className="font-sans text-[11px] font-semibold text-[#595650]">
+                            【核心词汇纠错与升级】
+                          </div>
+                          {activeRightReport.lr.paraphrasingUpgrades.map(
+                            (item, i) => {
+                              const { headword } = parseUpgradedParts(
+                                item.upgraded
+                              );
+                              const isCollected = existingVocabSet.has(
+                                headword.trim().toLowerCase()
+                              );
+
+                              return (
+                                <div
+                                  key={i}
+                                  className="flex items-center justify-between gap-2 border-b border-[#E7E4DA] pb-2 last:border-b-0 last:pb-0"
+                                >
+                                  <div className="min-w-0 flex-1 font-serif text-xs">
+                                    <span className="text-[#7A7873] line-through">
+                                      {item.original}
+                                    </span>
+                                    <span className="mx-2 text-[#7A7873]">
+                                      →
+                                    </span>
+                                    <span className="font-semibold text-[#262523]">
+                                      {item.upgraded}
+                                    </span>
+                                    {item.chineseMeaning && (
+                                      <span className="ml-2 font-sans text-[11px] text-[#7A7873]">
+                                        ({item.chineseMeaning})
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    disabled={isCollected}
+                                    onClick={() =>
+                                      handleIngestLexicalItem(
+                                        item,
+                                        activeRightReport
+                                      )
+                                    }
+                                    className={`shrink-0 rounded-md px-2.5 py-0.5 font-sans text-[11px] font-medium transition-all ${
+                                      isCollected
+                                        ? 'border border-[#D5D1C6] bg-[#EAE7DE] text-[#7A7873] cursor-default'
+                                        : 'skeuo-btn-light text-[#262523] hover:text-[#EA5B25]'
+                                    }`}
+                                  >
+                                    {isCollected ? '✓ 已入库' : '+ 入库'}
+                                  </button>
+                                </div>
+                              );
+                            }
+                          )}
+                        </div>
+                      )}
+
+                      {activeRightReport.gra.errorCorrections.length > 0 && (
+                        <div className="space-y-2.5 rounded-xl border border-[#E6E1D8] bg-[#FAF8F3] p-3.5">
+                          <div className="font-sans text-[11px] font-semibold text-[#595650]">
+                            【句子语法纠错对照】
+                          </div>
+                          {activeRightReport.gra.errorCorrections.map(
+                            (corr, idx) => {
+                              const targetPhrase = (
+                                corr.keyExpression ||
+                                corr.corrected.split(',')[0] ||
+                                corr.corrected
+                              ).trim();
+                              const isCollected = existingVocabSet.has(
+                                targetPhrase.toLowerCase()
+                              );
+
+                              return (
+                                <div
+                                  key={idx}
+                                  className="space-y-1 border-b border-[#ECE8DF] pb-2.5 last:border-b-0 last:pb-0"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="font-serif text-xs text-[#9E988E] line-through">
+                                      {corr.original}
+                                    </p>
+                                    <button
+                                      type="button"
+                                      disabled={isCollected}
+                                      onClick={() =>
+                                        handleIngestCorrectionItem(
+                                          corr,
+                                          activeRightReport
+                                        )
+                                      }
+                                      className={`shrink-0 rounded-md px-2.5 py-0.5 font-sans text-[11px] font-medium transition-all ${
+                                        isCollected
+                                          ? 'border border-[#D5D1C6] bg-[#EAE7DE] text-[#7A7873] cursor-default'
+                                          : 'skeuo-btn-light text-[#262523] hover:text-[#EA5B25]'
+                                      }`}
+                                    >
+                                      {isCollected ? '✓ 已入库' : '+ 入库'}
+                                    </button>
+                                  </div>
+                                  <p className="font-serif text-xs font-medium text-[#262523]">
+                                    {corr.corrected}
+                                  </p>
+                                  <p className="text-[11px] text-[#7A7873]">
+                                    {corr.explanation}
+                                  </p>
+                                </div>
+                              );
+                            }
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </section>
+
+                {/* ============================================================
+                    模块三：三、 突破分数天花板的核心策略 (Top 3 Actionable Strategies)
+                   ============================================================ */}
+                <section className="py-6">
+                  <h3 className="font-sans text-[13px] font-bold tracking-[0.06em] text-[#262523]">
+                    三、 突破分数天花板的核心策略
+                  </h3>
+
+                  <div className="mt-3.5 space-y-3">
+                    {(activeRightReport.breakthroughStrategies &&
+                    activeRightReport.breakthroughStrategies.length > 0
+                      ? activeRightReport.breakthroughStrategies
+                      : [
+                          ...(activeRightReport.trTa.improvements || []),
+                          ...(activeRightReport.cc.improvements || []),
+                          ...(activeRightReport.lr.improvements || []),
+                          ...(activeRightReport.gra.improvements || []),
+                        ]
+                          .slice(0, 3)
+                          .map((advice, idx) => ({
+                            title: `核心提分维度策略 0${idx + 1}`,
+                            actionableAdvice: advice,
+                          }))
+                    ).map((strategy, sIdx) => (
+                      <div
+                        key={sIdx}
+                        className="flex items-start gap-3.5 rounded-xl border border-[#E6E1D8] bg-[#FAF8F3] p-3.5"
+                      >
+                        <span
+                          style={{
+                            fontVariantNumeric: 'lining-nums tabular-nums',
+                          }}
+                          className="mt-0.5 shrink-0 font-mono text-xs font-bold tracking-wider text-[#EA5B25]"
+                        >
+                          {String(sIdx + 1).padStart(2, '0')}
+                        </span>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="font-sans text-xs font-semibold text-[#262523]">
+                            {strategy.title}
+                          </div>
+                          <p className="font-sans text-xs leading-relaxed text-[#595650]">
+                            {strategy.actionableAdvice}
                           </p>
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
-                )}
+                </section>
+
+                {/* ============================================================
+                    模块四：四、 考官级完整范文 (Examiner's Band 8.0+ Model Essay)
+                   ============================================================ */}
+                <section className="pt-6">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="font-sans text-[13px] font-bold tracking-[0.06em] text-[#262523]">
+                        四、 考官级完整范文
+                      </h3>
+                      <span
+                        style={{
+                          fontVariantNumeric: 'lining-nums tabular-nums',
+                        }}
+                        className="rounded-md border border-[#DFC5B8] bg-[#F9EFEA] px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#EA5B25]"
+                      >
+                        {activeRightReport.modelEssay?.bandScore || 'Band 8.0+'}
+                      </span>
+                    </div>
+
+                    {/* Copy & Speak Model Essay Controls */}
+                    {(() => {
+                      const modelParagraphs =
+                        activeRightReport.modelEssay?.paragraphs &&
+                        activeRightReport.modelEssay.paragraphs.length > 0
+                          ? activeRightReport.modelEssay.paragraphs
+                          : activeRightReport.improvedSampleParagraph
+                          ? activeRightReport.improvedSampleParagraph
+                              .split(/\n\s*\n/)
+                              .filter(Boolean)
+                          : [];
+                      const fullModelText = modelParagraphs.join('\n\n');
+                      if (!fullModelText) return null;
+
+                      const isCopied =
+                        copiedModelEssayId === activeRightReport.id;
+                      const isSpeaking =
+                        speakingModelEssayId === activeRightReport.id;
+
+                      return (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleSpeakModelEssay(
+                                activeRightReport.id,
+                                fullModelText
+                              )
+                            }
+                            className={`skeuo-btn-light inline-flex items-center gap-1 rounded-lg px-2.5 py-1 font-sans text-[11px] font-medium transition-colors ${
+                              isSpeaking
+                                ? 'text-[#EA5B25]'
+                                : 'text-[#595650] hover:text-[#262523]'
+                            }`}
+                            title="英式发音朗读范文"
+                          >
+                            <Volume2 className="h-3 w-3" />
+                            <span>{isSpeaking ? '停止朗读' : '朗读范文'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCopyModelEssay(
+                                activeRightReport.id,
+                                fullModelText
+                              )
+                            }
+                            className="skeuo-btn-light inline-flex items-center gap-1 rounded-lg px-2.5 py-1 font-sans text-[11px] font-medium text-[#595650] transition-colors hover:text-[#262523]"
+                            title="一键复制完整范文"
+                          >
+                            {isCopied ? (
+                              <>
+                                <Check className="h-3 w-3 text-[#EA5B25]" />
+                                <span className="text-[#EA5B25]">已复制</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3 w-3" />
+                                <span>复制范文</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Model Essay Paragraphs in Newsreader Serif */}
+                  <div className="mt-3.5 space-y-3.5 rounded-xl border border-[#E6E1D8] bg-[#FAF8F3] p-5">
+                    {(activeRightReport.modelEssay?.paragraphs &&
+                    activeRightReport.modelEssay.paragraphs.length > 0
+                      ? activeRightReport.modelEssay.paragraphs
+                      : activeRightReport.improvedSampleParagraph
+                      ? activeRightReport.improvedSampleParagraph
+                          .split(/\n\s*\n/)
+                          .filter(Boolean)
+                      : ['暂无考官范文数据。']
+                    ).map((pText, idx) => (
+                      <p
+                        key={idx}
+                        className="font-serif text-[14px] leading-[1.85] text-[#262523]"
+                      >
+                        {pText}
+                      </p>
+                    ))}
+                  </div>
+
+                  {/* Model Essay Highlights */}
+                  {activeRightReport.modelEssay?.highlights &&
+                    activeRightReport.modelEssay.highlights.length > 0 && (
+                      <div className="mt-3.5 rounded-xl border border-[#E6E1D8] bg-[#F6F3EB]/80 p-4">
+                        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7A7873]">
+                          MODEL HIGHLIGHTS · 范文高分逻辑骨架与词伙解析
+                        </div>
+                        <ul className="mt-2 space-y-1.5">
+                          {activeRightReport.modelEssay.highlights.map(
+                            (hl, hIdx) => (
+                              <li
+                                key={hIdx}
+                                className="flex items-start gap-2 font-sans text-xs leading-relaxed text-[#262523]"
+                              >
+                                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[#EA5B25]" />
+                                <span>{hl}</span>
+                              </li>
+                            )
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                </section>
               </div>
 
               {/* Bottom Footer of Right Score Sheet */}
