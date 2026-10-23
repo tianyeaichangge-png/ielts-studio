@@ -1998,17 +1998,27 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        {/* Vintage Printed Score: 6px Braun Orange Dot + Serif/Mono Bold Band X.X */}
+                        {/* Vintage Printed Score: 6px Braun Orange Dot + Mono Lining-Nums Bold BAND X.X */}
                         <div className="inline-flex items-center gap-2">
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
-                          <span className="font-serif text-sm font-bold tracking-wide text-[#EA5B25]">
-                            Band {item.overallBand.toFixed(1)}
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#EA5B25]" />
+                          <span
+                            style={{
+                              fontVariantNumeric: 'lining-nums tabular-nums',
+                            }}
+                            className="font-mono text-xs font-bold leading-none tracking-wider text-[#EA5B25]"
+                          >
+                            BAND {item.overallBand.toFixed(1)}
                           </span>
                         </div>
 
                         {/* Top-Right: Quiet Timestamp + Hover-Only Borderless Delete Icon */}
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-[11px] text-[#9E988E]">
+                        <div className="inline-flex items-center gap-2">
+                          <span
+                            style={{
+                              fontVariantNumeric: 'lining-nums tabular-nums',
+                            }}
+                            className="font-mono text-[11px] leading-none text-[#9E988E]"
+                          >
                             {new Date(item.createdAt).toLocaleString('zh-CN', {
                               month: '2-digit',
                               day: '2-digit',
@@ -2023,7 +2033,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                               e.stopPropagation();
                               handleDeleteHistoryRecord(item.id, item.taskType);
                             }}
-                            className="p-0.5 text-[#B5B0A4] opacity-0 transition-all hover:text-[#EA5B25] group-hover:opacity-100"
+                            className="inline-flex items-center justify-center p-0.5 text-[#B5B0A4] opacity-0 transition-all hover:text-[#EA5B25] group-hover:opacity-100"
                             title="删除此条批改记录"
                             aria-label="删除此条批改记录"
                           >
