@@ -42,6 +42,7 @@ import {
   TASK1_CHART_TYPE_ENGLISH,
 } from '../lib/samplePrompts';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { MicroPracticeView } from './MicroPracticeView';
 
 interface WritingModuleProps {
   aiConfig: DeepSeekConfig;
@@ -152,11 +153,13 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   onIngestVocab,
   onOpenApiKeyModal,
 }) => {
-  // 1. Strictly Isolated Dual-Track LocalStorage States (Task 1 vs Task 2)
+  // 1. Strictly Isolated Dual-Track LocalStorage States (Task 1 vs Task 2) + Micro-Practice Submodule
   const [activeTaskType, setActiveTaskType] = useLocalStorage<WritingTaskType>(
     'ielts_active_task_type',
     'task2'
   );
+  const [isMicroPracticeMode, setIsMicroPracticeMode] =
+    useLocalStorage<boolean>('ielts_writing_micro_practice_mode_v1', false);
 
   // Task 1 Independent Draft ('ielts_draft_task1')
   const [task1Draft, setTask1Draft] = useLocalStorage<Task1DraftState>(
@@ -713,8 +716,9 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     }));
   };
 
-  // Top Switch: [ Task 1 | Task 2 ] — ZERO DATA LOSS! Never clears either draft or timer
+  // Top Switch: [ Task 1 | Task 2 | 小练习 ] — ZERO DATA LOSS! Never clears any draft or timer
   const handleTopTaskTypeSwitch = (nextType: WritingTaskType) => {
+    setIsMicroPracticeMode(false);
     if (isHistoryMode) {
       setViewMode('draft');
     }
@@ -734,6 +738,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         viewStep: 'catalog',
       }));
     }
+  };
+
+  const handleEnterMicroPractice = () => {
+    setIsTimerRunning(false);
+    setIsHistoryDrawerOpen(false);
+    setConfirmBackToCatalog(false);
+    setErrorMsg(null);
+    setIsMicroPracticeMode(true);
   };
 
   // Upsert a practiced or submitted Task 1 prompt into personal Task 1 Topic Bank ('ielts_task1_topic_bank_v1')
@@ -1488,11 +1500,12 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const isFinalFiveMinutes = secondsLeft > 0 && secondsLeft <= 300;
   const hasComparisonReport = Boolean(activeRightReport);
-  const showTopTaskSwitcher = isHistoryMode || currentStep === 'catalog';
+  const showTopTaskSwitcher =
+    isMicroPracticeMode || isHistoryMode || currentStep === 'catalog';
 
   return (
     <div className="mx-auto w-[92vw] max-w-[1280px] pb-14 pt-1">
-      {/* TOP TASK SWITCHER BAR: [ Task 1 | Task 2 ] — Shown in Catalog & History Views */}
+      {/* TOP 3-SEGMENT SUB-NAVIGATION BAR: [ Task 1 | Task 2 | 小练习 ] */}
       {showTopTaskSwitcher && (
         <div className="mb-6 flex items-center justify-center select-none">
           <div className="skeuo-groove inline-flex items-center rounded-xl p-1 font-sans">
@@ -1500,7 +1513,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               type="button"
               onClick={() => handleTopTaskTypeSwitch('task1')}
               className={`rounded-lg px-5 py-1 text-xs font-medium tracking-wide transition-all ${
-                displayedTaskType === 'task1'
+                !isMicroPracticeMode && displayedTaskType === 'task1'
                   ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                   : 'text-[#7A7873] hover:text-[#262523]'
               }`}
@@ -1511,23 +1524,41 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               type="button"
               onClick={() => handleTopTaskTypeSwitch('task2')}
               className={`rounded-lg px-5 py-1 text-xs font-medium tracking-wide transition-all ${
-                displayedTaskType === 'task2'
+                !isMicroPracticeMode && displayedTaskType === 'task2'
                   ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                   : 'text-[#7A7873] hover:text-[#262523]'
               }`}
             >
               Task 2
             </button>
+            <button
+              type="button"
+              onClick={handleEnterMicroPractice}
+              className={`rounded-lg px-5 py-1 text-xs font-medium tracking-wide transition-all ${
+                isMicroPracticeMode
+                  ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                  : 'text-[#7A7873] hover:text-[#262523]'
+              }`}
+            >
+              小练习
+            </button>
           </div>
         </div>
       )}
 
       {/* =====================================================================
-          STEP 1A: TASK 1 TOPIC DIRECTORY & CHART TYPE CATALOG VIEW (图表小作文二级题库页 · 1000px)
+          STEP 0: MICRO-PRACTICE SUBMODULE (小练习 · 单句升格工作台 · max-w-[920px])
          ===================================================================== */}
-      {!isHistoryMode &&
-      activeTaskType === 'task1' &&
-      currentStep === 'catalog' ? (
+      {isMicroPracticeMode ? (
+        <MicroPracticeView
+          aiConfig={aiConfig}
+          vocabCards={vocabCards}
+          onIngestVocab={onIngestVocab}
+          onOpenApiKeyModal={onOpenApiKeyModal}
+        />
+      ) : !isHistoryMode &&
+        activeTaskType === 'task1' &&
+        currentStep === 'catalog' ? (
         <div className="mx-auto max-w-[1000px]">
           <section className="skeuo-paper overflow-hidden rounded-2xl">
             {/* Smartisan Vintage Double Crimson Header Rule */}
