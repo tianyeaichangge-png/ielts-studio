@@ -7,6 +7,7 @@ import {
   WritingEvaluationReport,
   WritingTaskType,
 } from '../types/ielts';
+import { inferTask1ChartType } from './samplePrompts';
 
 export const DEFAULT_DEEPSEEK_ENDPOINT =
   'https://api.deepseek.com/chat/completions';
@@ -183,18 +184,13 @@ export function convertImageFileToDataUrl(file: File | Blob): Promise<string> {
           // Fallback to full image if getImageData fails
         }
 
-        // Step 2: Scale cropped area down only if larger than 1600px
-        const maxDim = 1600;
+        // Step 2: Lightweight compression protection — restrict max width to 1000px and export as WebP (0.82)
+        const maxWidth = 1000;
         let outW = cropW;
         let outH = cropH;
-        if (outW > maxDim || outH > maxDim) {
-          if (outW > outH) {
-            outH = Math.round((outH * maxDim) / outW);
-            outW = maxDim;
-          } else {
-            outW = Math.round((outW * maxDim) / outH);
-            outH = maxDim;
-          }
+        if (outW > maxWidth) {
+          outH = Math.round((outH * maxWidth) / outW);
+          outW = maxWidth;
         }
 
         const outCanvas = document.createElement('canvas');
@@ -218,7 +214,7 @@ export function convertImageFileToDataUrl(file: File | Blob): Promise<string> {
           outW,
           outH
         );
-        resolve(outCanvas.toDataURL('image/jpeg', 0.9));
+        resolve(outCanvas.toDataURL('image/webp', 0.82));
       };
       img.src = rawDataUrl;
     };
@@ -277,9 +273,10 @@ export async function evaluateIeltsWriting({
    - **模块三：突破分数天花板的核心策略（Top 3 Actionable Strategies）**：针对考生本文最致命的提分瓶颈，给出 3 条具体、可落地的突破策略 breakthroughStrategies（每条含 title 核心策略标题 与 actionableAdvice 结合原文正反对比的具体落地建议）。
    - **模块四：考官级完整范文（Examiner's Band 8.0+ Model Essay）**：针对本题题目提供一篇结构严谨、用词考究的 Band 8.0+ 考官级完整范文 modelEssay（包含 bandScore 如 "Band 8.0"、paragraphs 完整分段英文正文数组、highlights 3~5个范文高分逻辑骨架或词伙亮点解析）。
 
-请严格返回符合以下结构的纯 JSON 对象（不要输出任何额外解释）：
+请严格返回符合以下结构的纯 JSON 对象（不要输出任何额外解释；若为 Task 1 图表小作文，必须结合题目关键词如 line/bar/pie/table/map/diagram/process 及考生正文描述自动判断并返回 chartType）：
 {
   "overallBand": 6.0,
+  "chartType": "严格从 '折线图' | '柱状图' | '饼图' | '表格' | '地图' | '流程图' 中选择一个最匹配的分类",
   "dimensions": {
     "taOrTr": {
       "score": 6.0,
@@ -592,10 +589,15 @@ ${essay}`;
     rawGra?.diagnosis || rawGra?.summary || ''
   ).trim();
 
+  const detectedChartType = isTask1
+    ? inferTask1ChartType(prompt, essay, parsed?.chartType)
+    : undefined;
+
   return {
     id: `report-${Date.now()}`,
     createdAt: new Date().toISOString(),
     taskType,
+    chartType: detectedChartType,
     prompt,
     essay,
     wordCount,

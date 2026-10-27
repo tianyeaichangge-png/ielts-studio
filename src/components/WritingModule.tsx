@@ -21,7 +21,9 @@ import {
   GrammarCorrectionItem,
   LexicalUpgradeItem,
   ParagraphKeyCorrection,
+  Task1ChartType,
   Task1DraftState,
+  Task1TopicBankItem,
   Task2DraftState,
   VocabularyCard,
   WritingEvaluationReport,
@@ -33,8 +35,11 @@ import {
   evaluateIeltsWriting,
 } from '../lib/geminiEvaluator';
 import {
+  BUILTIN_TASK1_TOPIC_BANK,
+  inferTask1ChartType,
   MASTER_WRITING_PROMPTS,
   MasterWritingPrompt,
+  TASK1_CHART_TYPE_ENGLISH,
 } from '../lib/samplePrompts';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
@@ -52,6 +57,16 @@ interface WritingModuleProps {
 }
 
 type ViewMode = 'draft' | 'history';
+
+const TASK1_CATALOG_FILTERS = [
+  { key: 'all', label: '全部' },
+  { key: '折线图', label: '折线图' },
+  { key: '柱状图', label: '柱状图' },
+  { key: '饼图', label: '饼图' },
+  { key: '表格', label: '表格' },
+  { key: '地图', label: '地图' },
+  { key: '流程图', label: '流程图' },
+] as const;
 
 const TASK2_CATALOG_FILTERS = [
   { key: 'all', label: '全部' },
@@ -147,12 +162,25 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const [task1Draft, setTask1Draft] = useLocalStorage<Task1DraftState>(
     'ielts_draft_task1',
     {
+      selectedTopicId: 'custom',
+      viewStep: 'catalog',
       prompt: '',
       image: null,
       content: '',
       timer: 1200,
       gradedReportId: null,
     }
+  );
+
+  // Task 1 Personal & Built-in Topic Bank ('ielts_task1_topic_bank_v1')
+  const [task1TopicBank, setTask1TopicBank] = useLocalStorage<
+    Task1TopicBankItem[]
+  >('ielts_task1_topic_bank_v1', BUILTIN_TASK1_TOPIC_BANK);
+
+  // Track deleted Task 1 topic IDs / normalized prompts so deleted cards are not resurrected on refresh
+  const [deletedTask1Keys, setDeletedTask1Keys] = useLocalStorage<string[]>(
+    'ielts_task1_deleted_keys_v1',
+    []
   );
 
   // Task 2 Independent Draft ('ielts_draft_task2')
@@ -174,7 +202,10 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] =
     useState<boolean>(false);
 
-  // 3. Topic Catalog Filter State
+  // 3. Topic Catalog Filter States (Task 1 & Task 2)
+  const [selectedTask1Category, setSelectedTask1Category] = useState<
+    'all' | Task1ChartType
+  >('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   // 4. Anti-Accidental-Loss Confirmation State when returning to catalog
@@ -202,6 +233,139 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const customPromptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Automatically backfill & sync Task 1 historical reports + built-in SVG chart topics into task1TopicBank
+  useEffect(() => {
+    setTask1TopicBank((prevBank) => {
+      const deletedSet = new Set(deletedTask1Keys);
+      const currentList: Task1TopicBankItem[] = Array.isArray(prevBank)
+        ? prevBank.map((item) => ({
+            ...item,
+            chartType: inferTask1ChartType(item.prompt, '', item.chartType),
+            attemptCount:
+              typeof item.attemptCount === 'number' ? item.attemptCount : 0,
+          }))
+        : [];
+
+      let mutated = !Array.isArray(prevBank);
+
+      // 1. Ensure built-in SVG chart topics exist unless explicitly deleted by user
+      for (const builtIn of BUILTIN_TASK1_TOPIC_BANK) {
+        const normPrompt = builtIn.prompt.trim().toLowerCase();
+        if (deletedSet.has(builtIn.id) || deletedSet.has(normPrompt)) {
+          continue;
+        }
+        const existingIdx = currentList.findIndex(
+          (c) =>
+            c.id === builtIn.id || c.prompt.trim().toLowerCase() === normPrompt
+        );
+        if (existingIdx === -1) {
+          currentList.push({ ...builtIn });
+          mutated = true;
+        } else if (!currentList[existingIdx].chartImage && builtIn.chartImage) {
+          currentList[existingIdx] = {
+            ...currentList[existingIdx],
+            chartImage: builtIn.chartImage,
+            isBuiltIn: true,
+          };
+          mutated = true;
+        }
+      }
+
+      // 2. Backfill from existing Task 1 History Reports (group by normalized prompt)
+      const groupedByPrompt = new Map<string, WritingEvaluationReport[]>();
+      for (const r of task1Reports) {
+        if (r.taskType !== 'task1' || !r.prompt?.trim()) continue;
+        const key = r.prompt.trim().toLowerCase();
+        const arr = groupedByPrompt.get(key) || [];
+        arr.push(r);
+        groupedByPrompt.set(key, arr);
+      }
+
+      for (const [normPrompt, reports] of groupedByPrompt.entries()) {
+        if (deletedSet.has(normPrompt)) continue;
+        // Sort reports newest first
+        const sorted = [...reports].sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        const latest = sorted[0];
+        const maxBand = Math.max(...sorted.map((r) => r.overallBand));
+        const count = sorted.length;
+        const firstImage =
+          sorted.find((r) => r.image || r.chartImageDataUrl)?.image ||
+          sorted.find((r) => r.image || r.chartImageDataUrl)
+            ?.chartImageDataUrl ||
+          null;
+        const inferredType = inferTask1ChartType(
+          latest.prompt,
+          latest.essay,
+          latest.chartType
+        );
+
+        const matchIdx = currentList.findIndex(
+          (c) =>
+            (latest.topicId &&
+              latest.topicId !== 'custom' &&
+              c.id === latest.topicId) ||
+            c.prompt.trim().toLowerCase() === normPrompt
+        );
+
+        if (matchIdx !== -1) {
+          const existing = currentList[matchIdx];
+          const nextBest =
+            existing.bestBand !== null && existing.bestBand !== undefined
+              ? Math.max(existing.bestBand, maxBand)
+              : maxBand;
+          const nextCount = Math.max(existing.attemptCount || 0, count);
+          const nextLastEssayId = existing.lastEssayId || latest.id;
+          const nextImage = existing.chartImage || firstImage;
+          const nextType =
+            !existing.isBuiltIn && latest.chartType
+              ? inferredType
+              : existing.chartType;
+
+          if (
+            existing.bestBand !== nextBest ||
+            existing.attemptCount !== nextCount ||
+            existing.lastEssayId !== nextLastEssayId ||
+            existing.chartImage !== nextImage ||
+            existing.chartType !== nextType
+          ) {
+            currentList[matchIdx] = {
+              ...existing,
+              bestBand: nextBest,
+              attemptCount: nextCount,
+              lastEssayId: nextLastEssayId,
+              chartImage: nextImage,
+              chartType: nextType,
+            };
+            mutated = true;
+          }
+        } else {
+          currentList.unshift({
+            id: `t1-hist-${ latest.id }`,
+            prompt: latest.prompt.trim(),
+            chartImage: firstImage,
+            chartType: inferredType,
+            bestBand: maxBand,
+            attemptCount: count,
+            lastEssayId: latest.id,
+            updatedAt: latest.createdAt,
+            isBuiltIn: false,
+          });
+          mutated = true;
+        }
+      }
+
+      return mutated ? currentList : prevBank;
+    });
+  }, [task1Reports, deletedTask1Keys, setTask1TopicBank]);
+
+  const filteredTask1TopicBank = useMemo(() => {
+    if (selectedTask1Category === 'all') return task1TopicBank;
+    return task1TopicBank.filter((p) => p.chartType === selectedTask1Category);
+  }, [task1TopicBank, selectedTask1Category]);
 
   // Task 2 Master Prompts filtered by category
   const task2Prompts = useMemo(
@@ -241,8 +405,35 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     : selectedTask2MasterPrompt?.topicTag || '科技与未来 · Technology';
 
   const isHistoryMode = viewMode === 'history';
+  const isTask1CustomPrompt =
+    !task1Draft.selectedTopicId || task1Draft.selectedTopicId === 'custom';
+  const selectedTask1TopicItem = useMemo(
+    () =>
+      isTask1CustomPrompt
+        ? null
+        : task1TopicBank.find((p) => p.id === task1Draft.selectedTopicId) ||
+          null,
+    [isTask1CustomPrompt, task1TopicBank, task1Draft.selectedTopicId]
+  );
+
+  const task1ResolvedTopicTag = useMemo(() => {
+    if (selectedTask1TopicItem) {
+      return `${TASK1_CHART_TYPE_ENGLISH[selectedTask1TopicItem.chartType]} · ${selectedTask1TopicItem.chartType}`;
+    }
+    if (task1Draft.prompt.trim()) {
+      const guessed = inferTask1ChartType(
+        task1Draft.prompt,
+        task1Draft.content
+      );
+      return `${TASK1_CHART_TYPE_ENGLISH[guessed]} · ${guessed}`;
+    }
+    return 'CUSTOM CHART · 自由命题图表';
+  }, [selectedTask1TopicItem, task1Draft.prompt, task1Draft.content]);
+
   const currentStep =
-    activeTaskType === 'task1' ? 'writing' : task2Draft.viewStep || 'catalog';
+    activeTaskType === 'task1'
+      ? task1Draft.viewStep || 'catalog'
+      : task2Draft.viewStep || 'catalog';
 
   // Strictly isolated history list for the currently active task ('task1' vs 'task2')
   const activeTaskReports =
@@ -285,7 +476,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         ? '图表小作文 · Academic Task 1'
         : '大作文历史存档 · Task 2 Archive')
     : activeTaskType === 'task1'
-    ? '图表小作文 · Academic Task 1'
+    ? task1ResolvedTopicTag
     : task2ResolvedTopicTag;
 
   const displayedPrompt = isHistoryMode
@@ -532,6 +723,183 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     setConfirmBackToCatalog(false);
     setErrorMsg(null);
     setActiveTaskType(nextType);
+    if (nextType === 'task1') {
+      setTask1Draft((prev) => ({
+        ...prev,
+        viewStep: 'catalog',
+      }));
+    } else {
+      setTask2Draft((prev) => ({
+        ...prev,
+        viewStep: 'catalog',
+      }));
+    }
+  };
+
+  // Upsert a practiced or submitted Task 1 prompt into personal Task 1 Topic Bank ('ielts_task1_topic_bank_v1')
+  const upsertTask1TopicBank = useCallback(
+    (params: {
+      topicId?: string | 'custom';
+      prompt: string;
+      chartImage: string | null;
+      chartType: Task1ChartType;
+      bandScore?: number;
+      reportId?: string;
+    }): string => {
+      const cleanPrompt = params.prompt.trim();
+      const normPrompt = cleanPrompt.toLowerCase();
+      const nowIso = new Date().toISOString();
+
+      // Un-mark from deleted keys if user re-submits this prompt
+      setDeletedTask1Keys((prevKeys) =>
+        prevKeys.filter(
+          (k) =>
+            k !== normPrompt &&
+            (!params.topicId || k !== params.topicId)
+        )
+      );
+
+      let resolvedId =
+        params.topicId && params.topicId !== 'custom'
+          ? params.topicId
+          : `t1-user-${Date.now()}`;
+
+      setTask1TopicBank((prevBank) => {
+        const list = Array.isArray(prevBank) ? [...prevBank] : [];
+        const matchIdx = list.findIndex(
+          (item) =>
+            (params.topicId &&
+              params.topicId !== 'custom' &&
+              item.id === params.topicId) ||
+            item.prompt.trim().toLowerCase() === normPrompt
+        );
+
+        if (matchIdx !== -1) {
+          const existing = list[matchIdx];
+          resolvedId = existing.id;
+          const nextBestBand =
+            params.bandScore !== undefined
+              ? existing.bestBand !== null && existing.bestBand !== undefined
+                ? Math.max(existing.bestBand, params.bandScore)
+                : params.bandScore
+              : existing.bestBand ?? null;
+          const nextAttemptCount =
+            params.bandScore !== undefined
+              ? (existing.attemptCount || 0) + 1
+              : existing.attemptCount || 0;
+
+          const updatedItem: Task1TopicBankItem = {
+            ...existing,
+            prompt: cleanPrompt,
+            chartImage: params.chartImage || existing.chartImage || null,
+            chartType: existing.isBuiltIn
+              ? existing.chartType
+              : params.chartType || existing.chartType,
+            bestBand: nextBestBand,
+            attemptCount: nextAttemptCount,
+            lastEssayId: params.reportId || existing.lastEssayId || null,
+            updatedAt: nowIso,
+          };
+          list[matchIdx] = updatedItem;
+          return list;
+        }
+
+        const newItem: Task1TopicBankItem = {
+          id: resolvedId,
+          prompt: cleanPrompt,
+          chartImage: params.chartImage || null,
+          chartType: params.chartType,
+          bestBand: params.bandScore ?? null,
+          attemptCount: params.bandScore !== undefined ? 1 : 0,
+          lastEssayId: params.reportId ?? null,
+          updatedAt: nowIso,
+          isBuiltIn: false,
+        };
+        return [newItem, ...list];
+      });
+
+      return resolvedId;
+    },
+    [setDeletedTask1Keys, setTask1TopicBank]
+  );
+
+  // Select "自由命题 · 新建图表作文 (Custom Chart Prompt)" from Task 1 Catalog
+  const handleSelectTask1CustomPromptMode = () => {
+    setIsTimerRunning(false);
+    setTask1Draft((prev) => {
+      const isAlreadyCustom =
+        !prev.selectedTopicId || prev.selectedTopicId === 'custom';
+      const keepDraft = isAlreadyCustom && !prev.gradedReportId;
+      return {
+        ...prev,
+        selectedTopicId: 'custom',
+        viewStep: 'writing',
+        prompt: keepDraft ? prev.prompt : '',
+        image: keepDraft ? prev.image : null,
+        content: keepDraft ? prev.content : '',
+        timer: keepDraft ? prev.timer : 1200,
+        gradedReportId: null,
+      };
+    });
+    setConfirmBackToCatalog(false);
+    setErrorMsg(null);
+  };
+
+  // Select a Task 1 Topic Card from Task 1 Catalog (Carries [原题目 + 原图表图片] into Dual-Column Workbench for Rewrite)
+  const handleSelectTask1TopicCard = (item: Task1TopicBankItem) => {
+    setIsTimerRunning(false);
+    setTask1Draft((prev) => {
+      const isSameUnfinishedTopic =
+        prev.selectedTopicId === item.id && !prev.gradedReportId;
+      return {
+        ...prev,
+        selectedTopicId: item.id,
+        viewStep: 'writing',
+        prompt: item.prompt,
+        image: item.chartImage || null,
+        content: isSameUnfinishedTopic ? prev.content : '',
+        timer: isSameUnfinishedTopic ? prev.timer : 1200,
+        gradedReportId: null,
+      };
+    });
+    setConfirmBackToCatalog(false);
+    setErrorMsg(null);
+  };
+
+  // Click [ 查看上次批改 ] on a Task 1 Topic Card
+  const handleViewTask1TopicLastReport = (
+    item: Task1TopicBankItem,
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+    const normPrompt = item.prompt.trim().toLowerCase();
+    let idx = -1;
+    if (item.lastEssayId) {
+      idx = task1Reports.findIndex((r) => r.id === item.lastEssayId);
+    }
+    if (idx === -1) {
+      idx = task1Reports.findIndex(
+        (r) =>
+          r.topicId === item.id ||
+          r.prompt.trim().toLowerCase() === normPrompt
+      );
+    }
+    if (idx !== -1) {
+      handleSelectHistoryRecord(idx);
+    }
+  };
+
+  // Delete a Task 1 Topic Card from Task 1 Catalog
+  const handleDeleteTask1TopicCard = (
+    item: Task1TopicBankItem,
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+    const normPrompt = item.prompt.trim().toLowerCase();
+    setDeletedTask1Keys((prev) =>
+      Array.from(new Set([...prev, item.id, normPrompt]))
+    );
+    setTask1TopicBank((prev) => prev.filter((c) => c.id !== item.id));
   };
 
   // Select "✍️ 自由命题 (Custom Prompt)" from Task 2 Catalog
@@ -570,12 +938,27 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     setErrorMsg(null);
   };
 
-  // Click [ ← 重选题目 ] from the Task 2 immersive writing pad
+  // Click [ ← 重选题目 ] from Task 1 or Task 2 immersive writing pad
   const handleRequestBackToCatalog = () => {
     if (isHistoryMode) {
       setViewMode('draft');
       return;
     }
+    if (activeTaskType === 'task1') {
+      if (task1WordCount > 10 && !task1Report) {
+        setConfirmBackToCatalog(true);
+        return;
+      }
+      setIsTimerRunning(false);
+      setConfirmBackToCatalog(false);
+      setErrorMsg(null);
+      setTask1Draft((prev) => ({
+        ...prev,
+        viewStep: 'catalog',
+      }));
+      return;
+    }
+
     if (task2WordCount > 10 && !task2Report) {
       setConfirmBackToCatalog(true);
       return;
@@ -589,13 +972,34 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     }));
   };
 
-  // Confirmed clearing of Task 2 draft when clicking [ ← 重选题目 ] -> [ 继续 ]
+  // Confirmed clearing of Task 1 or Task 2 draft when clicking [ ← 重选题目 ] -> [ 继续 ]
   const handleConfirmReturnAndClear = () => {
     setIsTimerRunning(false);
-    setIsTask2TimeUpLocked(false);
-    setTask2TimedWords(null);
     setConfirmBackToCatalog(false);
     setErrorMsg(null);
+    if (activeTaskType === 'task1') {
+      setIsTask1TimeUpLocked(false);
+      setTask1TimedWords(null);
+      setTask1Draft((prev) => ({
+        ...prev,
+        viewStep: 'catalog',
+        prompt:
+          !prev.selectedTopicId || prev.selectedTopicId === 'custom'
+            ? ''
+            : prev.prompt,
+        image:
+          !prev.selectedTopicId || prev.selectedTopicId === 'custom'
+            ? null
+            : prev.image,
+        content: '',
+        timer: 1200,
+        gradedReportId: null,
+      }));
+      return;
+    }
+
+    setIsTask2TimeUpLocked(false);
+    setTask2TimedWords(null);
     setTask2Draft((prev) => ({
       ...prev,
       viewStep: 'catalog',
@@ -650,6 +1054,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       setIsTask1TimeUpLocked(false);
       setTask1TimedWords(null);
       setTask1Draft({
+        selectedTopicId: 'custom',
+        viewStep: 'catalog',
         prompt: '',
         image: null,
         content: '',
@@ -687,7 +1093,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       activeTaskType === 'task1' ? task1Draft.content : task2Draft.content;
     const activeTopicTag =
       activeTaskType === 'task1'
-        ? '图表小作文 · Academic Task 1'
+        ? task1ResolvedTopicTag
         : task2ResolvedTopicTag;
 
     if (!activePrompt.trim()) {
@@ -698,6 +1104,17 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     if (draftWordCount < 1) {
       setErrorMsg('请先输入作文正文后再交卷批改');
       return;
+    }
+
+    // Even before API returns, if Task 1 custom prompt is submitted, archive the prompt & image into personal topic bank
+    if (activeTaskType === 'task1') {
+      const initialChartType = inferTask1ChartType(activePrompt, activeEssay);
+      upsertTask1TopicBank({
+        topicId: task1Draft.selectedTopicId,
+        prompt: activePrompt.trim(),
+        chartImage: task1Draft.image || null,
+        chartType: initialChartType,
+      });
     }
 
     if (!aiConfig.apiKey.trim()) {
@@ -728,13 +1145,42 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             : 'deepseek-v4-pro',
       });
 
+      const resolvedChartType: Task1ChartType | undefined =
+        activeTaskType === 'task1'
+          ? inferTask1ChartType(
+              activePrompt,
+              activeEssay,
+              newReport.chartType
+            )
+          : undefined;
+
+      const resolvedTopicTag =
+        activeTaskType === 'task1' && resolvedChartType
+          ? `${TASK1_CHART_TYPE_ENGLISH[resolvedChartType]} · ${resolvedChartType}`
+          : activeTopicTag;
+
+      let savedTask1TopicId: string | undefined;
+      if (activeTaskType === 'task1' && resolvedChartType) {
+        savedTask1TopicId = upsertTask1TopicBank({
+          topicId: task1Draft.selectedTopicId,
+          prompt: activePrompt.trim(),
+          chartImage: task1Draft.image || null,
+          chartType: resolvedChartType,
+          bandScore: newReport.overallBand,
+          reportId: newReport.id,
+        });
+      }
+
       const enrichedReport: WritingEvaluationReport = {
         ...newReport,
         taskType: activeTaskType,
         firstCriterionLabel: activeTaskType === 'task1' ? 'TA' : 'TR',
         topicId:
-          activeTaskType === 'task2' ? task2Draft.selectedTopicId : undefined,
-        topicTag: activeTopicTag,
+          activeTaskType === 'task1'
+            ? savedTask1TopicId || task1Draft.selectedTopicId
+            : task2Draft.selectedTopicId,
+        topicTag: resolvedTopicTag,
+        chartType: resolvedChartType,
         image: activeTaskType === 'task1' ? task1Draft.image || null : null,
         chartImageDataUrl:
           activeTaskType === 'task1' ? task1Draft.image || null : null,
@@ -744,6 +1190,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       if (activeTaskType === 'task1') {
         setTask1Draft((prev) => ({
           ...prev,
+          selectedTopicId: savedTask1TopicId || prev.selectedTopicId,
           gradedReportId: enrichedReport.id,
         }));
       } else {
@@ -1044,12 +1491,11 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const isFinalFiveMinutes = secondsLeft > 0 && secondsLeft <= 300;
   const hasComparisonReport = Boolean(activeRightReport);
-  const showTopTaskSwitcher =
-    isHistoryMode || activeTaskType === 'task1' || currentStep === 'catalog';
+  const showTopTaskSwitcher = isHistoryMode || currentStep === 'catalog';
 
   return (
     <div className="mx-auto w-[92vw] max-w-[1280px] pb-14 pt-1">
-      {/* TOP TASK SWITCHER BAR: [ Task 1 | Task 2 ] — Hidden during Task 2 immersive notepad writing */}
+      {/* TOP TASK SWITCHER BAR: [ Task 1 | Task 2 ] — Shown in Catalog & History Views */}
       {showTopTaskSwitcher && (
         <div className="mb-6 flex items-center justify-center select-none">
           <div className="skeuo-groove inline-flex items-center rounded-xl p-1 font-sans">
@@ -1080,11 +1526,265 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       )}
 
       {/* =====================================================================
-          STEP 1: TASK 2 TOPIC DIRECTORY INDEX VIEW (大作文题目目录索引页 · 拓宽至 1000px)
+          STEP 1A: TASK 1 TOPIC DIRECTORY & CHART TYPE CATALOG VIEW (图表小作文二级题库页 · 1000px)
          ===================================================================== */}
       {!isHistoryMode &&
-      activeTaskType === 'task2' &&
+      activeTaskType === 'task1' &&
       currentStep === 'catalog' ? (
+        <div className="mx-auto max-w-[1000px]">
+          <section className="skeuo-paper overflow-hidden rounded-2xl">
+            {/* Smartisan Vintage Double Crimson Header Rule */}
+            <div className="pt-4">
+              <div className="h-[2px] w-full bg-[#C97A63]/35" />
+              <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
+            </div>
+
+            {/* Catalog Header & Top Chart Type Filter Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E3DA] px-8 py-5">
+              {/* Left Chart Type Filter Pills: 全部 | 折线图 | 柱状图 | 饼图 | 表格 | 地图 | 流程图 */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {TASK1_CATALOG_FILTERS.map((cat) => {
+                  const isActive = selectedTask1Category === cat.key;
+                  return (
+                    <button
+                      key={cat.key}
+                      type="button"
+                      onClick={() => setSelectedTask1Category(cat.key)}
+                      className={`rounded-lg px-3 py-1 text-xs transition-all ${
+                        isActive
+                          ? 'skeuo-switch-thumb font-semibold text-[#262523]'
+                          : 'text-[#7A7873] hover:text-[#262523]'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Right Symmetrical [ 历史批改 ] Tactile Button */}
+              <button
+                type="button"
+                onClick={handleEnterHistoryMode}
+                className="skeuo-btn-light rounded-lg px-3.5 py-1.5 font-sans text-xs font-medium text-[#262523]"
+              >
+                <span>历史批改</span>
+                {task1Reports.length > 0 && (
+                  <span className="ml-1 font-mono">
+                    ({task1Reports.length})
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Catalog Body: Pinned Custom Chart Prompt Card + Left-Prompt / Right-Thumbnail Topic Cards */}
+            <div className="space-y-3.5 px-8 py-6">
+              {/* PINNED TOP SPECIAL CARD: 自由命题 · 新建图表作文 (Custom Chart Prompt) */}
+              <button
+                type="button"
+                onClick={handleSelectTask1CustomPromptMode}
+                className="group relative w-full rounded-xl border-2 border-dashed border-[#CBC6B8] bg-[#F6F3EB]/80 p-5 text-left transition-all hover:border-[#262523]/45 hover:bg-[#F3EFE5]"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="inline-flex items-center gap-1.5 font-serif text-base font-semibold text-[#262523]">
+                      <PenLine className="h-4 w-4 text-[#EA5B25]" />
+                      <span>
+                        自由命题 · 新建图表作文 (Custom Chart Prompt)
+                      </span>
+                    </span>
+                    <span className="rounded border border-[#D8D4C8] bg-[#FAF8F2] px-2 py-0.5 font-mono text-[10px] tracking-wider text-[#7A7873]">
+                      CUSTOM CHART
+                    </span>
+                  </div>
+
+                  {isTask1CustomPrompt &&
+                  !task1Report &&
+                  (task1WordCount > 0 || task1Draft.prompt.trim()) ? (
+                    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium text-[#262523]">
+                      <span className="h-2 w-2 rounded-full bg-[#EA5B25]" />
+                      <span>继续草稿 ({task1WordCount} words)</span>
+                    </span>
+                  ) : (
+                    <span className="font-mono text-xs text-[#7A7873] transition-transform group-hover:translate-x-0.5 group-hover:text-[#262523]">
+                      进入书写 →
+                    </span>
+                  )}
+                </div>
+
+                <p className="mt-2 text-xs leading-relaxed text-[#7A7873]">
+                  自行粘贴剑桥真题与图表截图，AI 考官将自动识别题型并归入你的个人图表题库
+                </p>
+              </button>
+
+              {/* TASK 1 TOPIC CARDS LIST: 左题干 (78%) · 右图表缩略图 (22%, max-w-[160px]) */}
+              {filteredTask1TopicBank.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-[#E6E3DA] bg-[#FAF8F2]/60 py-12 text-center">
+                  <p className="font-sans text-sm font-medium text-[#262523]">
+                    当前「{selectedTask1Category}」分类下暂无图表题
+                  </p>
+                  <p className="mt-1.5 font-sans text-xs text-[#7A7873]">
+                    点击上方「自由命题 · 新建图表作文」完成练习后，AI 将自动识别题型并沉淀至此。
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 pt-1">
+                  {filteredTask1TopicBank.map((item) => {
+                    const globalIdx =
+                      task1TopicBank.findIndex((p) => p.id === item.id) + 1;
+                    const formattedNo = String(
+                      globalIdx > 0 ? globalIdx : 1
+                    ).padStart(2, '0');
+                    const enType =
+                      TASK1_CHART_TYPE_ENGLISH[item.chartType] || 'CHART';
+                    const normPrompt = item.prompt.trim().toLowerCase();
+                    const matchingReports = task1Reports.filter(
+                      (r) =>
+                        r.topicId === item.id ||
+                        r.prompt.trim().toLowerCase() === normPrompt
+                    );
+                    const hasReportRecord =
+                      Boolean(item.lastEssayId) || matchingReports.length > 0;
+                    const effectiveAttempts = Math.max(
+                      item.attemptCount || 0,
+                      matchingReports.length
+                    );
+                    const effectiveBestBand =
+                      item.bestBand !== null && item.bestBand !== undefined
+                        ? item.bestBand
+                        : matchingReports.length > 0
+                        ? Math.max(...matchingReports.map((r) => r.overallBand))
+                        : null;
+                    const hasActiveDraftHere =
+                      !isTask1CustomPrompt &&
+                      task1Draft.selectedTopicId === item.id &&
+                      task1WordCount > 0 &&
+                      !task1Report;
+
+                    return (
+                      <div
+                        key={item.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleSelectTask1TopicCard(item)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleSelectTask1TopicCard(item);
+                          }
+                        }}
+                        className="group relative flex w-full cursor-pointer items-center justify-between gap-5 rounded-xl border border-[#E2DFD5] bg-[#FAF8F2] p-5 text-left shadow-[0_2px_6px_rgba(38,37,35,0.03)] transition-all hover:border-[#C5C0B2] hover:bg-[#F6F3EB]"
+                      >
+                        {/* Left Column (78% width): Nameplate + Band Stamp + Newsreader Prompt + Bottom Actions */}
+                        <div className="flex w-[78%] min-w-0 flex-1 flex-col justify-between pr-2">
+                          {/* Top Monospace Nameplate + Practiced Band Score */}
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-xs font-semibold tracking-wider text-[#7A7873]">
+                                NO. {formattedNo} · {enType} · {item.chartType}
+                              </span>
+
+                              {effectiveAttempts > 0 && (
+                                <span
+                                  style={{
+                                    fontVariantNumeric:
+                                      'lining-nums tabular-nums',
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded border border-[#E5C5B8] bg-[#FAF0EC] px-2 py-0.5 font-mono text-[11px] font-semibold text-[#262523]"
+                                >
+                                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#EA5B25]" />
+                                  {effectiveBestBand !== null && (
+                                    <span>
+                                      BAND {effectiveBestBand.toFixed(1)}
+                                    </span>
+                                  )}
+                                  <span className="font-sans text-[10px] font-normal text-[#7A7873]">
+                                    已练 {effectiveAttempts} 次
+                                  </span>
+                                </span>
+                              )}
+
+                              {hasActiveDraftHere && (
+                                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium text-[#262523]">
+                                  <span className="h-2 w-2 rounded-full bg-[#EA5B25]" />
+                                  <span>草稿 ({task1WordCount}w)</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Middle Prompt Text (Newsreader Serif) */}
+                          <p className="mt-2.5 font-serif text-[14px] leading-relaxed text-[#262523]">
+                            {item.prompt}
+                          </p>
+
+                          {/* Bottom Right of Left Column: [ 查看上次批改 ] + Hover Delete Icon */}
+                          <div className="mt-3 flex items-center justify-between gap-3">
+                            <span className="font-mono text-[11px] text-[#9E988E] transition-colors group-hover:text-[#262523]">
+                              {effectiveAttempts > 0
+                                ? '点击卡片进入二刷重写 →'
+                                : '点击卡片进入书写 →'}
+                            </span>
+
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center gap-2"
+                            >
+                              {hasReportRecord && (
+                                <button
+                                  type="button"
+                                  onClick={(e) =>
+                                    handleViewTask1TopicLastReport(item, e)
+                                  }
+                                  className="rounded border border-[#D8D3C6] bg-[#EFECE3]/80 px-2.5 py-0.5 font-sans text-[11px] font-medium text-[#5C5852] transition-colors hover:border-[#EA5B25]/50 hover:bg-[#FAF0EC] hover:text-[#EA5B25]"
+                                >
+                                  [ 查看上次批改 ]
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={(e) =>
+                                  handleDeleteTask1TopicCard(item, e)
+                                }
+                                className="rounded p-1 text-[#B5B0A4] opacity-0 transition-all hover:bg-[#EFECE3] hover:text-[#EA5B25] group-hover:opacity-100"
+                                title="从个人图表题库中删除该题"
+                                aria-label="删除该题"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right Column (22% width, max-w-[160px]): Chart Miniature Thumbnail */}
+                        <div className="w-[22%] max-w-[160px] shrink-0">
+                          {item.chartImage ? (
+                            <img
+                              src={item.chartImage}
+                              alt={`${item.chartType} preview`}
+                              className="h-[96px] w-full rounded border border-[#E5E0D5] bg-[#FAF8F5] object-contain p-1.5"
+                            />
+                          ) : (
+                            <div className="flex h-[96px] w-full flex-col items-center justify-center rounded border border-[#E5E0D5] bg-[#FAF8F5] p-1.5 text-center font-mono text-[10px] text-[#ACA79C]">
+                              <span>{enType}</span>
+                              <span className="mt-0.5 font-sans text-[10px]">
+                                {item.chartType}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : !isHistoryMode &&
+        activeTaskType === 'task2' &&
+        currentStep === 'catalog' ? (
         <div className="mx-auto max-w-[1000px]">
           <section className="skeuo-paper overflow-hidden rounded-2xl">
             {/* Smartisan Vintage Double Crimson Header Rule */}
@@ -1250,24 +1950,16 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             <div className="flex flex-col border-b border-[#E6E1D8] lg:sticky lg:top-4 lg:self-start lg:border-b-0 lg:border-r lg:border-[#E6E1D8]">
               {/* Left Page Top Header */}
               <div className="flex min-h-[54px] items-center justify-between gap-3 border-b border-[#ECE8DF] px-7 py-3.5 select-none">
-                {displayedTaskType === 'task2' ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleRequestBackToCatalog}
-                      className="skeuo-switch-thumb inline-flex h-7 shrink-0 items-center gap-1 rounded-lg px-3 text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
-                    >
-                      <span className="leading-none">← 重选题目</span>
-                    </button>
-                    <span className="truncate font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#7A7873] leading-none translate-y-[1px]">
-                      {formatPrintedStamp(displayedTopicTag)}
-                    </span>
-                  </>
-                ) : (
-                  <span className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#7A7873] leading-none translate-y-[1px]">
-                    ACADEMIC TASK 1 · 图表小作文
-                  </span>
-                )}
+                <button
+                  type="button"
+                  onClick={handleRequestBackToCatalog}
+                  className="skeuo-switch-thumb inline-flex h-7 shrink-0 items-center gap-1 rounded-lg px-3 text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
+                >
+                  <span className="leading-none">← 重选题目</span>
+                </button>
+                <span className="truncate font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#7A7873] leading-none translate-y-[1px]">
+                  {formatPrintedStamp(displayedTopicTag)}
+                </span>
               </div>
 
               {/* Anti-Loss Confirmation when clicking [ ← 重选题目 ] with >10 words */}
@@ -1574,7 +2266,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 {/* Left Page Top Bar */}
                 <div className="flex min-h-[52px] items-center justify-between gap-2 border-b border-[#ECE8DF] px-7 py-3 select-none">
                   <div className="flex items-center gap-2.5">
-                    {!isHistoryMode && displayedTaskType === 'task2' && (
+                    {!isHistoryMode && (
                       <button
                         type="button"
                         onClick={handleRequestBackToCatalog}

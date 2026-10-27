@@ -27,6 +27,26 @@ export interface VocabularyCard {
 
 export type WritingTaskType = 'task1' | 'task2';
 
+export type Task1ChartType =
+  | '折线图'
+  | '柱状图'
+  | '饼图'
+  | '表格'
+  | '地图'
+  | '流程图';
+
+export interface Task1TopicBankItem {
+  id: string;
+  prompt: string;
+  chartImage: string | null;
+  chartType: Task1ChartType;
+  bestBand?: number | null;
+  attemptCount: number;
+  lastEssayId?: string | null;
+  updatedAt: string;
+  isBuiltIn?: boolean;
+}
+
 export interface CriterionEvaluation {
   band: number;
   summary: string;
@@ -115,6 +135,7 @@ export interface WritingEvaluationReport {
   firstCriterionLabel?: 'TA' | 'TR';
   topicId?: string | 'custom';
   topicTag?: string;
+  chartType?: Task1ChartType;
   prompt: string;
   image?: string | null;
   chartImageDataUrl?: string | null;
@@ -143,6 +164,8 @@ export interface WritingEvaluationReport {
 }
 
 export interface Task1DraftState {
+  selectedTopicId?: string | 'custom';
+  viewStep?: 'catalog' | 'writing';
   prompt: string;
   image: string | null;
   content: string;
