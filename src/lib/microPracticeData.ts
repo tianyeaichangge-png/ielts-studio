@@ -66,6 +66,24 @@ export interface MicroPracticeEvaluation {
   lexicon: MicroPracticeLexiconItem[];
 }
 
+export interface MicroPracticeHistoryRecord {
+  id: string;
+  timestamp: string;
+  taskType: 'T1' | 'T2' | 'FREE';
+  category: MicroPracticeSubType;
+  questionId: string;
+  chineseMeaning: string;
+  rawSentence: string;
+  targetWord?: string;
+  userSentence: string;
+  diagnosis: string;
+  bandScore: number;
+  band7Sentence: string;
+  band8Sentence: string;
+  structureFormula: string;
+  lexicon: MicroPracticeLexiconItem[];
+}
+
 /**
  * Built-in 24 high-frequency IELTS Micro-Practice Questions
  * (8 sub-types × 3 items = 24 questions, zero latency out-of-the-box)
