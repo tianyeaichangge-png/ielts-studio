@@ -8,7 +8,10 @@ import {
   WritingTaskType,
 } from './types/ielts';
 import { DEFAULT_IELTS_VOCABULARY } from './lib/defaultVocabulary';
-import { DEFAULT_DEEPSEEK_ENDPOINT } from './lib/geminiEvaluator';
+import {
+  DEFAULT_DEEPSEEK_ENDPOINT,
+  deriveConciseMeaning,
+} from './lib/geminiEvaluator';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Navbar } from './components/Navbar';
 import { ApiKeyModal } from './components/ApiKeyModal';
@@ -34,71 +37,92 @@ export function App() {
         phonetic: string;
         pos: string;
         meaning?: string;
+        fullMeaning?: string;
         synonyms?: string[];
       }
     > = {
       categories: {
         phonetic: '/ˈkætəɡəriz/',
         pos: 'n.',
-        meaning: '类别，种类（category 的复数）',
+        meaning: '类别，种类，分组',
+        fullMeaning: 'n. 类别，种类，统计分组（category 的复数，Task 1 图表首段改写与分类对比核心词）',
         synonyms: ['classifications', 'types'],
       },
       category: {
         phonetic: '/ˈkætəɡəri/',
         pos: 'n.',
-        meaning: '类别，种类',
+        meaning: '类别，种类，范畴',
+        fullMeaning: 'n. 类别，种类，范畴 (fall into the category of 属于…类别)',
         synonyms: ['classification', 'type'],
       },
       'scenic spots': {
         phonetic: '',
         pos: 'phrase',
         meaning: '风景名胜，旅游景点',
+        fullMeaning: 'phrase 风景名胜，自然或人文旅游景点（替换 tourist places 的地道词组）',
         synonyms: ['tourist attractions', 'landmarks'],
       },
       trajectory: {
         phonetic: '/trəˈdʒektəri/',
         pos: 'n.',
-        meaning: '轨迹，发展道路，趋势',
+        meaning: '轨迹，发展态势，趋势',
+        fullMeaning: 'n. 发展轨迹，演变态势 (upward/downward trajectory)；弹道，轨道',
         synonyms: ['trend', 'path', 'course'],
       },
       proportion: {
         phonetic: '/prəˈpɔːʃn/',
         pos: 'n. / v.',
-        meaning: 'n. 比例，份额，占比；均衡 (in proportion to) | v. 使成比例，使相称',
+        meaning: '比例，份额，占比',
+        fullMeaning: 'n. 比例，份额，占比 (a large proportion of)；均衡 (in proportion to) | v. 使成比例，使相称',
         synonyms: ['percentage', 'share', 'ratio'],
       },
       address: {
         phonetic: '/əˈdres/',
         pos: 'v. / n.',
-        meaning: 'v. 解决，处理；向…发表演说；称呼 | n. 地址；演讲',
+        meaning: '解决，处理；演说；地址',
+        fullMeaning: 'v. 解决，处理 (address the issue)；向…发表演说；称呼 | n. 地址；正式演讲',
         synonyms: ['tackle', 'resolve', 'handle'],
       },
       project: {
         phonetic: '/ˈprɒdʒekt/',
         pos: 'n. / v.',
-        meaning: 'n. 项目，工程 | v. 预测，预计（Task 1核心）；投射',
+        meaning: '项目，工程；预测，预计',
+        fullMeaning: 'n. 项目，工程，课题 | v. 预测，预计（Task 1 未来趋势核心词 be projected to）；投射，展现',
         synonyms: ['forecast', 'predict', 'scheme'],
       },
       figure: {
         phonetic: '/ˈfɪɡə(r)/',
         pos: 'n. / v.',
-        meaning: 'n. 数字，数据；图表；人物 | v. 认为，认定；计算 (figure out)',
+        meaning: '数字，数据；图表；认为',
+        fullMeaning: 'n. 数字，统计数据（Task 1 核心词）；图表；人物，身材 | v. 认为，认定；计算，弄懂 (figure out)',
         synonyms: ['statistic', 'number', 'data'],
       },
       account: {
         phonetic: '/əˈkaʊnt/',
         pos: 'n. / v.',
-        meaning: 'n. 账户；描述，解释 | v. 占比，解释 (account for)；认为是',
+        meaning: '账户；描述；占比，解释',
+        fullMeaning: 'n. 账户；描述，叙述；解释 (on account of 由于) | v. 占…比例，解释说明 (account for)；认为是',
         synonyms: ['constitute', 'comprise', 'represent'],
+      },
+      inform: {
+        phonetic: '/ɪnˈfɔːm/',
+        pos: 'v.',
+        meaning: '通知，告知；影响；提供依据',
+        fullMeaning: 'v. 通知，告知 (inform sb of sth)；为…提供依据，影响（决策或态度）；检举，告发 (inform on)；赋予特征',
+        synonyms: ['notify', 'apprise', 'influence'],
       },
       significantly: {
         phonetic: '/sɪɡˈnɪfɪkəntli/',
         pos: 'adv.',
+        meaning: '显著地，大幅地；意味深长地',
+        fullMeaning: 'adv. 显著地，大幅度地（Task 1 核心程度副词）；有重大意义地，意味深长地',
         synonyms: ['considerably', 'markedly', 'substantially'],
       },
       dramatically: {
         phonetic: '/drəˈmætɪkli/',
         pos: 'adv.',
+        meaning: '急剧地，显著地；戏剧性地',
+        fullMeaning: 'adv. 急剧地，显著地（修饰剧烈上升或下跌）；戏剧性地，引人注目地',
         synonyms: ['sharply', 'drastically', 'steeply'],
       },
     };
@@ -161,16 +185,21 @@ export function App() {
         const defaultCard = DEFAULT_IELTS_VOCABULARY.find(
           (d) => d.id === card.id || d.word.trim().toLowerCase() === lower
         );
-        const needsDefaultMultiPosUpgrade =
+        const needsDualMeaningUpgrade =
           Boolean(
             defaultCard &&
-              defaultCard.chineseMeaning.includes('|') &&
-              !card.chineseMeaning.includes('|')
+              (card.chineseMeaning !== defaultCard.chineseMeaning ||
+                card.fullMeaning !== defaultCard.fullMeaning)
           ) ||
           Boolean(
-            known?.meaning &&
-              known.meaning.includes('|') &&
-              !card.chineseMeaning.includes('|')
+            known?.fullMeaning &&
+              (card.fullMeaning !== known.fullMeaning ||
+                card.chineseMeaning.includes('|'))
+          ) ||
+          Boolean(
+            !card.fullMeaning &&
+              (card.chineseMeaning.includes('|') ||
+                card.chineseMeaning.length > 22)
           );
 
         return (
@@ -179,7 +208,7 @@ export function App() {
           Boolean(needsKnownPhoneticFix) ||
           Boolean(hasPollutedSynonym) ||
           Boolean(needsKnownSynonymFix) ||
-          Boolean(needsDefaultMultiPosUpgrade) ||
+          Boolean(needsDualMeaningUpgrade) ||
           missingCategory
         );
       });
@@ -259,21 +288,35 @@ export function App() {
               : defaultCategoryByWord.get(lower) ||
                 (card.id.startsWith('task1-') ? 'task1' : 'task2'));
 
+          const isLongCurrentMeaning =
+            card.chineseMeaning.includes('|') ||
+            card.chineseMeaning.length > 22;
+
+          const nextConciseMeaning = defaultCard
+            ? defaultCard.chineseMeaning
+            : known?.meaning
+            ? known.meaning
+            : isLongCurrentMeaning
+            ? deriveConciseMeaning(card.chineseMeaning)
+            : card.meaning || card.chineseMeaning;
+
+          const nextFullMeaning = defaultCard?.fullMeaning
+            ? defaultCard.fullMeaning
+            : known?.fullMeaning
+            ? known.fullMeaning
+            : card.fullMeaning
+            ? card.fullMeaning
+            : isLongCurrentMeaning
+            ? card.chineseMeaning
+            : undefined;
+
           return {
             ...card,
             phonetic: nextPhonetic,
             partOfSpeech: nextPos,
-            chineseMeaning:
-              known?.meaning &&
-              (card.chineseMeaning.startsWith('高分替换：') ||
-                (known.meaning.includes('|') &&
-                  !card.chineseMeaning.includes('|')))
-                ? known.meaning
-                : defaultCard &&
-                  defaultCard.chineseMeaning.includes('|') &&
-                  !card.chineseMeaning.includes('|')
-                ? defaultCard.chineseMeaning
-                : card.chineseMeaning,
+            meaning: nextConciseMeaning,
+            chineseMeaning: nextConciseMeaning,
+            fullMeaning: nextFullMeaning,
             paraphrasing: sanitizedSynonyms,
             synonyms: sanitizedSynonyms,
             originalError: nextOriginalError,
@@ -451,13 +494,17 @@ export function App() {
           if (!normalized) continue;
           const existingIdx = existingIndexByWord.get(normalized);
           if (existingIdx !== undefined) {
-            // Upgrade existing card in place with full multi-POS definition & phonetics
+            // Upgrade existing card in place with dual-layer meaning + fullMeaning & phonetics
             const existingCard = updatedPrev[existingIdx];
+            const nextConcise =
+              item.meaning || item.chineseMeaning || existingCard.chineseMeaning;
             updatedPrev[existingIdx] = {
               ...existingCard,
               phonetic: item.phonetic || existingCard.phonetic,
               partOfSpeech: item.partOfSpeech || existingCard.partOfSpeech,
-              chineseMeaning: item.chineseMeaning || existingCard.chineseMeaning,
+              meaning: nextConcise,
+              chineseMeaning: nextConcise,
+              fullMeaning: item.fullMeaning || existingCard.fullMeaning,
               englishDefinition:
                 item.englishDefinition || existingCard.englishDefinition,
               paraphrasing:

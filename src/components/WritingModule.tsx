@@ -862,14 +862,17 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         ? 'phrase'
         : 'n.';
 
+    const conciseMeaning =
+      item.meaning ||
+      item.chineseMeaning ||
+      item.contextExplanation.slice(0, 20);
     onIngestVocab({
       word: headword,
       phonetic: cleanPhonetic,
       partOfSpeech: cleanPos,
-      chineseMeaning:
-        item.meaning ||
-        item.chineseMeaning ||
-        item.contextExplanation.slice(0, 32),
+      meaning: conciseMeaning,
+      chineseMeaning: conciseMeaning,
+      fullMeaning: item.fullMeaning || undefined,
       englishDefinition: item.contextExplanation,
       paraphrasing: cleanSynonyms,
       synonyms: cleanSynonyms,
@@ -983,11 +986,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       item.originalError
     );
 
+    const conciseMeaning = item.meaning || '高分学术表达';
     onIngestVocab({
       word: headword,
       phonetic: cleanPhonetic,
       partOfSpeech: cleanPos,
-      chineseMeaning: item.meaning || '高分学术表达',
+      meaning: conciseMeaning,
+      chineseMeaning: conciseMeaning,
+      fullMeaning: item.fullMeaning || undefined,
       englishDefinition: `Upgraded from "${item.originalError}" in IELTS Writing.`,
       paraphrasing: cleanSynonyms,
       synonyms: cleanSynonyms,

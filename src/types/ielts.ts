@@ -7,7 +7,9 @@ export interface VocabularyCard {
   word: string;
   phonetic: string;
   partOfSpeech: string;
+  meaning?: string;
   chineseMeaning: string;
+  fullMeaning?: string;
   englishDefinition: string;
   paraphrasing: string[];
   synonyms?: string[];
@@ -40,6 +42,7 @@ export interface LexicalUpgradeItem {
   pos?: string;
   meaning?: string;
   chineseMeaning?: string;
+  fullMeaning?: string;
   synonyms?: string[];
   upgradedSentence?: string;
   contextExplanation: string;
@@ -54,6 +57,7 @@ export interface GrammarCorrectionItem {
   pos?: string;
   meaning?: string;
   chineseMeaning?: string;
+  fullMeaning?: string;
   synonyms?: string[];
   errorType: string;
   explanation: string;
@@ -80,6 +84,7 @@ export interface ParagraphKeyCorrection {
   phonetic: string;
   pos: string;
   meaning: string;
+  fullMeaning?: string;
   synonyms: string[];
   example: string;
 }

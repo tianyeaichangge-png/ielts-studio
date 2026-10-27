@@ -33,6 +33,34 @@ function roundToHalfBand(score: number): number {
 }
 
 /**
+ * Extracts a concise 2~3 core meaning string (<= 18~20 chars, zero parenthetical clutter)
+ * from a potentially long dictionary definition string.
+ */
+export function deriveConciseMeaning(rawMeaning: string): string {
+  const cleaned = rawMeaning
+    .replace(/（[^）]*）|\([^)]*\)/g, '')
+    .replace(/^\s*(?:n\.|v\.|adj\.|adv\.|prep\.|conj\.|phrase)\s*/i, '')
+    .replace(/\s*\|\s*(?:n\.|v\.|adj\.|adv\.|prep\.|conj\.|phrase)?\s*/gi, '；')
+    .trim();
+
+  if (!cleaned) return rawMeaning.trim();
+  const clauses = cleaned
+    .split(/[；;]+/)
+    .map((c) => c.trim())
+    .filter(Boolean);
+  const picked: string[] = [];
+  let totalLen = 0;
+  for (const clause of clauses) {
+    if (picked.length >= 3) break;
+    if (picked.length > 0 && totalLen + clause.length + 1 > 20) break;
+    picked.push(clause);
+    totalLen += clause.length + 1;
+  }
+  const result = picked.join('；') || clauses[0] || cleaned;
+  return result.length > 22 ? result.slice(0, 20) : result;
+}
+
+/**
  * Normalizes model names to DeepSeek V4 official models ('deepseek-v4-flash' | 'deepseek-v4-pro').
  * Automatically migrates deprecated 'deepseek-chat' or 'deepseek-reasoner' aliases to 'deepseek-v4-pro'.
  */
@@ -237,16 +265,13 @@ export async function evaluateIeltsWriting({
      * "originalText": 100% 逐字摘录考生该段的原始英文段落；
      * "logicAndLanguageCritique": 考官对该段逻辑推进、论证漏洞、衔接断层及语言错误的深度批注诊断（中文，一针见血）；
      * "reconstructedParagraph": 考官在保留考生原本意图的基础上，示范如何用 Band 7.5+ 的严谨逻辑与学术衔接重写该段（纯正英文）；
-     * "keyCorrections": 从该段中提取 1~3 个核心词汇/短语纠错与高分升级项，供考生点击「+ 入库」直接存入背单词本。每项必须遵循《雅思学术双解词典》全词性、全义项标准：
+     * "keyCorrections": 从该段中提取 1~3 个核心词汇/短语纠错与高分升级项，供考生点击「+ 入库」直接存入背单词本。每项必须同时输出「精简版 meaning」与「全义项版 fullMeaning」两个层级的释义字段：
        - "originalError": 100% 摘自考生该段原文的错误拼写或低分口语词（如 "catogerise"、"more and more"）；
        - "upgradedWord": 升级后的 1 个地道雅思高分学术单词或词组（不要用斜杠堆砌多个，以便直接作为背单词词头）；
        - "phonetic": 升级词的真实英式国际音标（IPA，如 "/ˈkætəɡəraɪz/"；若为多词短语无单字音标则必须填 "" 空字符串，严禁填写 "/academic/" 等假音标！）；
        - "pos": 汇总该升级词的所有核心常用词性（如 "v. / n."、"n. / v."、"adj."、"phrase"，严禁使用 "acad." 或 "expr."！）；
-       - "meaning": **严禁只给单一表面意思！** 必须先列出当前作文语境下的核心意思，同时遍历该词的其他常用词性（n. / v. / adj. / adv.），用 " | " 隔开不同词性，同一词性下的多个义项用 "；" 隔开，完整涵盖【当前语境义项 + 日常核心义项 + 雅思学术高频义项 + 熟词僻义 + 核心固定搭配】（例如：
-         * address -> "v. 解决，处理；向…发表演说；称呼 | n. 地址；演讲"
-         * project -> "n. 项目，工程 | v. 预测，预计（Task 1核心）；投射"
-         * figure -> "n. 数字，数据；图表；人物 | v. 认为，认定；计算 (figure out)"
-         * account -> "n. 账户；描述，解释 | v. 占比，解释 (account for)；认为是"）；
+       - "meaning": **精简版释义（默认展示）**：极其精炼的 2~3 个核心高频意思（严格控制在 15~20 字以内，如 "解决，处理；地址，演讲"，绝不带冗余括号解释）；
+       - "fullMeaning": **全义项版释义（按需展开展示）**：按词性完整详列的全义项、熟词僻义与雅思固定搭配，不同词性用 " | " 隔开，同一词性下的多个义项用 "；" 隔开（如 "v. 解决，处理；向…发表演说；称呼 | n. 地址；演讲"）；
        - "synonyms": 2~3 个地道的高分雅思同义替换词数组（严禁把考生的错误原词 originalError 放进 synonyms！）；
        - "example": 包含该升级词的地道雅思学术完整英文例句（基于考生该句改写）。
    - **模块三：突破分数天花板的核心策略（Top 3 Actionable Strategies）**：针对考生本文最致命的提分瓶颈，给出 3 条具体、可落地的突破策略 breakthroughStrategies（每条含 title 核心策略标题 与 actionableAdvice 结合原文正反对比的具体落地建议）。
@@ -294,7 +319,8 @@ export async function evaluateIeltsWriting({
           "upgradedWord": "地道高分替换词或词组",
           "phonetic": "/.../（多词短语填 \"\"）",
           "pos": "汇总所有核心词性，如 v. / n. 或 adj. / n.",
-          "meaning": "全词性多义项释义，不同词性用 \" | \" 隔开，同词性多义项用 \"；\" 隔开（如：v. 解决，处理；向…发表演说 | n. 地址；演讲）",
+          "meaning": "15~20字以内的精炼 2~3 个核心意思（不带冗余括号解释）",
+          "fullMeaning": "按词性完整详列的全义项、熟词僻义与固定搭配，不同词性用 \" | \" 隔开，同词性多义项用 \"；\" 隔开（如：v. 解决，处理；向…发表演说 | n. 地址；演讲）",
           "synonyms": ["地道雅思同义词1", "地道雅思同义词2"],
           "example": "包含该升级词的完整正确雅思学术英文例句"
         }
@@ -453,9 +479,17 @@ ${essay}`;
           ? 'phrase'
           : 'n.'
         : rawPos;
-    const meaning = String(
+    const rawMeaning = String(
       raw?.meaning || raw?.chineseMeaning || '高分学术表达'
     ).trim();
+    const rawFullMeaning = String(raw?.fullMeaning || '').trim();
+    const isRawMeaningLong =
+      rawMeaning.includes('|') || rawMeaning.length > 22;
+    const meaning = isRawMeaningLong
+      ? deriveConciseMeaning(rawMeaning)
+      : rawMeaning;
+    const fullMeaning =
+      rawFullMeaning || (isRawMeaningLong ? rawMeaning : rawMeaning);
     const synonyms = normalizeStrArray(raw?.synonyms).filter(
       (s) => s.toLowerCase() !== originalError.toLowerCase()
     );
@@ -469,6 +503,7 @@ ${essay}`;
       phonetic,
       pos,
       meaning,
+      fullMeaning,
       synonyms,
       example,
     };
@@ -628,6 +663,7 @@ ${essay}`;
         pos: c.pos,
         meaning: c.meaning,
         chineseMeaning: c.meaning,
+        fullMeaning: c.fullMeaning,
         synonyms: c.synonyms,
         upgradedSentence: c.example,
         contextExplanation: '',
@@ -726,47 +762,54 @@ export async function generateVocabularyCardsWithAI({
   const systemPrompt = `你是一部权威、严谨的《雅思学术双解词典》（IELTS Academic Bilingual Dictionary）。
 用户将提供一组英文单词/短语（或“英文单词 + 用户自定义中文释义”的混合输入，如 "address 解决"），请你为每个词条生成标准、详尽的雅思背诵卡片 JSON 数据，并严格只输出合法的 JSON 对象（不要包含任何 Markdown 代码块标记）。
 
-【核心铁律 —— 强制输出全词性、全义项，严禁只给单一表面意思！】
+【核心铁律 —— 双层释义设计：同时输出精炼版 "meaning" 与全义项词典版 "fullMeaning"！】
 1. "word": 纯净、规范化后的英文单词或短语（修正明显拼写错误，严禁在 word 字段中残留任何中文字符！例如用户输入 "address 解决"，"word" 必须严格为 "address"）。
 2. "phonetic": 必须是真实的英式国际音标（IPA，例如 "/əˈdres/"）。如果是多词短语，若无单字音标请填 ""（空字符串），严禁编造 "/academic/"、"/phrase/" 等假音标！
 3. "pos"（及 "partOfSpeech"）: 必须汇总该词的所有常用核心词性，格式如 "v. / n."、"n. / v."、"adj. / n."、"n."、"v."、"adj."、"adv."、"phrase"（严禁出现 "acad." 或 "expr."）。
-4. "meaning"（及 "chineseMeaning"）:
-   - **严禁只给单一表面意思！** 必须遍历该词所有常用词性（n. / v. / adj. / adv.），并在 meaning 字段中按词性分类，完整列出【日常核心义项 + 雅思学术高频义项 + 熟词僻义 + 核心固定搭配】。
+4. "meaning"（默认展示的精简版释义）：
+   - **极其精炼的 2~3 个核心高频意思，严格控制在 15~20 字以内，绝不带冗余括号解释！**
+   - 示例 (inform)："通知，告知；影响；提供依据"
+   - 示例 (address)："解决，处理；演说；地址"
+   - 示例 (project)："项目，工程；预测，预计"
+   - 若用户附带了自定义中文含义（如 "address 解决"），请将用户指定的中文排在最前面。
+5. "fullMeaning"（点击展开时展示的全义项词典版释义）：
+   - **严禁只给单一表面意思！** 必须遍历该词所有常用词性（n. / v. / adj. / adv.），按词性分类，完整列出【日常核心义项 + 雅思学术高频义项 + 熟词僻义 + 核心固定搭配】。
    - **格式规范**：不同词性之间必须用 " | " 隔开，同一词性下的多个意思用 "；" 隔开。
    - **标杆示例**：
-     * 示例 1 (address)："v. 解决，处理；向…发表演说；称呼 | n. 地址；演讲"
-     * 示例 2 (project)："n. 项目，工程 | v. 预测，预计（Task 1核心）；投射"
-     * 示例 3 (figure)："n. 数字，数据；图表；人物 | v. 认为，认定；计算 (figure out)"
-     * 示例 4 (account)："n. 账户；描述，解释 | v. 占比，解释 (account for)；认为是"
-   - **用户自定义中文优先规则**：若用户在输入中附带了自定义中文含义（如输入了 "address 解决"），请务必将用户指定的中文含义排在 meaning 最前面对应的词性首位，再由你补全该词的其他全部词性与义项！
-5. "englishDefinition": 简明精准的英文学术释义。
-6. "synonyms"（及 "paraphrasing"）: 2~3 个高分雅思同义替换词（字符串数组）。
-7. "exampleSentence": 一句地道的雅思学术写作（Task 1 或 Task 2）真题风格英文例句，必须包含该单词或短语（优先体现其雅思学术高频用法或用户指定义项用法）。
-8. "exampleTranslation": 对应的精准中文翻译。
+     * 示例 1 (inform)："v. 通知，告知；为…提供依据，影响（决策等）；告发 (inform on)；赋予特征 | n. 信息提供者"
+     * 示例 2 (address)："v. 解决，处理；向…发表演说；称呼 | n. 地址；演讲"
+     * 示例 3 (project)："n. 项目，工程 | v. 预测，预计（Task 1核心）；投射"
+     * 示例 4 (figure)："n. 数字，数据；图表；人物 | v. 认为，认定；计算 (figure out)"
+     * 示例 5 (account)："n. 账户；描述，解释 | v. 占比，解释 (account for)；认为是"
+6. "englishDefinition": 简明精准的英文学术释义。
+7. "synonyms"（及 "paraphrasing"）: 2~3 个高分雅思同义替换词（字符串数组）。
+8. "exampleSentence": 一句地道的雅思学术写作（Task 1 或 Task 2）真题风格英文例句，必须包含该单词或短语。
+9. "exampleTranslation": 对应的精准中文翻译。
 
 请严格返回如下 JSON 格式：
 {
   "cards": [
     {
-      "word": "address",
-      "phonetic": "/əˈdres/",
-      "pos": "v. / n.",
-      "partOfSpeech": "v. / n.",
-      "meaning": "v. 解决，处理；向…发表演说；称呼 | n. 地址；演讲",
-      "chineseMeaning": "v. 解决，处理；向…发表演说；称呼 | n. 地址；演讲",
-      "englishDefinition": "To deal with a matter or problem; a formal speech or location.",
-      "synonyms": ["tackle", "resolve", "handle"],
-      "paraphrasing": ["tackle", "resolve", "handle"],
-      "exampleSentence": "Governments must take immediate action to address the root causes of urban poverty.",
-      "exampleTranslation": "政府必须采取果断行动，解决城市贫困的根源问题。"
+      "word": "inform",
+      "phonetic": "/ɪnˈfɔːm/",
+      "pos": "v.",
+      "partOfSpeech": "v.",
+      "meaning": "通知，告知；影响；提供依据",
+      "chineseMeaning": "通知，告知；影响；提供依据",
+      "fullMeaning": "v. 通知，告知 (inform sb of sth)；为…提供依据，影响（决策或态度）；检举，告发 (inform on)；赋予特征",
+      "englishDefinition": "To give someone facts or information; to influence or give an essential quality to.",
+      "synonyms": ["notify", "apprise", "influence"],
+      "paraphrasing": ["notify", "apprise", "influence"],
+      "exampleSentence": "Scientific research should directly inform environmental policy-making.",
+      "exampleTranslation": "科学研究应当直接为环境政策制定提供依据。"
     }
   ]
 }`;
 
   const userLines = parsedEntries.map((entry) =>
     entry.userCustomMeaning
-      ? `英文单词: "${entry.englishWord}" | 用户指定优先中文含义: "${entry.userCustomMeaning}"（请将该含义排在 meaning 最前面，并继续补全该词的所有常用词性、雅思学术义项、熟词僻义与固定搭配）`
-      : `英文单词: "${entry.englishWord}"（请遍历所有常用词性，按“词性1 义项1；义项2 | 词性2 义项1；义项2”格式完整输出日常义项、雅思高频学术义项、熟词僻义与固定搭配）`
+      ? `英文单词: "${entry.englishWord}" | 用户指定优先中文含义: "${entry.userCustomMeaning}"（请将该含义排在 meaning 与 fullMeaning 最前面，同时输出 15~20字内的精简版 meaning 和包含所有常用词性、熟词僻义与固定搭配的完整版 fullMeaning）`
+      : `英文单词: "${entry.englishWord}"（请同时输出 15~20字内的精简版 meaning，以及按“词性1 义项1；义项2 | 词性2 义项1；义项2”格式完整详列的 fullMeaning）`
   );
 
   const requestBody: Record<string, unknown> = {
@@ -856,14 +899,33 @@ export async function generateVocabularyCardsWithAI({
             : 'n.'
           : rawPos;
 
-      let fullMeaning = String(
+      const rawMeaningStr = String(
         item?.meaning || item?.chineseMeaning || '核心词汇'
       ).trim();
+      const rawFullMeaningStr = String(item?.fullMeaning || '').trim();
+
+      let conciseMeaning =
+        rawMeaningStr.includes('|') || rawMeaningStr.length > 22
+          ? deriveConciseMeaning(rawMeaningStr)
+          : rawMeaningStr;
+
+      let fullMeaning =
+        rawFullMeaningStr ||
+        (rawMeaningStr.includes('|') || rawMeaningStr.length > 22
+          ? rawMeaningStr
+          : `${partOfSpeech} ${rawMeaningStr}`);
 
       // Ensure user's custom Chinese meaning is placed at the very front if not already present
       const customMeaning = matchedInput?.userCustomMeaning?.trim();
-      if (customMeaning && !fullMeaning.includes(customMeaning)) {
-        fullMeaning = `${customMeaning}；${fullMeaning}`;
+      if (customMeaning) {
+        if (!conciseMeaning.includes(customMeaning)) {
+          conciseMeaning = deriveConciseMeaning(
+            `${customMeaning}；${conciseMeaning}`
+          );
+        }
+        if (!fullMeaning.includes(customMeaning)) {
+          fullMeaning = `${customMeaning}；${fullMeaning}`;
+        }
       }
 
       const rawSyns = Array.isArray(item?.synonyms)
@@ -879,7 +941,9 @@ export async function generateVocabularyCardsWithAI({
         word: rawWord,
         phonetic,
         partOfSpeech,
-        chineseMeaning: fullMeaning,
+        meaning: conciseMeaning,
+        chineseMeaning: conciseMeaning,
+        fullMeaning,
         englishDefinition: String(
           item?.englishDefinition || 'High-frequency IELTS academic expression.'
         ).trim(),

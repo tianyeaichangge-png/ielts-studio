@@ -300,6 +300,12 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
   const [hasRecordedMistakeThisCard, setHasRecordedMistakeThisCard] =
     useState(false);
 
+  // Progressive Dual-Meaning expansion states ('meaning' concise vs 'fullMeaning' comprehensive)
+  const [expandedListIds, setExpandedListIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [isDeckFullMeaningOpen, setIsDeckFullMeaningOpen] = useState(false);
+
   // Unified single-line Search & AI Smart Word Ingestion states
   const [unifiedInput, setUnifiedInput] = useState('');
   const [aiTargetCategory, setAiTargetCategory] = useState<
@@ -395,7 +401,9 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
       (c) =>
         c.word.toLowerCase().includes(q) ||
         (englishPart && c.word.toLowerCase().includes(englishPart)) ||
+        (c.meaning || '').toLowerCase().includes(q) ||
         c.chineseMeaning.toLowerCase().includes(q) ||
+        (c.fullMeaning || '').toLowerCase().includes(q) ||
         (c.synonyms || c.paraphrasing || []).some((s) =>
           s.toLowerCase().includes(q)
         )
@@ -523,6 +531,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
 
       setIsFlipTransitionEnabled(false);
       setIsFlipped(false);
+      setIsDeckFullMeaningOpen(false);
       setTypedInput('');
       setSpellStatus('idle');
       setHasRecordedMistakeThisCard(false);
@@ -540,6 +549,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
     }
     setIsFlipTransitionEnabled(false);
     setIsFlipped(false);
+    setIsDeckFullMeaningOpen(false);
     setTypedInput('');
     setSpellStatus('idle');
     setHasRecordedMistakeThisCard(false);
@@ -585,6 +595,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
 
       setIsFlipTransitionEnabled(false);
       setIsFlipped(false);
+      setIsDeckFullMeaningOpen(false);
       setTypedInput('');
       setSpellStatus('idle');
       setHasRecordedMistakeThisCard(false);
@@ -697,6 +708,90 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
     }
   }, [activeCard, handleSpeak, spellStatus, typedInput]);
 
+  // Single-card multi-POS dictionary completion via deepseek-v4-flash
+  const handleRefreshSingleCard = useCallback(
+    async (card: VocabularyCard) => {
+      if (!aiConfig.apiKey.trim()) {
+        setAiFeedbackMsg({
+          type: 'error',
+          text: '尚未配置 DeepSeek API Key，请先在右上角设置中填入 Key。',
+        });
+        onOpenApiKeyModal();
+        return;
+      }
+
+      setRefreshingCardId(card.id);
+      setAiFeedbackMsg(null);
+      try {
+        const box = getCardBoxCategory(card);
+        const generatedCards = await generateVocabularyCardsWithAI({
+          rawInput: card.word,
+          targetCategory: box,
+          apiKey: aiConfig.apiKey,
+          endpoint: aiConfig.endpoint,
+          model: 'deepseek-v4-flash',
+        });
+        if (generatedCards.length > 0) {
+          onAddCards(generatedCards);
+          setAiFeedbackMsg({
+            type: 'success',
+            text: `✓ 已为「${card.word}」补全全词性与熟词僻义`,
+          });
+        }
+      } catch (err) {
+        setAiFeedbackMsg({
+          type: 'error',
+          text:
+            err instanceof Error
+              ? err.message
+              : `补全「${card.word}」全义项失败，请重试。`,
+        });
+      } finally {
+        setRefreshingCardId(null);
+      }
+    },
+    [aiConfig.apiKey, aiConfig.endpoint, onAddCards, onOpenApiKeyModal]
+  );
+
+  // Toggle progressive fullMeaning expansion in List row or Deck card; auto-completes via deepseek-v4-flash if missing
+  const handleToggleFullMeaning = useCallback(
+    (
+      card: VocabularyCard,
+      context: 'list' | 'deck',
+      e?: React.MouseEvent
+    ) => {
+      if (e) e.stopPropagation();
+
+      const conciseText = (card.meaning || card.chineseMeaning || '').trim();
+      const fullText = (card.fullMeaning || '').trim();
+      const needsAiCompletion = !fullText || fullText === conciseText;
+
+      if (context === 'list') {
+        const isCurrentlyOpen = Boolean(expandedListIds[card.id]);
+        const nextOpen = !isCurrentlyOpen;
+        setExpandedListIds((prev) => ({
+          ...prev,
+          [card.id]: nextOpen,
+        }));
+        if (nextOpen && needsAiCompletion && refreshingCardId !== card.id) {
+          void handleRefreshSingleCard(card);
+        }
+      } else {
+        const nextOpen = !isDeckFullMeaningOpen;
+        setIsDeckFullMeaningOpen(nextOpen);
+        if (nextOpen && needsAiCompletion && refreshingCardId !== card.id) {
+          void handleRefreshSingleCard(card);
+        }
+      }
+    },
+    [
+      expandedListIds,
+      isDeckFullMeaningOpen,
+      refreshingCardId,
+      handleRefreshSingleCard,
+    ]
+  );
+
   // Global keyboard shortcuts in Deck Recognize Mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -719,11 +814,21 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
       } else if (e.key === '2') {
         e.preventDefault();
         handleDecision('mastered');
+      } else if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        handleToggleFullMeaning(activeCard, 'deck');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [viewStep, studyMode, activeCard, handleDecision, handleToggleFlip]);
+  }, [
+    viewStep,
+    studyMode,
+    activeCard,
+    handleDecision,
+    handleToggleFlip,
+    handleToggleFullMeaning,
+  ]);
 
   // AI Smart Word Ingestion handler (uses unifiedInput)
   const handleAiIngestWords = async (e?: React.FormEvent) => {
@@ -764,7 +869,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
       if (addedCount > 0) {
         setAiFeedbackMsg({
           type: 'success',
-          text: `✓ 已自动补全全词性释义、音标与例句并收录 ${addedCount} 个词条`,
+          text: `✓ 已自动补全精简释义与全词性词典义项并收录 ${addedCount} 个词条`,
         });
       } else {
         setAiFeedbackMsg({
@@ -780,48 +885,6 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
       });
     } finally {
       setIsAiGenerating(false);
-    }
-  };
-
-  // Single-card multi-POS dictionary completion via deepseek-v4-flash ('↻ 补全全义项')
-  const handleRefreshSingleCard = async (card: VocabularyCard) => {
-    if (!aiConfig.apiKey.trim()) {
-      setAiFeedbackMsg({
-        type: 'error',
-        text: '尚未配置 DeepSeek API Key，请先在右上角设置中填入 Key。',
-      });
-      onOpenApiKeyModal();
-      return;
-    }
-
-    setRefreshingCardId(card.id);
-    setAiFeedbackMsg(null);
-    try {
-      const box = getCardBoxCategory(card);
-      const generatedCards = await generateVocabularyCardsWithAI({
-        rawInput: card.word,
-        targetCategory: box,
-        apiKey: aiConfig.apiKey,
-        endpoint: aiConfig.endpoint,
-        model: 'deepseek-v4-flash',
-      });
-      if (generatedCards.length > 0) {
-        onAddCards(generatedCards);
-        setAiFeedbackMsg({
-          type: 'success',
-          text: `✓ 已为「${card.word}」补全全词性与熟词僻义`,
-        });
-      }
-    } catch (err) {
-      setAiFeedbackMsg({
-        type: 'error',
-        text:
-          err instanceof Error
-            ? err.message
-            : `补全「${card.word}」全义项失败，请重试。`,
-      });
-    } finally {
-      setRefreshingCardId(null);
     }
   };
 
@@ -1055,17 +1118,21 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                     const itemSyns = getCleanSynonyms(item, itemOrigErr);
                     const itemIsLearning = isCardLearning(item);
                     const itemIsMastered = isCardMastered(item);
+                    const conciseMeaning =
+                      item.meaning || item.chineseMeaning;
+                    const isRowExpanded = Boolean(expandedListIds[item.id]);
+                    const isRowRefreshing = refreshingCardId === item.id;
 
                     return (
                       <div
                         key={item.id}
                         onClick={(e) => handleSpeak(item.word, e)}
                         title="点击朗读英式发音 (en-GB)"
-                        className="group grid cursor-pointer grid-cols-12 items-baseline gap-x-4 gap-y-1 py-3.5 transition-colors hover:bg-[#F4F1E8]/70"
+                        className="group relative flex flex-col sm:flex-row sm:items-baseline gap-y-1 py-3 px-2 -mx-2 rounded-lg cursor-pointer transition-colors hover:bg-[#F4F1E8]/70"
                       >
-                        {/* Left Column (5 cols): Index + Bold Serif Headword + POS + IPA Phonetic */}
-                        <div className="col-span-12 flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0 sm:col-span-5">
-                          <span className="w-6 shrink-0 font-mono text-[11px] text-[#ACA79C]">
+                        {/* Left Column: Fixed w-[260px] shrink-0 (Index + Bold Serif Headword + POS + IPA Phonetic) */}
+                        <div className="w-full sm:w-[260px] shrink-0 pr-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0">
+                          <span className="w-5 shrink-0 font-mono text-[11px] text-[#ACA79C]">
                             {String(idx + 1).padStart(2, '0')}
                           </span>
 
@@ -1100,85 +1167,108 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           )}
                         </div>
 
-                        {/* Middle Column (4 cols): Full Multi-POS Chinese Meaning (Zero Truncation) */}
-                        <div className="col-span-12 min-w-0 py-1 pl-8 leading-relaxed break-words sm:col-span-4 sm:pl-0">
-                          <span className="font-sans text-xs font-medium leading-relaxed break-words text-[#262523]">
-                            {item.chineseMeaning}
-                          </span>
-                          {itemOrigErr && (
-                            <span className="ml-2 inline-block font-mono text-[11px] text-[#EA5B25] line-through">
-                              {itemOrigErr}
+                        {/* Middle Column: flex-1 min-w-0 pr-4 (Concise Meaning + [ + 全义项 ] Inline Toggle + Expandable Full Meaning) */}
+                        <div className="flex-1 min-w-0 pr-4 pl-7 sm:pl-0">
+                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                            <span className="font-sans text-[13px] font-medium leading-snug break-words text-[#262523]">
+                              {conciseMeaning}
                             </span>
+
+                            {itemOrigErr && (
+                              <span className="inline-block font-mono text-[11px] text-[#EA5B25] line-through">
+                                {itemOrigErr}
+                              </span>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={(e) =>
+                                handleToggleFullMeaning(item, 'list', e)
+                              }
+                              className="inline-flex items-center font-mono text-[11px] text-[#8C867E] transition-colors hover:text-[#EA5B25]"
+                              title={
+                                isRowExpanded
+                                  ? '收起完整词典释义'
+                                  : '展开全词性义项、熟词僻义与固定搭配'
+                              }
+                            >
+                              {isRowExpanded ? '[ - 收起 ]' : '[ + 全义项 ]'}
+                            </button>
+                          </div>
+
+                          {isRowExpanded && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="border-l-2 border-[#EA5B25] pl-2.5 mt-1.5 font-sans text-[13px] leading-relaxed text-[#5C5852] break-words"
+                            >
+                              {isRowRefreshing ? (
+                                <span className="inline-flex items-center gap-1.5 font-mono text-xs text-[#8C867E]">
+                                  <Loader2 className="h-3 w-3 animate-spin text-[#EA5B25]" />
+                                  <span>加载全义项中...</span>
+                                </span>
+                              ) : (
+                                <span>
+                                  {item.fullMeaning || item.chineseMeaning}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
 
-                        {/* Right Column (3 cols): Italic Synonyms (≈ ...) + Hover Actions (Zero Truncation) */}
-                        <div className="col-span-12 flex items-baseline justify-between gap-2 py-1 pl-8 sm:col-span-3 sm:pl-0 min-w-0">
-                          <div className="min-w-0 flex-1 leading-relaxed break-words">
-                            {itemSyns.length > 0 && (
-                              <span
-                                className="font-serif text-xs italic leading-relaxed break-words text-[#8A857C]"
-                                title={`同义替换: ${itemSyns.join(' / ')}`}
-                              >
-                                ≈ {itemSyns.join(' / ')}
-                              </span>
-                            )}
-                          </div>
+                        {/* Right Column: Fixed w-[200px] shrink-0 text-right (Italic Synonyms ≈ ... with truncate/break-words, zero break-all) */}
+                        <div className="w-full sm:w-[200px] shrink-0 text-left sm:text-right pl-7 sm:pl-0 min-w-0">
+                          {itemSyns.length > 0 && (
+                            <div
+                              className="truncate font-serif text-xs italic text-[#8A857C]"
+                              title={`同义替换: ${itemSyns.join(' / ')}`}
+                            >
+                              ≈ {itemSyns.slice(0, 2).join(' / ')}
+                            </div>
+                          )}
+                        </div>
 
-                          <div
-                            onClick={(e) => e.stopPropagation()}
-                            className={`flex shrink-0 items-center gap-1 transition-opacity ${
-                              refreshingCardId === item.id
-                                ? 'opacity-100'
-                                : 'opacity-0 group-hover:opacity-100'
-                            }`}
+                        {/* Floating Hover Action Overlay (absolute right-4, never squeezes right column synonyms) */}
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className={`absolute right-4 top-2.5 flex items-center gap-1 rounded-md bg-[#F4F1E8]/95 px-1.5 py-0.5 shadow-sm backdrop-blur-[1px] transition-opacity ${
+                            isRowRefreshing
+                              ? 'opacity-100'
+                              : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
+                          }`}
+                        >
+                          {itemIsMastered ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onUpdateStatus(item.id, 'unlearned')
+                              }
+                              className="rounded px-1.5 py-0.5 font-sans text-[10px] font-medium text-[#7A7873] hover:bg-[#EAE6DC] hover:text-[#262523]"
+                              title="移回待背队列"
+                            >
+                              恢复待背
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onUpdateStatus(item.id, 'mastered')
+                              }
+                              className="rounded px-1.5 py-0.5 font-sans text-[10px] font-medium text-[#7A7873] hover:bg-[#EAE6DC] hover:text-[#2E7D5B]"
+                              title="直接标记为已掌握"
+                            >
+                              标为掌握
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => onDeleteCard(item.id)}
+                            className="p-1 text-[#B5B0A4] transition-colors hover:text-[#EA5B25]"
+                            title="删除该词条"
+                            aria-label="删除该词条"
                           >
-                            <button
-                              type="button"
-                              disabled={refreshingCardId === item.id}
-                              onClick={() => handleRefreshSingleCard(item)}
-                              className="rounded px-1.5 py-0.5 font-sans text-[10px] text-[#7A7873] hover:bg-[#EAE6DC] hover:text-[#EA5B25] disabled:opacity-60"
-                              title="使用 deepseek-v4-flash 极速补全该词全部词性与熟词僻义"
-                            >
-                              {refreshingCardId === item.id
-                                ? '补全中...'
-                                : '↻ 补全全义项'}
-                            </button>
-
-                            {itemIsMastered ? (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onUpdateStatus(item.id, 'unlearned')
-                                }
-                                className="rounded px-1.5 py-0.5 font-sans text-[10px] text-[#7A7873] hover:bg-[#EAE6DC] hover:text-[#262523]"
-                                title="移回待背队列"
-                              >
-                                恢复待背
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onUpdateStatus(item.id, 'mastered')
-                                }
-                                className="rounded px-1.5 py-0.5 font-sans text-[10px] text-[#7A7873] hover:bg-[#EAE6DC] hover:text-[#2E7D5B]"
-                                title="直接标记为已掌握"
-                              >
-                                标为掌握
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => onDeleteCard(item.id)}
-                              className="p-1 text-[#B5B0A4] transition-colors hover:text-[#EA5B25]"
-                              title="删除该词条"
-                              aria-label="删除该词条"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                       </div>
                     );
@@ -1438,12 +1528,13 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                               e.stopPropagation();
                               spellInputRef.current?.focus();
                             }}
-                            className="my-auto flex w-full flex-col items-center py-3"
+                            className="my-auto flex w-full flex-col items-center py-2"
                           >
                             <div className="mx-auto flex w-full max-w-[92%] flex-col items-center gap-1.5">
                               <div className="flex flex-wrap items-center justify-center gap-1.5 text-center">
-                                <span className="mx-auto max-w-[92%] break-words font-sans text-[16px] font-semibold leading-relaxed tracking-tight text-[#262523] md:text-[18px]">
-                                  {activeCard.chineseMeaning}
+                                <span className="max-w-[92%] break-words font-sans text-lg font-semibold leading-snug tracking-tight text-[#262523] sm:text-xl">
+                                  {activeCard.meaning ||
+                                    activeCard.chineseMeaning}
                                 </span>
                                 <button
                                   type="button"
@@ -1456,7 +1547,46 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                                 >
                                   <Volume2 className="h-3.5 w-3.5" />
                                 </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) =>
+                                    handleToggleFullMeaning(
+                                      activeCard,
+                                      'deck',
+                                      e
+                                    )
+                                  }
+                                  className="inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[11px] text-[#8C867E] transition-colors hover:bg-[#EFECE3] hover:text-[#EA5B25]"
+                                  title={
+                                    isDeckFullMeaningOpen
+                                      ? '收起全部意思'
+                                      : '展开全部词性义项与熟词僻义提示'
+                                  }
+                                >
+                                  {isDeckFullMeaningOpen
+                                    ? '[ - 收起 ]'
+                                    : '[ + 全义项 ]'}
+                                </button>
                               </div>
+
+                              {isDeckFullMeaningOpen && (
+                                <div
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="mt-1 max-h-[84px] w-full max-w-[92%] overflow-y-auto rounded-lg border border-[#E6E1D8] border-l-2 border-l-[#EA5B25] bg-[#F5F2EA]/85 px-3 py-1.5 text-left font-sans text-xs leading-relaxed text-[#5C5852]"
+                                >
+                                  {refreshingCardId === activeCard.id ? (
+                                    <span className="inline-flex items-center gap-1.5 font-mono text-xs text-[#8C867E]">
+                                      <Loader2 className="h-3 w-3 animate-spin text-[#EA5B25]" />
+                                      <span>加载全义项中...</span>
+                                    </span>
+                                  ) : (
+                                    <span>
+                                      {activeCard.fullMeaning ||
+                                        activeCard.chineseMeaning}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
 
                               {originalErrorText && (
                                 <span className="font-sans text-[11px] text-[#7A7873]">
@@ -1645,8 +1775,8 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           </div>
                         </div>
 
-                        {/* BACK CENTER: Word Echo + Prominent Multi-Line Meaning + Synonyms + Original Error */}
-                        <div className="my-auto flex w-full flex-col items-center py-3">
+                        {/* BACK CENTER: Word Echo + Concise Meaning + [ + 展开全义项 ] Toggle + Synonyms + Original Error */}
+                        <div className="my-auto flex w-full flex-col items-center py-2">
                           {/* 1. 顶部小字回显英文单词与音标 */}
                           <div className="inline-flex items-center gap-2 text-[#7A7873]">
                             <span className="font-serif text-base font-medium text-[#262523]">
@@ -1668,10 +1798,44 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                             </button>
                           </div>
 
-                          {/* 2. 中央醒目展示全词性中文释义（零截断、多行居中自适应） */}
-                          <h2 className="mx-auto mt-3 max-w-[92%] break-words font-sans text-[16px] font-semibold leading-relaxed tracking-tight text-[#262523] md:text-[18px]">
-                            {activeCard.chineseMeaning}
+                          {/* 2. 中央默认大字展示精炼好记的 meaning（2~3 个核心意思），保持卡片背面留白呼吸感 */}
+                          <h2 className="mx-auto mt-2.5 max-w-[92%] break-words font-sans text-xl font-semibold leading-snug tracking-tight text-[#262523] sm:text-2xl">
+                            {activeCard.meaning || activeCard.chineseMeaning}
                           </h2>
+
+                          {/* 2b. 中文释义正下方：极简轻拟物微凸小按钮 [ + 展开全义项 ]（支持快捷键 E） */}
+                          <button
+                            type="button"
+                            onClick={(e) =>
+                              handleToggleFullMeaning(activeCard, 'deck', e)
+                            }
+                            className="skeuo-btn-light mt-2 inline-flex items-center rounded-md px-2.5 py-1 font-mono text-[11px] font-medium text-[#6E6A63] transition-colors hover:text-[#EA5B25]"
+                            title="展开或收起全词性义项与熟词僻义 (快捷键: E)"
+                          >
+                            {isDeckFullMeaningOpen
+                              ? '[ - 收起全义项 ]'
+                              : '[ + 展开全义项 ]'}
+                          </button>
+
+                          {/* 2c. 按需平滑展开的 fullMeaning 完整多词性释义与熟词僻义区 */}
+                          {isDeckFullMeaningOpen && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="mt-2 max-h-[96px] w-full max-w-[92%] overflow-y-auto rounded-lg border border-[#E6E1D8] border-l-2 border-l-[#EA5B25] bg-[#F5F2EA]/90 px-3.5 py-2 text-left font-sans text-xs leading-relaxed text-[#5C5852]"
+                            >
+                              {refreshingCardId === activeCard.id ? (
+                                <span className="inline-flex items-center gap-1.5 font-mono text-xs text-[#8C867E]">
+                                  <Loader2 className="h-3 w-3 animate-spin text-[#EA5B25]" />
+                                  <span>加载全义项中...</span>
+                                </span>
+                              ) : (
+                                <span>
+                                  {activeCard.fullMeaning ||
+                                    activeCard.chineseMeaning}
+                                </span>
+                              )}
+                            </div>
+                          )}
 
                           {/* 3. 下方展示真正的雅思同义替换（Synonyms，无则隐藏） */}
                           {cleanSynonyms.length > 0 && (
@@ -1685,7 +1849,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
 
                           {/* 4. 原词误写/原表达警示（若来自写作批改） */}
                           {originalErrorText && (
-                            <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-[#E5C5B8] bg-[#FAF0EC] px-3 py-1 font-sans text-xs text-[#EA5B25]">
+                            <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[#E5C5B8] bg-[#FAF0EC] px-3 py-1 font-sans text-xs text-[#EA5B25]">
                               <span>原词误写/原表达：</span>
                               <span className="font-mono font-semibold line-through">
                                 {originalErrorText}
