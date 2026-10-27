@@ -21,7 +21,6 @@ export interface VocabularyCard {
   lastReviewedAt?: string;
   isCustom?: boolean;
   fromWriting?: boolean;
-  originalError?: string;
   vocabCategory?: 'writing' | 'task1' | 'task2';
 }
 

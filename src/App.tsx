@@ -156,21 +156,21 @@ export function App() {
         const needsKnownPhoneticFix =
           known && card.phonetic !== known.phonetic;
 
-        // Check if paraphrasing / synonyms is polluted by originalError or known bad words
-        const extractedErr =
-          card.originalError?.trim().toLowerCase() ||
-          card.exampleTranslation
-            ?.match(/将\s*[“"]([^”"]+)[”"]\s*升级为/)?.[1]
-            ?.trim()
-            .toLowerCase() ||
-          '';
+        // Check if paraphrasing / synonyms is polluted by known bad words
+        const legacyErr =
+          ((card as unknown as { originalError?: string }).originalError || '')
+            .trim()
+            .toLowerCase();
+        const hasLegacyOriginalError = Boolean(
+          (card as unknown as { originalError?: string }).originalError
+        );
 
         const currentSyns = card.paraphrasing || [];
         const hasPollutedSynonym = currentSyns.some((s) => {
           const sl = s.trim().toLowerCase();
           return (
             KNOWN_BAD_SYNONYMS.has(sl) ||
-            (extractedErr && sl === extractedErr) ||
+            (legacyErr && sl === legacyErr) ||
             sl === lower
           );
         });
@@ -205,6 +205,7 @@ export function App() {
         return (
           hasFakePhonetic ||
           hasFakePos ||
+          hasLegacyOriginalError ||
           Boolean(needsKnownPhoneticFix) ||
           Boolean(hasPollutedSynonym) ||
           Boolean(needsKnownSynonymFix) ||
@@ -257,26 +258,18 @@ export function App() {
               : 'n.'
             : card.partOfSpeech;
 
-          let nextOriginalError = card.originalError;
-          if (!nextOriginalError && card.fromWriting) {
-            const match = card.exampleTranslation?.match(
-              /将\s*[“"]([^”"]+)[”"]\s*升级为/
-            );
-            if (match?.[1]) {
-              nextOriginalError = match[1].trim();
-            } else if (card.paraphrasing?.[0]) {
-              nextOriginalError = card.paraphrasing[0].trim();
-            }
-          }
-
-          const errLower = (nextOriginalError || '').trim().toLowerCase();
+          const legacyErrLower = (
+            (card as unknown as { originalError?: string }).originalError || ''
+          )
+            .trim()
+            .toLowerCase();
           const sanitizedSynonyms = known?.synonyms
             ? known.synonyms
             : (card.synonyms || card.paraphrasing || []).filter((s) => {
                 const sl = String(s).trim().toLowerCase();
                 if (!sl || sl.length > 36) return false;
                 if (sl === lower) return false;
-                if (errLower && sl === errLower) return false;
+                if (legacyErrLower && sl === legacyErrLower) return false;
                 if (KNOWN_BAD_SYNONYMS.has(sl)) return false;
                 return true;
               });
@@ -310,8 +303,11 @@ export function App() {
             ? card.chineseMeaning
             : undefined;
 
+          const restCard = { ...(card as unknown as Record<string, unknown>) };
+          delete restCard.originalError;
+
           return {
-            ...card,
+            ...(restCard as unknown as VocabularyCard),
             phonetic: nextPhonetic,
             partOfSpeech: nextPos,
             meaning: nextConciseMeaning,
@@ -319,7 +315,6 @@ export function App() {
             fullMeaning: nextFullMeaning,
             paraphrasing: sanitizedSynonyms,
             synonyms: sanitizedSynonyms,
-            originalError: nextOriginalError,
             vocabCategory: resolvedCategory,
           };
         });

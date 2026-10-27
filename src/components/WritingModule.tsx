@@ -1324,11 +1324,10 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       paraphrasing: cleanSynonyms,
       synonyms: cleanSynonyms,
       exampleSentence: modifiedSentence,
-      exampleTranslation: `原句对比：${userSentence}（将 “${item.original}” 升级为 “${item.upgraded}”）`,
+      exampleTranslation: '',
       topicTag: report.topicTag || '来自写作批改',
       isCustom: true,
       fromWriting: true,
-      originalError: (item.originalError || item.original || '').trim(),
     });
   };
 
@@ -1372,20 +1371,21 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         ? 'phrase'
         : 'n.';
 
+    const conciseMeaning = corr.meaning || corr.chineseMeaning || corr.errorType;
     onIngestVocab({
       word: targetPhrase,
       phonetic: cleanPhonetic,
       partOfSpeech: cleanPos,
-      chineseMeaning: corr.meaning || corr.chineseMeaning || corr.errorType,
+      meaning: conciseMeaning,
+      chineseMeaning: conciseMeaning,
       englishDefinition: corr.explanation,
       paraphrasing: cleanSynonyms,
       synonyms: cleanSynonyms,
       exampleSentence: corr.corrected,
-      exampleTranslation: `原句对比：${corr.original}`,
+      exampleTranslation: '',
       topicTag: report.topicTag || '来自写作批改',
       isCustom: true,
       fromWriting: true,
-      originalError: (corr.originalError || '').trim(),
     });
   };
 
@@ -1441,18 +1441,15 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       meaning: conciseMeaning,
       chineseMeaning: conciseMeaning,
       fullMeaning: item.fullMeaning || undefined,
-      englishDefinition: `Upgraded from "${item.originalError}" in IELTS Writing.`,
+      englishDefinition: headword,
       paraphrasing: cleanSynonyms,
       synonyms: cleanSynonyms,
       exampleSentence: item.example || userSentence,
-      exampleTranslation: item.originalError
-        ? `将原文中的 “${item.originalError}” 升级为 “${headword}”`
-        : '',
+      exampleTranslation: '',
       topicTag: report.topicTag || '来自写作批改',
       isCustom: true,
       fromWriting: true,
       vocabCategory: 'writing',
-      originalError: (item.originalError || '').trim(),
     });
   };
 

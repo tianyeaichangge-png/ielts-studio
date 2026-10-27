@@ -153,44 +153,13 @@ function getValidPos(card: VocabularyCard): string {
 }
 
 /**
- * Extracts the user's original misspelled or low-band word from a writing-ingested card.
+ * Returns strictly validated IELTS synonyms, ensuring erroneous words NEVER appear.
  */
-function getOriginalErrorText(card: VocabularyCard): string | null {
-  if (!card.fromWriting) return null;
-  const candidate = (card.originalError || '').trim();
-  if (
-    candidate &&
-    candidate.toLowerCase() !== card.word.trim().toLowerCase() &&
-    candidate.length <= 42
-  ) {
-    return candidate;
-  }
-  const match = card.exampleTranslation?.match(
-    /将\s*[“"]([^”"]+)[”"]\s*升级为/
-  );
-  if (
-    match?.[1] &&
-    match[1].trim().toLowerCase() !== card.word.trim().toLowerCase()
-  ) {
-    return match[1].trim();
-  }
-  return null;
-}
-
-/**
- * Returns strictly validated IELTS synonyms, ensuring originalError or misspelled words NEVER appear.
- */
-function getCleanSynonyms(
-  card: VocabularyCard,
-  originalErrorText: string | null
-): string[] {
+function getCleanSynonyms(card: VocabularyCard): string[] {
   const lower = card.word.trim().toLowerCase();
   if (FALLBACK_PHONETIC_DICT[lower]?.synonyms) {
     return FALLBACK_PHONETIC_DICT[lower].synonyms!;
   }
-  const errLower = (originalErrorText || card.originalError || '')
-    .trim()
-    .toLowerCase();
   const rawList = card.synonyms?.length
     ? card.synonyms
     : card.paraphrasing || [];
@@ -201,7 +170,6 @@ function getCleanSynonyms(
       if (!s || s.length > 36) return false;
       const sl = s.toLowerCase();
       if (sl === lower) return false;
-      if (errLower && sl === errLower) return false;
       if (KNOWN_ERRONEOUS_SYNONYMS.has(sl)) return false;
       return true;
     });
@@ -448,14 +416,9 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
     () => (activeCard ? getValidPos(activeCard) : ''),
     [activeCard]
   );
-  const originalErrorText = useMemo(
-    () => (activeCard ? getOriginalErrorText(activeCard) : null),
-    [activeCard]
-  );
   const cleanSynonyms = useMemo(
-    () =>
-      activeCard ? getCleanSynonyms(activeCard, originalErrorText) : [],
-    [activeCard, originalErrorText]
+    () => (activeCard ? getCleanSynonyms(activeCard) : []),
+    [activeCard]
   );
 
   // Trigger a subtle orange highlight pulse on the '待攻克' tab
@@ -1114,8 +1077,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                   {listFilteredCards.map((item, idx) => {
                     const itemPhonetic = getValidPhonetic(item);
                     const itemPos = getValidPos(item);
-                    const itemOrigErr = getOriginalErrorText(item);
-                    const itemSyns = getCleanSynonyms(item, itemOrigErr);
+                    const itemSyns = getCleanSynonyms(item);
                     const itemIsLearning = isCardLearning(item);
                     const itemIsMastered = isCardMastered(item);
                     const conciseMeaning =
@@ -1167,33 +1129,37 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           )}
                         </div>
 
-                        {/* Middle Column: flex-1 min-w-0 pr-4 (Concise Meaning + [ + 全义项 ] Inline Toggle + Expandable Full Meaning) */}
+                        {/* Middle Column: flex-1 min-w-0 pr-4 (Pure Black Concise Meaning — Click Directly to Expand/Collapse Full Meaning) */}
                         <div className="flex-1 min-w-0 pr-4 pl-7 sm:pl-0">
-                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                            <span className="font-sans text-[13px] font-medium leading-snug break-words text-[#262523]">
-                              {conciseMeaning}
-                            </span>
-
-                            {itemOrigErr && (
-                              <span className="inline-block font-mono text-[11px] text-[#EA5B25] line-through">
-                                {itemOrigErr}
-                              </span>
-                            )}
-
-                            <button
-                              type="button"
+                          <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                            <span
+                              role="button"
+                              tabIndex={0}
                               onClick={(e) =>
                                 handleToggleFullMeaning(item, 'list', e)
                               }
-                              className="inline-flex items-center font-mono text-[11px] text-[#8C867E] transition-colors hover:text-[#EA5B25]"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleToggleFullMeaning(item, 'list');
+                                }
+                              }}
                               title={
                                 isRowExpanded
-                                  ? '收起完整词典释义'
-                                  : '展开全词性义项、熟词僻义与固定搭配'
+                                  ? '点击收起全义项词典释义'
+                                  : '点击展开全词性义项、熟词僻义与固定搭配'
                               }
+                              className="group/meaning inline-flex items-baseline gap-1 font-sans text-[13px] font-medium leading-snug break-words text-[#262523] transition-colors hover:text-[#EA5B25]"
                             >
-                              {isRowExpanded ? '[ - 收起 ]' : '[ + 全义项 ]'}
-                            </button>
+                              <span>{conciseMeaning}</span>
+                              <span
+                                aria-hidden="true"
+                                className="select-none text-[10px] text-[#B8B2A6] transition-colors group-hover/meaning:text-[#EA5B25]"
+                              >
+                                {isRowExpanded ? '▴' : '▾'}
+                              </span>
+                            </span>
                           </div>
 
                           {isRowExpanded && (
@@ -1215,60 +1181,64 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           )}
                         </div>
 
-                        {/* Right Column: Fixed w-[200px] shrink-0 text-right (Italic Synonyms ≈ ... with truncate/break-words, zero break-all) */}
-                        <div className="w-full sm:w-[200px] shrink-0 text-left sm:text-right pl-7 sm:pl-0 min-w-0">
+                        {/* Right Column: Fixed w-[200px] shrink-0 text-right (In-place Smooth Opacity Swap between Synonyms and Hover Action Buttons) */}
+                        <div className="relative w-full sm:w-[200px] shrink-0 text-left sm:text-right pl-7 sm:pl-0 min-w-0">
                           {itemSyns.length > 0 && (
                             <div
-                              className="truncate font-serif text-xs italic text-[#8A857C]"
+                              className={`truncate font-serif text-xs italic text-[#8A857C] select-none transition-opacity duration-150 ${
+                                isRowRefreshing
+                                  ? 'opacity-0'
+                                  : 'group-hover:opacity-0'
+                              }`}
                               title={`同义替换: ${itemSyns.join(' / ')}`}
                             >
                               ≈ {itemSyns.slice(0, 2).join(' / ')}
                             </div>
                           )}
-                        </div>
 
-                        {/* Floating Hover Action Overlay (absolute right-4, never squeezes right column synonyms) */}
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          className={`absolute right-4 top-2.5 flex items-center gap-1 rounded-md bg-[#F4F1E8]/95 px-1.5 py-0.5 shadow-sm backdrop-blur-[1px] transition-opacity ${
-                            isRowRefreshing
-                              ? 'opacity-100'
-                              : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
-                          }`}
-                        >
-                          {itemIsMastered ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onUpdateStatus(item.id, 'unlearned')
-                              }
-                              className="rounded px-1.5 py-0.5 font-sans text-[10px] font-medium text-[#7A7873] hover:bg-[#EAE6DC] hover:text-[#262523]"
-                              title="移回待背队列"
-                            >
-                              恢复待背
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onUpdateStatus(item.id, 'mastered')
-                              }
-                              className="rounded px-1.5 py-0.5 font-sans text-[10px] font-medium text-[#7A7873] hover:bg-[#EAE6DC] hover:text-[#2E7D5B]"
-                              title="直接标记为已掌握"
-                            >
-                              标为掌握
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => onDeleteCard(item.id)}
-                            className="p-1 text-[#B5B0A4] transition-colors hover:text-[#EA5B25]"
-                            title="删除该词条"
-                            aria-label="删除该词条"
+                          {/* In-place Right-Aligned Hover Action Buttons (100% replaces synonyms on hover with zero peeking text) */}
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className={`flex items-center justify-end gap-1 sm:absolute sm:right-0 sm:top-1/2 sm:-translate-y-1/2 transition-opacity duration-150 ${
+                              isRowRefreshing
+                                ? 'opacity-100'
+                                : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
+                            }`}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                            {itemIsMastered ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onUpdateStatus(item.id, 'unlearned')
+                                }
+                                className="rounded px-1.5 py-0.5 font-sans text-[11px] font-medium text-[#5C5852] transition-colors hover:bg-[#EAE6DC] hover:text-[#EA5B25]"
+                                title="移回待背队列"
+                              >
+                                恢复待背
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onUpdateStatus(item.id, 'mastered')
+                                }
+                                className="rounded px-1.5 py-0.5 font-sans text-[11px] font-medium text-[#5C5852] transition-colors hover:bg-[#EAE6DC] hover:text-[#EA5B25]"
+                                title="直接标记为已掌握"
+                              >
+                                标为掌握
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => onDeleteCard(item.id)}
+                              className="p-1 text-[#B5B0A4] transition-colors hover:text-[#EA5B25]"
+                              title="删除该词条"
+                              aria-label="删除该词条"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1587,15 +1557,6 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                                   )}
                                 </div>
                               )}
-
-                              {originalErrorText && (
-                                <span className="font-sans text-[11px] text-[#7A7873]">
-                                  原词误写：
-                                  <span className="ml-1 font-mono text-[#EA5B25] line-through">
-                                    {originalErrorText}
-                                  </span>
-                                </span>
-                              )}
                             </div>
 
                             {/* Borderless Paper-Direct Spelling Zone (Single Bottom Dash Only) */}
@@ -1845,16 +1806,6 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                                 {cleanSynonyms.join(' / ')}
                               </span>
                             </p>
-                          )}
-
-                          {/* 4. 原词误写/原表达警示（若来自写作批改） */}
-                          {originalErrorText && (
-                            <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[#E5C5B8] bg-[#FAF0EC] px-3 py-1 font-sans text-xs text-[#EA5B25]">
-                              <span>原词误写/原表达：</span>
-                              <span className="font-mono font-semibold line-through">
-                                {originalErrorText}
-                              </span>
-                            </div>
                           )}
                         </div>
 
