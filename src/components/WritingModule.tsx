@@ -721,7 +721,11 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         essay: activeEssay.trim(),
         apiKey: aiConfig.apiKey,
         endpoint: aiConfig.endpoint,
-        model: aiConfig.model || 'deepseek-chat',
+        model:
+          aiConfig.model === 'deepseek-v4-flash' ||
+          aiConfig.model === 'deepseek-v4-pro'
+            ? aiConfig.model
+            : 'deepseek-v4-pro',
       });
 
       const enrichedReport: WritingEvaluationReport = {

@@ -301,9 +301,22 @@ export function App() {
     {
       apiKey: '',
       endpoint: DEFAULT_DEEPSEEK_ENDPOINT,
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-pro',
     }
   );
+
+  // Automatic localStorage migration: upgrade legacy 'deepseek-chat' / 'deepseek-reasoner' aliases to 'deepseek-v4-pro'
+  useEffect(() => {
+    if (
+      aiConfig.model !== 'deepseek-v4-flash' &&
+      aiConfig.model !== 'deepseek-v4-pro'
+    ) {
+      setAiConfig((prev) => ({
+        ...prev,
+        model: 'deepseek-v4-pro',
+      }));
+    }
+  }, [aiConfig.model, setAiConfig]);
 
   // Independent Task 1 & Task 2 History Archives ('ielts_history_task1' & 'ielts_history_task2')
   const [task1Reports, setTask1Reports] = useLocalStorage<

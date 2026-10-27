@@ -33,6 +33,53 @@ function roundToHalfBand(score: number): number {
 }
 
 /**
+ * Normalizes model names to DeepSeek V4 official models ('deepseek-v4-flash' | 'deepseek-v4-pro').
+ * Automatically migrates deprecated 'deepseek-chat' or 'deepseek-reasoner' aliases to 'deepseek-v4-pro'.
+ */
+export function normalizeDeepSeekV4Model(
+  rawModel?: string,
+  fallback: 'deepseek-v4-flash' | 'deepseek-v4-pro' = 'deepseek-v4-pro'
+): 'deepseek-v4-flash' | 'deepseek-v4-pro' {
+  const trimmed = (rawModel || '').trim();
+  if (trimmed === 'deepseek-v4-flash' || trimmed === 'deepseek-v4-pro') {
+    return trimmed;
+  }
+  return fallback;
+}
+
+/**
+ * Fault-tolerant JSON extractor for DeepSeek V4 Flash & Pro responses:
+ * 1. Strips <think>...</think> reasoning blocks (and any unclosed <think> prefix).
+ * 2. Strips ```json ... ``` markdown code fences.
+ * 3. Extracts the outermost {...} JSON object if surrounded by explanatory text.
+ */
+export function extractAndParseJson(rawText: string): Record<string, any> {
+  const withoutThink = rawText
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^[\s\S]*?<\/think>/i, '')
+    .trim();
+
+  const strippedCodeFence = withoutThink
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/i, '')
+    .trim();
+
+  try {
+    return JSON.parse(strippedCodeFence);
+  } catch {
+    const firstBrace = strippedCodeFence.indexOf('{');
+    const lastBrace = strippedCodeFence.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      const jsonCandidate = strippedCodeFence
+        .slice(firstBrace, lastBrace + 1)
+        .replace(/,\s*([}\]])/g, '$1');
+      return JSON.parse(jsonCandidate);
+    }
+    throw new Error('JSON parse failed');
+  }
+}
+
+/**
  * Converts a File or Clipboard Blob into a crisp, storage-friendly Base64 Data URL
  * and automatically crops out redundant pure-white margins around chart screenshots
  * so axis labels and numbers render as large and clear as possible.
@@ -165,12 +212,12 @@ export async function evaluateIeltsWriting({
   essay,
   apiKey,
   endpoint = DEFAULT_DEEPSEEK_ENDPOINT,
-  model = 'deepseek-chat',
+  model = 'deepseek-v4-pro',
 }: EvaluateWritingParams): Promise<WritingEvaluationReport> {
   const wordCount = countWords(essay);
   const cleanKey = apiKey.trim();
   const cleanEndpoint = endpoint.trim() || DEFAULT_DEEPSEEK_ENDPOINT;
-  const cleanModel = model.trim() || 'deepseek-chat';
+  const cleanModel = normalizeDeepSeekV4Model(model, 'deepseek-v4-pro');
 
   if (!cleanKey) {
     throw new Error('未检测到 DeepSeek API Key，请先在右上角设置中填写您的 API Key。');
@@ -307,15 +354,8 @@ ${essay}`;
         content: userContent,
       },
     ],
-    response_format: {
-      type: 'json_object',
-    },
     stream: false,
   };
-
-  if (cleanModel !== 'deepseek-reasoner') {
-    requestBody.temperature = 0.2;
-  }
 
   let response: Response;
   try {
@@ -357,16 +397,9 @@ ${essay}`;
     throw new Error('DeepSeek API 返回内容为空，请重试。');
   }
 
-  const cleanedJson = rawText
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```\s*$/i, '')
-    .trim();
-
   let parsed: Record<string, any>;
   try {
-    parsed = JSON.parse(cleanedJson);
+    parsed = extractAndParseJson(rawText);
   } catch {
     throw new Error('DeepSeek 返回的数据格式解析失败，请重新点击交卷批改。');
   }
@@ -668,7 +701,6 @@ export async function generateVocabularyCardsWithAI({
   targetCategory = 'writing',
   apiKey,
   endpoint = DEFAULT_DEEPSEEK_ENDPOINT,
-  model = 'deepseek-chat',
 }: GenerateVocabularyWithAIParams): Promise<
   Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'>[]
 > {
@@ -688,7 +720,8 @@ export async function generateVocabularyCardsWithAI({
   }
 
   const targetEndpoint = endpoint.trim() || DEFAULT_DEEPSEEK_ENDPOINT;
-  const targetModel = model.trim() || 'deepseek-chat';
+  // Scenario A: Always use deepseek-v4-flash (non-thinking ultra-fast mode) for 1~2s response
+  const targetModel = 'deepseek-v4-flash';
 
   const systemPrompt = `你是一部权威、严谨的《雅思学术双解词典》（IELTS Academic Bilingual Dictionary）。
 用户将提供一组英文单词/短语（或“英文单词 + 用户自定义中文释义”的混合输入，如 "address 解决"），请你为每个词条生成标准、详尽的雅思背诵卡片 JSON 数据，并严格只输出合法的 JSON 对象（不要包含任何 Markdown 代码块标记）。
@@ -745,8 +778,7 @@ export async function generateVocabularyCardsWithAI({
         content: `请严格按《雅思学术双解词典》全词性、全义项标准，为以下词条生成 JSON：\n${userLines.join('\n')}`,
       },
     ],
-    temperature: 0.2,
-    response_format: { type: 'json_object' },
+    stream: false,
   };
 
   let response: Response;
@@ -785,16 +817,9 @@ export async function generateVocabularyCardsWithAI({
     throw new Error('DeepSeek 返回内容为空，请重试。');
   }
 
-  const cleanedJson = rawText
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```\s*$/i, '')
-    .trim();
-
   let parsed: Record<string, any>;
   try {
-    parsed = JSON.parse(cleanedJson);
+    parsed = extractAndParseJson(rawText);
   } catch {
     throw new Error('DeepSeek 返回的词汇 JSON 解析失败，请重试。');
   }

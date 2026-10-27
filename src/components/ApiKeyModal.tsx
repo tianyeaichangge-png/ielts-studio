@@ -16,12 +16,19 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   config,
   onSaveConfig,
 }) => {
+  const normalizeV4Model = (rawModel?: string): string => {
+    if (rawModel === 'deepseek-v4-flash' || rawModel === 'deepseek-v4-pro') {
+      return rawModel;
+    }
+    return 'deepseek-v4-pro';
+  };
+
   const [apiKeyInput, setApiKeyInput] = useState(config.apiKey);
   const [endpointInput, setEndpointInput] = useState(
     config.endpoint || DEFAULT_DEEPSEEK_ENDPOINT
   );
   const [selectedModel, setSelectedModel] = useState(
-    config.model || 'deepseek-chat'
+    normalizeV4Model(config.model)
   );
   const [showKey, setShowKey] = useState(false);
 
@@ -29,11 +36,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
     if (isOpen) {
       setApiKeyInput(config.apiKey || '');
       setEndpointInput(config.endpoint || DEFAULT_DEEPSEEK_ENDPOINT);
-      setSelectedModel(
-        config.model === 'deepseek-chat' || config.model === 'deepseek-reasoner'
-          ? config.model
-          : 'deepseek-chat'
-      );
+      setSelectedModel(normalizeV4Model(config.model));
     }
   }, [isOpen, config]);
 
@@ -133,25 +136,25 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             <div className="skeuo-groove mt-1.5 grid grid-cols-2 gap-1 rounded-xl p-1 font-mono text-xs">
               <button
                 type="button"
-                onClick={() => setSelectedModel('deepseek-chat')}
+                onClick={() => setSelectedModel('deepseek-v4-flash')}
                 className={`rounded-lg py-1.5 text-center transition-all ${
-                  selectedModel === 'deepseek-chat'
+                  selectedModel === 'deepseek-v4-flash'
                     ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                     : 'text-[#7A7873] hover:text-[#262523]'
                 }`}
               >
-                deepseek-chat (V3)
+                deepseek-v4-flash (极速)
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedModel('deepseek-reasoner')}
+                onClick={() => setSelectedModel('deepseek-v4-pro')}
                 className={`rounded-lg py-1.5 text-center transition-all ${
-                  selectedModel === 'deepseek-reasoner'
+                  selectedModel === 'deepseek-v4-pro'
                     ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                     : 'text-[#7A7873] hover:text-[#262523]'
                 }`}
               >
-                deepseek-reasoner (R1)
+                deepseek-v4-pro (旗舰)
               </button>
             </div>
           </div>

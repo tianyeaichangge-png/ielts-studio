@@ -307,6 +307,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
   >('writing');
   const [isTargetDropdownOpen, setIsTargetDropdownOpen] = useState(false);
   const [isAiGenerating, setIsAiGenerating] = useState(false);
+  const [refreshingCardId, setRefreshingCardId] = useState<string | null>(null);
   const [aiFeedbackMsg, setAiFeedbackMsg] = useState<{
     type: 'success' | 'error';
     text: string;
@@ -754,7 +755,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
         targetCategory: aiTargetCategory,
         apiKey: aiConfig.apiKey,
         endpoint: aiConfig.endpoint,
-        model: aiConfig.model,
+        model: 'deepseek-v4-flash',
       });
 
       const addedCount = onAddCards(generatedCards);
@@ -763,7 +764,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
       if (addedCount > 0) {
         setAiFeedbackMsg({
           type: 'success',
-          text: `✓ 已自动补全音标与例句并收录 ${addedCount} 个词条`,
+          text: `✓ 已自动补全全词性释义、音标与例句并收录 ${addedCount} 个词条`,
         });
       } else {
         setAiFeedbackMsg({
@@ -779,6 +780,48 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
       });
     } finally {
       setIsAiGenerating(false);
+    }
+  };
+
+  // Single-card multi-POS dictionary completion via deepseek-v4-flash ('↻ 补全全义项')
+  const handleRefreshSingleCard = async (card: VocabularyCard) => {
+    if (!aiConfig.apiKey.trim()) {
+      setAiFeedbackMsg({
+        type: 'error',
+        text: '尚未配置 DeepSeek API Key，请先在右上角设置中填入 Key。',
+      });
+      onOpenApiKeyModal();
+      return;
+    }
+
+    setRefreshingCardId(card.id);
+    setAiFeedbackMsg(null);
+    try {
+      const box = getCardBoxCategory(card);
+      const generatedCards = await generateVocabularyCardsWithAI({
+        rawInput: card.word,
+        targetCategory: box,
+        apiKey: aiConfig.apiKey,
+        endpoint: aiConfig.endpoint,
+        model: 'deepseek-v4-flash',
+      });
+      if (generatedCards.length > 0) {
+        onAddCards(generatedCards);
+        setAiFeedbackMsg({
+          type: 'success',
+          text: `✓ 已为「${card.word}」补全全词性与熟词僻义`,
+        });
+      }
+    } catch (err) {
+      setAiFeedbackMsg({
+        type: 'error',
+        text:
+          err instanceof Error
+            ? err.message
+            : `补全「${card.word}」全义项失败，请重试。`,
+      });
+    } finally {
+      setRefreshingCardId(null);
     }
   };
 
@@ -1084,8 +1127,24 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
 
                           <div
                             onClick={(e) => e.stopPropagation()}
-                            className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+                            className={`flex shrink-0 items-center gap-1 transition-opacity ${
+                              refreshingCardId === item.id
+                                ? 'opacity-100'
+                                : 'opacity-0 group-hover:opacity-100'
+                            }`}
                           >
+                            <button
+                              type="button"
+                              disabled={refreshingCardId === item.id}
+                              onClick={() => handleRefreshSingleCard(item)}
+                              className="rounded px-1.5 py-0.5 font-sans text-[10px] text-[#7A7873] hover:bg-[#EAE6DC] hover:text-[#EA5B25] disabled:opacity-60"
+                              title="使用 deepseek-v4-flash 极速补全该词全部词性与熟词僻义"
+                            >
+                              {refreshingCardId === item.id
+                                ? '补全中...'
+                                : '↻ 补全全义项'}
+                            </button>
+
                             {itemIsMastered ? (
                               <button
                                 type="button"

@@ -156,7 +156,7 @@ export interface Task2DraftState {
   gradedReportId?: string | null;
 }
 
-export type DeepSeekModel = 'deepseek-chat' | 'deepseek-reasoner';
+export type DeepSeekModel = 'deepseek-v4-flash' | 'deepseek-v4-pro';
 
 export interface DeepSeekConfig {
   apiKey: string;
