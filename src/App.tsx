@@ -63,8 +63,33 @@ export function App() {
       },
       proportion: {
         phonetic: '/prəˈpɔːʃn/',
-        pos: 'n.',
+        pos: 'n. / v.',
+        meaning: 'n. 比例，份额，占比；均衡 (in proportion to) | v. 使成比例，使相称',
         synonyms: ['percentage', 'share', 'ratio'],
+      },
+      address: {
+        phonetic: '/əˈdres/',
+        pos: 'v. / n.',
+        meaning: 'v. 解决，处理；向…发表演说；称呼 | n. 地址；演讲',
+        synonyms: ['tackle', 'resolve', 'handle'],
+      },
+      project: {
+        phonetic: '/ˈprɒdʒekt/',
+        pos: 'n. / v.',
+        meaning: 'n. 项目，工程 | v. 预测，预计（Task 1核心）；投射',
+        synonyms: ['forecast', 'predict', 'scheme'],
+      },
+      figure: {
+        phonetic: '/ˈfɪɡə(r)/',
+        pos: 'n. / v.',
+        meaning: 'n. 数字，数据；图表；人物 | v. 认为，认定；计算 (figure out)',
+        synonyms: ['statistic', 'number', 'data'],
+      },
+      account: {
+        phonetic: '/əˈkaʊnt/',
+        pos: 'n. / v.',
+        meaning: 'n. 账户；描述，解释 | v. 占比，解释 (account for)；认为是',
+        synonyms: ['constitute', 'comprise', 'represent'],
       },
       significantly: {
         phonetic: '/sɪɡˈnɪfɪkəntli/',
@@ -133,23 +158,41 @@ export function App() {
             currentSyns.join('|') !== known.synonyms.join('|'));
 
         const missingCategory = !card.vocabCategory;
+        const defaultCard = DEFAULT_IELTS_VOCABULARY.find(
+          (d) => d.id === card.id || d.word.trim().toLowerCase() === lower
+        );
+        const needsDefaultMultiPosUpgrade =
+          Boolean(
+            defaultCard &&
+              defaultCard.chineseMeaning.includes('|') &&
+              !card.chineseMeaning.includes('|')
+          ) ||
+          Boolean(
+            known?.meaning &&
+              known.meaning.includes('|') &&
+              !card.chineseMeaning.includes('|')
+          );
+
         return (
           hasFakePhonetic ||
           hasFakePos ||
           Boolean(needsKnownPhoneticFix) ||
           Boolean(hasPollutedSynonym) ||
           Boolean(needsKnownSynonymFix) ||
+          Boolean(needsDefaultMultiPosUpgrade) ||
           missingCategory
         );
       });
 
     if (needsCleanup) {
       setVocabCards((prev) => {
+        const defaultCardByWord = new Map<string, VocabularyCard>();
         const defaultCategoryByWord = new Map<
           string,
           'writing' | 'task1' | 'task2'
         >();
         for (const def of DEFAULT_IELTS_VOCABULARY) {
+          defaultCardByWord.set(def.word.trim().toLowerCase(), def);
           if (def.vocabCategory) {
             defaultCategoryByWord.set(
               def.word.trim().toLowerCase(),
@@ -161,6 +204,7 @@ export function App() {
         const cleaned = prev.map((card) => {
           const lower = card.word.trim().toLowerCase();
           const known = KNOWN_WORD_FIXES[lower];
+          const defaultCard = defaultCardByWord.get(lower);
           const isFakePhonetic = /\/(academic|phrase|collocation)\//i.test(
             card.phonetic || ''
           );
@@ -174,6 +218,10 @@ export function App() {
 
           const nextPos = known
             ? known.pos
+            : defaultCard &&
+              defaultCard.partOfSpeech.includes('/') &&
+              !card.partOfSpeech.includes('/')
+            ? defaultCard.partOfSpeech
             : isFakePos
             ? card.word.trim().includes(' ')
               ? 'phrase'
@@ -216,8 +264,15 @@ export function App() {
             phonetic: nextPhonetic,
             partOfSpeech: nextPos,
             chineseMeaning:
-              known?.meaning && card.chineseMeaning.startsWith('高分替换：')
+              known?.meaning &&
+              (card.chineseMeaning.startsWith('高分替换：') ||
+                (known.meaning.includes('|') &&
+                  !card.chineseMeaning.includes('|')))
                 ? known.meaning
+                : defaultCard &&
+                  defaultCard.chineseMeaning.includes('|') &&
+                  !card.chineseMeaning.includes('|')
+                ? defaultCard.chineseMeaning
                 : card.chineseMeaning,
             paraphrasing: sanitizedSynonyms,
             synonyms: sanitizedSynonyms,
@@ -369,16 +424,44 @@ export function App() {
     (
       newCardsData: Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'>[]
     ): number => {
-      let addedCount = 0;
+      let addedOrUpdatedCount = 0;
       setVocabCards((prev) => {
-        const existingLower = new Set(
-          prev.map((c) => c.word.trim().toLowerCase())
-        );
+        const updatedPrev = [...prev];
+        const existingIndexByWord = new Map<string, number>();
+        updatedPrev.forEach((c, idx) => {
+          existingIndexByWord.set(c.word.trim().toLowerCase(), idx);
+        });
+
         const createdCards: VocabularyCard[] = [];
         for (const item of newCardsData) {
           const normalized = item.word.trim().toLowerCase();
-          if (!normalized || existingLower.has(normalized)) continue;
-          existingLower.add(normalized);
+          if (!normalized) continue;
+          const existingIdx = existingIndexByWord.get(normalized);
+          if (existingIdx !== undefined) {
+            // Upgrade existing card in place with full multi-POS definition & phonetics
+            const existingCard = updatedPrev[existingIdx];
+            updatedPrev[existingIdx] = {
+              ...existingCard,
+              phonetic: item.phonetic || existingCard.phonetic,
+              partOfSpeech: item.partOfSpeech || existingCard.partOfSpeech,
+              chineseMeaning: item.chineseMeaning || existingCard.chineseMeaning,
+              englishDefinition:
+                item.englishDefinition || existingCard.englishDefinition,
+              paraphrasing:
+                item.paraphrasing?.length
+                  ? item.paraphrasing
+                  : existingCard.paraphrasing,
+              synonyms:
+                item.synonyms?.length ? item.synonyms : existingCard.synonyms,
+              exampleSentence:
+                item.exampleSentence || existingCard.exampleSentence,
+              exampleTranslation:
+                item.exampleTranslation || existingCard.exampleTranslation,
+            };
+            addedOrUpdatedCount += 1;
+            continue;
+          }
+          existingIndexByWord.set(normalized, -1);
           createdCards.push({
             ...item,
             id: `custom-vocab-${Date.now()}-${Math.random()
@@ -389,11 +472,13 @@ export function App() {
             isCustom: true,
             vocabCategory: item.vocabCategory || 'writing',
           });
+          addedOrUpdatedCount += 1;
         }
-        addedCount = createdCards.length;
-        return createdCards.length > 0 ? [...createdCards, ...prev] : prev;
+        return createdCards.length > 0
+          ? [...createdCards, ...updatedPrev]
+          : updatedPrev;
       });
-      return addedCount;
+      return addedOrUpdatedCount;
     },
     [setVocabCards]
   );

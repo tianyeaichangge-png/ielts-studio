@@ -155,7 +155,7 @@ export function convertImageFileToDataUrl(file: File | Blob): Promise<string> {
  * 100% Real DeepSeek IELTS Writing Examiner Evaluation
  * Outputs the 4 sequential Examiner Modules:
  * 1. 雅思官方四维评分诊断 (overallBand + dimensions)
- * 2. 逐段深度批改与逻辑重构 (paragraphReviews with keyCorrections for one-click Vocabulary ingestion)
+ * 2. 逐段深度批改与逻辑重构 (paragraphReviews with full multi-POS keyCorrections for one-click Vocabulary ingestion)
  * 3. 突破分数天花板的核心策略 (breakthroughStrategies - Top 3 actionable strategies)
  * 4. 考官级完整范文 (modelEssay - Band 8.0+ full paragraphs & highlights)
  */
@@ -179,7 +179,7 @@ export async function evaluateIeltsWriting({
   const isTask1 = taskType === 'task1';
   const minWords = isTask1 ? 150 : 250;
 
-  const systemInstruction = `你是一位铁面无私、经验丰富的前雅思考官（Former Senior IELTS Writing Examiner）。
+  const systemInstruction = `你是一位铁面无私、经验丰富的前雅思考官（Former Senior IELTS Writing Examiner），同时具备《雅思学术双解词典》编纂专家的严谨素养。
 请严格按照雅思官方评分标准（Task 1 要求 ≥150 词，Task 2 要求 ≥250 词）进行客观、严谨的评估，克服 AI 的讨好倾向。若文章存在未写完、字数严重不足、跑题或拼写语法错误，请严格按照真实雅思考场的扣分尺度如实给出低分与一针见血的批评！
 
 【铁律要求 —— 严禁无中生有】：
@@ -190,12 +190,16 @@ export async function evaluateIeltsWriting({
      * "originalText": 100% 逐字摘录考生该段的原始英文段落；
      * "logicAndLanguageCritique": 考官对该段逻辑推进、论证漏洞、衔接断层及语言错误的深度批注诊断（中文，一针见血）；
      * "reconstructedParagraph": 考官在保留考生原本意图的基础上，示范如何用 Band 7.5+ 的严谨逻辑与学术衔接重写该段（纯正英文）；
-     * "keyCorrections": 从该段中提取 1~3 个核心词汇/短语纠错与高分升级项，供考生点击「+ 入库」直接存入背单词本。每项必须包含：
+     * "keyCorrections": 从该段中提取 1~3 个核心词汇/短语纠错与高分升级项，供考生点击「+ 入库」直接存入背单词本。每项必须遵循《雅思学术双解词典》全词性、全义项标准：
        - "originalError": 100% 摘自考生该段原文的错误拼写或低分口语词（如 "catogerise"、"more and more"）；
        - "upgradedWord": 升级后的 1 个地道雅思高分学术单词或词组（不要用斜杠堆砌多个，以便直接作为背单词词头）；
        - "phonetic": 升级词的真实英式国际音标（IPA，如 "/ˈkætəɡəraɪz/"；若为多词短语无单字音标则必须填 "" 空字符串，严禁填写 "/academic/" 等假音标！）；
-       - "pos": 准确词性缩写（严格使用 "n." / "v." / "adj." / "adv." / "phrase"，严禁使用 "acad." 或 "expr."！）；
-       - "meaning": 简明精准的中文释义（12字以内）；
+       - "pos": 汇总该升级词的所有核心常用词性（如 "v. / n."、"n. / v."、"adj."、"phrase"，严禁使用 "acad." 或 "expr."！）；
+       - "meaning": **严禁只给单一表面意思！** 必须先列出当前作文语境下的核心意思，同时遍历该词的其他常用词性（n. / v. / adj. / adv.），用 " | " 隔开不同词性，同一词性下的多个义项用 "；" 隔开，完整涵盖【当前语境义项 + 日常核心义项 + 雅思学术高频义项 + 熟词僻义 + 核心固定搭配】（例如：
+         * address -> "v. 解决，处理；向…发表演说；称呼 | n. 地址；演讲"
+         * project -> "n. 项目，工程 | v. 预测，预计（Task 1核心）；投射"
+         * figure -> "n. 数字，数据；图表；人物 | v. 认为，认定；计算 (figure out)"
+         * account -> "n. 账户；描述，解释 | v. 占比，解释 (account for)；认为是"）；
        - "synonyms": 2~3 个地道的高分雅思同义替换词数组（严禁把考生的错误原词 originalError 放进 synonyms！）；
        - "example": 包含该升级词的地道雅思学术完整英文例句（基于考生该句改写）。
    - **模块三：突破分数天花板的核心策略（Top 3 Actionable Strategies）**：针对考生本文最致命的提分瓶颈，给出 3 条具体、可落地的突破策略 breakthroughStrategies（每条含 title 核心策略标题 与 actionableAdvice 结合原文正反对比的具体落地建议）。
@@ -242,8 +246,8 @@ export async function evaluateIeltsWriting({
           "originalError": "100%摘自该段原文的错误或低分表达",
           "upgradedWord": "地道高分替换词或词组",
           "phonetic": "/.../（多词短语填 \"\"）",
-          "pos": "n. | v. | adj. | adv. | phrase",
-          "meaning": "简明精准中文释义",
+          "pos": "汇总所有核心词性，如 v. / n. 或 adj. / n.",
+          "meaning": "全词性多义项释义，不同词性用 \" | \" 隔开，同词性多义项用 \"；\" 隔开（如：v. 解决，处理；向…发表演说 | n. 地址；演讲）",
           "synonyms": ["地道雅思同义词1", "地道雅思同义词2"],
           "example": "包含该升级词的完整正确雅思学术英文例句"
         }
@@ -409,7 +413,7 @@ ${essay}`;
       /academic|phrase|collocation|expr/i.test(rawPhonetic) || isPhrase
         ? ''
         : rawPhonetic;
-    const rawPos = String(raw?.pos || '').trim();
+    const rawPos = String(raw?.pos || raw?.partOfSpeech || '').trim();
     const pos =
       !rawPos || /^(acad\.|expr\.)$/i.test(rawPos)
         ? isPhrase
@@ -623,10 +627,41 @@ export interface GenerateVocabularyWithAIParams {
   model?: string;
 }
 
+interface ParsedInputWordEntry {
+  raw: string;
+  englishWord: string;
+  userCustomMeaning: string;
+}
+
 /**
- * Uses DeepSeek API to automatically generate structured IELTS vocabulary cards
- * (with genuine IPA phonetics, accurate POS, concise IELTS Chinese meaning, and authentic IELTS example sentences)
- * from one or more user-submitted English words or phrases.
+ * Parses mixed user input such as "address 解决" or "project 预测, figure"
+ * into clean English word/phrase + optional user-specified priority Chinese meaning.
+ */
+export function parseMixedVocabInputEntry(entry: string): ParsedInputWordEntry {
+  const trimmed = entry.trim();
+  // Match leading English word/phrase followed by optional Chinese custom meaning
+  const match = trimmed.match(
+    /^([a-zA-Z][a-zA-Z\s'-]*?)\s*[:：\-—\s]*([\u4e00-\u9fff].*)$/
+  );
+  if (match) {
+    return {
+      raw: trimmed,
+      englishWord: match[1].trim(),
+      userCustomMeaning: match[2].trim(),
+    };
+  }
+  return {
+    raw: trimmed,
+    englishWord: trimmed,
+    userCustomMeaning: '',
+  };
+}
+
+/**
+ * Uses DeepSeek API (acting as an authoritative IELTS Academic Bilingual Dictionary)
+ * to automatically generate structured IELTS vocabulary cards with ALL common parts of speech,
+ * daily core meanings, IELTS academic high-frequency meanings, familiar-word-uncommon-meanings (熟词僻义),
+ * and core collocations. Supports mixed "English + custom Chinese" input (e.g., "address 解决").
  */
 export async function generateVocabularyCardsWithAI({
   rawInput,
@@ -642,47 +677,64 @@ export async function generateVocabularyCardsWithAI({
     throw new Error('请先点击右上角齿轮图标 ⚙️ 配置有效的 DeepSeek API Key。');
   }
 
-  const words = rawInput
+  const parsedEntries = rawInput
     .split(/[,，;\n\r]+/)
-    .map((w) => w.trim())
-    .filter(Boolean)
+    .map((w) => parseMixedVocabInputEntry(w))
+    .filter((entry) => Boolean(entry.englishWord))
     .slice(0, 15);
 
-  if (words.length === 0) {
-    throw new Error('请输入至少一个英文单词或词组。');
+  if (parsedEntries.length === 0) {
+    throw new Error('请输入至少一个英文单词或词组（支持“英文+中文”如：address 解决）。');
   }
 
   const targetEndpoint = endpoint.trim() || DEFAULT_DEEPSEEK_ENDPOINT;
   const targetModel = model.trim() || 'deepseek-chat';
 
-  const systemPrompt = `你是一位严谨的雅思（IELTS）学术词汇专家与词典编纂者。
-用户将提供一组英文单词或短语，请你为每个单词/短语生成标准的雅思背诵卡片数据，并严格只输出合法的 JSON 对象（不要包含任何 Markdown 代码块标记）。
+  const systemPrompt = `你是一部权威、严谨的《雅思学术双解词典》（IELTS Academic Bilingual Dictionary）。
+用户将提供一组英文单词/短语（或“英文单词 + 用户自定义中文释义”的混合输入，如 "address 解决"），请你为每个词条生成标准、详尽的雅思背诵卡片 JSON 数据，并严格只输出合法的 JSON 对象（不要包含任何 Markdown 代码块标记）。
 
-【严格要求】
-1. "word": 规范化后的英文单词或短语（修正明显拼写错误，保持原词核心形态）。
-2. "phonetic": 必须是真实的英式国际音标（IPA，例如 "/kənˈsɪdərəbl/"）。如果是多词短语，若无单字音标请填 ""（空字符串），严禁编造 "/academic/"、"/phrase/" 等假音标！
-3. "partOfSpeech": 准确的词性缩写，仅限 "n."、"v."、"adj."、"adv."、"phrase"、"prep."、"conj."，严禁出现 "acad." 或 "expr."。
-4. "chineseMeaning": 简明、地道的雅思核心中文释义（控制在 12 个汉字以内，不要带多余前缀）。
-5. "englishDefinition": 简明的英文学术释义。
-6. "paraphrasing": 2~3 个高分雅思同义替换词（字符串数组）。
-7. "exampleSentence": 一句地道的雅思学术写作（Task 1 或 Task 2）真题风格英文例句，必须包含该单词或短语。
+【核心铁律 —— 强制输出全词性、全义项，严禁只给单一表面意思！】
+1. "word": 纯净、规范化后的英文单词或短语（修正明显拼写错误，严禁在 word 字段中残留任何中文字符！例如用户输入 "address 解决"，"word" 必须严格为 "address"）。
+2. "phonetic": 必须是真实的英式国际音标（IPA，例如 "/əˈdres/"）。如果是多词短语，若无单字音标请填 ""（空字符串），严禁编造 "/academic/"、"/phrase/" 等假音标！
+3. "pos"（及 "partOfSpeech"）: 必须汇总该词的所有常用核心词性，格式如 "v. / n."、"n. / v."、"adj. / n."、"n."、"v."、"adj."、"adv."、"phrase"（严禁出现 "acad." 或 "expr."）。
+4. "meaning"（及 "chineseMeaning"）:
+   - **严禁只给单一表面意思！** 必须遍历该词所有常用词性（n. / v. / adj. / adv.），并在 meaning 字段中按词性分类，完整列出【日常核心义项 + 雅思学术高频义项 + 熟词僻义 + 核心固定搭配】。
+   - **格式规范**：不同词性之间必须用 " | " 隔开，同一词性下的多个意思用 "；" 隔开。
+   - **标杆示例**：
+     * 示例 1 (address)："v. 解决，处理；向…发表演说；称呼 | n. 地址；演讲"
+     * 示例 2 (project)："n. 项目，工程 | v. 预测，预计（Task 1核心）；投射"
+     * 示例 3 (figure)："n. 数字，数据；图表；人物 | v. 认为，认定；计算 (figure out)"
+     * 示例 4 (account)："n. 账户；描述，解释 | v. 占比，解释 (account for)；认为是"
+   - **用户自定义中文优先规则**：若用户在输入中附带了自定义中文含义（如输入了 "address 解决"），请务必将用户指定的中文含义排在 meaning 最前面对应的词性首位，再由你补全该词的其他全部词性与义项！
+5. "englishDefinition": 简明精准的英文学术释义。
+6. "synonyms"（及 "paraphrasing"）: 2~3 个高分雅思同义替换词（字符串数组）。
+7. "exampleSentence": 一句地道的雅思学术写作（Task 1 或 Task 2）真题风格英文例句，必须包含该单词或短语（优先体现其雅思学术高频用法或用户指定义项用法）。
 8. "exampleTranslation": 对应的精准中文翻译。
 
 请严格返回如下 JSON 格式：
 {
   "cards": [
     {
-      "word": "string",
-      "phonetic": "/.../",
-      "partOfSpeech": "n. | v. | adj. | adv. | phrase",
-      "chineseMeaning": "简明中文释义",
-      "englishDefinition": "Concise English definition",
-      "paraphrasing": ["synonym1", "synonym2"],
-      "exampleSentence": "Authentic IELTS academic example sentence containing the word.",
-      "exampleTranslation": "例句中文翻译"
+      "word": "address",
+      "phonetic": "/əˈdres/",
+      "pos": "v. / n.",
+      "partOfSpeech": "v. / n.",
+      "meaning": "v. 解决，处理；向…发表演说；称呼 | n. 地址；演讲",
+      "chineseMeaning": "v. 解决，处理；向…发表演说；称呼 | n. 地址；演讲",
+      "englishDefinition": "To deal with a matter or problem; a formal speech or location.",
+      "synonyms": ["tackle", "resolve", "handle"],
+      "paraphrasing": ["tackle", "resolve", "handle"],
+      "exampleSentence": "Governments must take immediate action to address the root causes of urban poverty.",
+      "exampleTranslation": "政府必须采取果断行动，解决城市贫困的根源问题。"
     }
   ]
 }`;
+
+  const userLines = parsedEntries.map((entry) =>
+    entry.userCustomMeaning
+      ? `英文单词: "${entry.englishWord}" | 用户指定优先中文含义: "${entry.userCustomMeaning}"（请将该含义排在 meaning 最前面，并继续补全该词的所有常用词性、雅思学术义项、熟词僻义与固定搭配）`
+      : `英文单词: "${entry.englishWord}"（请遍历所有常用词性，按“词性1 义项1；义项2 | 词性2 义项1；义项2”格式完整输出日常义项、雅思高频学术义项、熟词僻义与固定搭配）`
+  );
 
   const requestBody: Record<string, unknown> = {
     model: targetModel,
@@ -690,7 +742,7 @@ export async function generateVocabularyCardsWithAI({
       { role: 'system', content: systemPrompt },
       {
         role: 'user',
-        content: `请为以下英文单词/词组生成雅思词汇卡片 JSON：\n${words.join('\n')}`,
+        content: `请严格按《雅思学术双解词典》全词性、全义项标准，为以下词条生成 JSON：\n${userLines.join('\n')}`,
       },
     ],
     temperature: 0.2,
@@ -753,16 +805,25 @@ export async function generateVocabularyCardsWithAI({
   }
 
   return rawCards
-    .map((item: any) => {
-      const word = String(item?.word || '').trim();
-      if (!word) return null;
-      const isPhrase = word.includes(' ');
+    .map((item: any, idx: number) => {
+      // Strip any accidental Chinese characters from word
+      const rawWord = String(item?.word || parsedEntries[idx]?.englishWord || '')
+        .replace(/[\u4e00-\u9fff]+.*$/, '')
+        .trim();
+      if (!rawWord) return null;
+
+      const matchedInput =
+        parsedEntries.find(
+          (e) => e.englishWord.toLowerCase() === rawWord.toLowerCase()
+        ) || parsedEntries[idx];
+
+      const isPhrase = rawWord.includes(' ');
       const rawPhonetic = String(item?.phonetic || '').trim();
       const phonetic =
         /academic|phrase|collocation|expr/i.test(rawPhonetic) || isPhrase
           ? ''
           : rawPhonetic;
-      const rawPos = String(item?.partOfSpeech || '').trim();
+      const rawPos = String(item?.pos || item?.partOfSpeech || '').trim();
       const partOfSpeech =
         !rawPos || /^(acad\.|expr\.)$/i.test(rawPos)
           ? isPhrase
@@ -770,11 +831,30 @@ export async function generateVocabularyCardsWithAI({
             : 'n.'
           : rawPos;
 
+      let fullMeaning = String(
+        item?.meaning || item?.chineseMeaning || '核心词汇'
+      ).trim();
+
+      // Ensure user's custom Chinese meaning is placed at the very front if not already present
+      const customMeaning = matchedInput?.userCustomMeaning?.trim();
+      if (customMeaning && !fullMeaning.includes(customMeaning)) {
+        fullMeaning = `${customMeaning}；${fullMeaning}`;
+      }
+
+      const rawSyns = Array.isArray(item?.synonyms)
+        ? item.synonyms
+        : Array.isArray(item?.paraphrasing)
+        ? item.paraphrasing
+        : [];
+      const cleanSyns = rawSyns
+        .map((s: any) => String(s).trim())
+        .filter(Boolean);
+
       return {
-        word,
+        word: rawWord,
         phonetic,
         partOfSpeech,
-        chineseMeaning: String(item?.chineseMeaning || '核心词汇').trim(),
+        chineseMeaning: fullMeaning,
         englishDefinition: String(
           item?.englishDefinition || 'High-frequency IELTS academic expression.'
         ).trim(),
@@ -784,12 +864,11 @@ export async function generateVocabularyCardsWithAI({
             : targetCategory === 'task2'
             ? 'Task 2 学术词'
             : 'Academic Writing',
-        paraphrasing: Array.isArray(item?.paraphrasing)
-          ? item.paraphrasing.map((s: any) => String(s).trim()).filter(Boolean)
-          : [],
+        paraphrasing: cleanSyns,
+        synonyms: cleanSyns,
         exampleSentence: String(
           item?.exampleSentence ||
-            `This concept plays a vital role in modern society (${word}).`
+            `This concept plays a vital role in modern society (${rawWord}).`
         ).trim(),
         exampleTranslation: String(item?.exampleTranslation || '').trim(),
         isCustom: true,

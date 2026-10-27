@@ -76,7 +76,7 @@ const FALLBACK_PHONETIC_DICT: Record<
   },
   proportion: {
     phonetic: '/prəˈpɔːʃn/',
-    pos: 'n.',
+    pos: 'n. / v.',
     synonyms: ['percentage', 'share', 'ratio'],
   },
   significantly: {
@@ -137,18 +137,19 @@ function getValidPhonetic(card: VocabularyCard): string {
 }
 
 /**
- * Ensures fake POS tags like "acad." or "expr." are NEVER rendered.
+ * Ensures fake POS tags like "acad." or "expr." are NEVER rendered,
+ * while preserving multi-POS strings such as "v. / n." or "n. / adj.".
  */
 function getValidPos(card: VocabularyCard): string {
+  const raw = (card.partOfSpeech || '').trim();
+  if (raw && !/^(acad\.|expr\.)$/i.test(raw)) {
+    return raw;
+  }
   const lower = card.word.trim().toLowerCase();
   if (FALLBACK_PHONETIC_DICT[lower]) {
     return FALLBACK_PHONETIC_DICT[lower].pos;
   }
-  const raw = (card.partOfSpeech || '').trim();
-  if (!raw || /^(acad\.|expr\.)$/i.test(raw)) {
-    return card.word.trim().includes(' ') ? 'phrase' : 'n.';
-  }
-  return raw;
+  return card.word.trim().includes(' ') ? 'phrase' : 'n.';
 }
 
 /**
@@ -387,9 +388,12 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
   const listFilteredCards = useMemo(() => {
     const q = unifiedInput.trim().toLowerCase();
     if (!q || q.includes(',') || q.includes('，')) return categoryCards;
+    // Support mixed "address 解决" input in the search bar by matching either full query or English headword
+    const englishPart = q.replace(/[\u4e00-\u9fff：:\-—]+.*$/, '').trim();
     return categoryCards.filter(
       (c) =>
         c.word.toLowerCase().includes(q) ||
+        (englishPart && c.word.toLowerCase().includes(englishPart)) ||
         c.chineseMeaning.toLowerCase().includes(q) ||
         (c.synonyms || c.paraphrasing || []).some((s) =>
           s.toLowerCase().includes(q)
@@ -870,7 +874,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                         setUnifiedInput(e.target.value);
                         if (aiFeedbackMsg) setAiFeedbackMsg(null);
                       }}
-                      placeholder="搜索当前词盒，或输入英文生词由 AI 自动入库..."
+                      placeholder="搜索当前词盒，或输入英文生词（支持“address 解决”）由 AI 自动入库..."
                       className="w-full min-w-0 bg-transparent px-2.5 py-1 font-sans text-xs text-[#262523] placeholder-[#9E998E] focus:outline-none"
                     />
 
@@ -1053,27 +1057,27 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           )}
                         </div>
 
-                        {/* Middle Column (4 cols): Clean Chinese Meaning */}
-                        <div className="col-span-12 pl-8 sm:col-span-4 sm:pl-0 min-w-0">
-                          <span className="font-sans text-xs font-medium text-[#262523]">
+                        {/* Middle Column (4 cols): Full Multi-POS Chinese Meaning (Zero Truncation) */}
+                        <div className="col-span-12 min-w-0 py-1 pl-8 leading-relaxed break-words sm:col-span-4 sm:pl-0">
+                          <span className="font-sans text-xs font-medium leading-relaxed break-words text-[#262523]">
                             {item.chineseMeaning}
                           </span>
                           {itemOrigErr && (
-                            <span className="ml-2 font-mono text-[11px] text-[#EA5B25] line-through">
+                            <span className="ml-2 inline-block font-mono text-[11px] text-[#EA5B25] line-through">
                               {itemOrigErr}
                             </span>
                           )}
                         </div>
 
-                        {/* Right Column (3 cols): Italic Synonyms (≈ ...) + Hover Actions */}
-                        <div className="col-span-12 flex items-baseline justify-between gap-2 pl-8 sm:col-span-3 sm:pl-0 min-w-0">
-                          <div className="min-w-0 flex-1 truncate">
+                        {/* Right Column (3 cols): Italic Synonyms (≈ ...) + Hover Actions (Zero Truncation) */}
+                        <div className="col-span-12 flex items-baseline justify-between gap-2 py-1 pl-8 sm:col-span-3 sm:pl-0 min-w-0">
+                          <div className="min-w-0 flex-1 leading-relaxed break-words">
                             {itemSyns.length > 0 && (
                               <span
-                                className="font-serif text-xs italic text-[#8A857C]"
+                                className="font-serif text-xs italic leading-relaxed break-words text-[#8A857C]"
                                 title={`同义替换: ${itemSyns.join(' / ')}`}
                               >
-                                ≈ {itemSyns.slice(0, 2).join(' / ')}
+                                ≈ {itemSyns.join(' / ')}
                               </span>
                             )}
                           </div>
@@ -1256,7 +1260,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           spellInputRef.current?.focus();
                         }
                       }}
-                      className={`relative h-[390px] w-full ${
+                      className={`relative h-[430px] sm:h-[440px] w-full ${
                         studyMode === 'recognize'
                           ? 'cursor-pointer'
                           : 'cursor-text'
@@ -1375,11 +1379,11 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                               e.stopPropagation();
                               spellInputRef.current?.focus();
                             }}
-                            className="my-auto flex w-full flex-col items-center py-4"
+                            className="my-auto flex w-full flex-col items-center py-3"
                           >
-                            <div className="flex flex-col items-center gap-1.5">
-                              <div className="inline-flex items-center gap-2">
-                                <span className="font-sans text-xl font-semibold tracking-tight text-[#262523]">
+                            <div className="mx-auto flex w-full max-w-[92%] flex-col items-center gap-1.5">
+                              <div className="flex flex-wrap items-center justify-center gap-1.5 text-center">
+                                <span className="mx-auto max-w-[92%] break-words font-sans text-[16px] font-semibold leading-relaxed tracking-tight text-[#262523] md:text-[18px]">
                                   {activeCard.chineseMeaning}
                                 </span>
                                 <button
@@ -1387,7 +1391,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                                   onClick={(e) =>
                                     handleSpeak(activeCard.word, e)
                                   }
-                                  className="inline-flex h-6 w-6 items-center justify-center rounded text-[#9B978E] transition-colors hover:text-[#EA5B25]"
+                                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#9B978E] transition-colors hover:text-[#EA5B25]"
                                   title="重播发音 (Tab)"
                                   aria-label="重播发音"
                                 >
@@ -1408,7 +1412,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                             {/* Borderless Paper-Direct Spelling Zone (Single Bottom Dash Only) */}
                             <div
                               key={shakeKey}
-                              className={`relative mt-7 w-full max-w-md py-2 transition-all ${
+                              className={`relative mt-5 w-full max-w-md py-2 transition-all ${
                                 spellStatus === 'wrong' ? 'animate-shake' : ''
                               }`}
                             >
@@ -1509,7 +1513,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                         )}
 
                         {/* FRONT BOTTOM: Pure Example Sentence Only */}
-                        <p className="mx-auto max-w-md font-serif text-sm italic leading-relaxed text-[#7A7873] line-clamp-3">
+                        <p className="mx-auto max-w-[92%] break-words font-serif text-sm italic leading-relaxed text-[#7A7873]">
                           “
                           {studyMode === 'spell' && spellStatus !== 'correct'
                             ? maskedSentence
@@ -1582,8 +1586,8 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           </div>
                         </div>
 
-                        {/* BACK CENTER: Word Echo + Prominent Meaning + Synonyms + Original Error */}
-                        <div className="my-auto flex flex-col items-center py-4">
+                        {/* BACK CENTER: Word Echo + Prominent Multi-Line Meaning + Synonyms + Original Error */}
+                        <div className="my-auto flex w-full flex-col items-center py-3">
                           {/* 1. 顶部小字回显英文单词与音标 */}
                           <div className="inline-flex items-center gap-2 text-[#7A7873]">
                             <span className="font-serif text-base font-medium text-[#262523]">
@@ -1605,14 +1609,14 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                             </button>
                           </div>
 
-                          {/* 2. 中央醒目展示中文释义 */}
-                          <h2 className="mt-3.5 font-sans text-2xl font-semibold tracking-tight text-[#262523]">
+                          {/* 2. 中央醒目展示全词性中文释义（零截断、多行居中自适应） */}
+                          <h2 className="mx-auto mt-3 max-w-[92%] break-words font-sans text-[16px] font-semibold leading-relaxed tracking-tight text-[#262523] md:text-[18px]">
                             {activeCard.chineseMeaning}
                           </h2>
 
                           {/* 3. 下方展示真正的雅思同义替换（Synonyms，无则隐藏） */}
                           {cleanSynonyms.length > 0 && (
-                            <p className="mt-3 font-sans text-xs text-[#7A7873]">
+                            <p className="mx-auto mt-2.5 max-w-[92%] break-words font-sans text-xs leading-relaxed text-[#7A7873]">
                               同义替换：
                               <span className="font-serif text-sm text-[#262523]">
                                 {cleanSynonyms.join(' / ')}
@@ -1622,7 +1626,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
 
                           {/* 4. 原词误写/原表达警示（若来自写作批改） */}
                           {originalErrorText && (
-                            <div className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-[#E5C5B8] bg-[#FAF0EC] px-3 py-1 font-sans text-xs text-[#EA5B25]">
+                            <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-[#E5C5B8] bg-[#FAF0EC] px-3 py-1 font-sans text-xs text-[#EA5B25]">
                               <span>原词误写/原表达：</span>
                               <span className="font-mono font-semibold line-through">
                                 {originalErrorText}
@@ -1632,7 +1636,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                         </div>
 
                         {/* BACK BOTTOM: Pure Example Sentence Only */}
-                        <p className="mx-auto max-w-md font-serif text-sm italic leading-relaxed text-[#7A7873] line-clamp-3">
+                        <p className="mx-auto max-w-[92%] break-words font-serif text-sm italic leading-relaxed text-[#7A7873]">
                           “{activeCard.exampleSentence}”
                         </p>
                       </div>
