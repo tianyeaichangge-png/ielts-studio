@@ -145,6 +145,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const feedbackContainerRef = useRef<HTMLDivElement | null>(null);
+  const historyContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Sub-types belonging to the active T1 / T2 group
   const groupSubTypes = useMemo(
@@ -539,6 +540,23 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
     text: string,
     color: HighlightMarkerColor
   ) => {
+    if (viewMode === 'history') {
+      const lower = text.trim().toLowerCase();
+      setSentenceHistory((prev) =>
+        prev.map((rec) => {
+          const inRec =
+            rec.band8Sentence.toLowerCase().includes(lower) ||
+            rec.userSentence.toLowerCase().includes(lower) ||
+            rec.chineseMeaning.toLowerCase().includes(lower);
+          if (!inRec) return rec;
+          return {
+            ...rec,
+            highlights: upsertHighlightInList(rec.highlights, text, color),
+          };
+        })
+      );
+      return;
+    }
     if (!activeEvaluation) return;
     const next = upsertHighlightInList(
       activeEvaluation.highlights,
@@ -549,6 +567,15 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
   };
 
   const handleEraseMicroHighlight = (text: string) => {
+    if (viewMode === 'history') {
+      setSentenceHistory((prev) =>
+        prev.map((rec) => ({
+          ...rec,
+          highlights: removeHighlightFromList(rec.highlights, text),
+        }))
+      );
+      return;
+    }
     if (!activeEvaluation) return;
     const next = removeHighlightFromList(activeEvaluation.highlights, text);
     updateMicroPracticeHighlights(next);
@@ -556,6 +583,11 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
 
   const isMicroTextHighlighted = (text: string): boolean => {
     const clean = text.trim().toLowerCase();
+    if (viewMode === 'history') {
+      return sentenceHistory.some((rec) =>
+        rec.highlights?.some((h) => h.text.trim().toLowerCase() === clean)
+      );
+    }
     return Boolean(
       activeEvaluation?.highlights?.some(
         (h) => h.text.trim().toLowerCase() === clean
@@ -653,7 +685,19 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
             </div>
 
             {/* History List Body (Separated by thin stationery horizontal lines, zero nested card boxes) */}
-            <div className="px-8 py-4 sm:px-10">
+            <div ref={historyContainerRef} className="relative px-8 py-4 sm:px-10">
+              <SelectionHighlightPopover
+                containerRef={historyContainerRef}
+                aiConfig={aiConfig}
+                sourceLabel="小练习 · 历史档案"
+                isTextHighlighted={isMicroTextHighlighted}
+                onApplyHighlight={handleApplyMicroHighlight}
+                onEraseHighlight={handleEraseMicroHighlight}
+                onIngestVocab={onIngestVocab}
+                onExcerptToNotes={onExcerptToNotes}
+                onOpenApiKeyModal={onOpenApiKeyModal}
+              />
+
               {filteredHistory.length === 0 ? (
                 <div className="py-16 text-center">
                   <p className="font-sans text-sm font-medium text-[#262523]">
@@ -676,7 +720,13 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                         key={rec.id}
                         role="button"
                         tabIndex={0}
-                        onClick={() => handleLoadHistoryRecord(rec)}
+                        onClick={() => {
+                          const sel = window.getSelection();
+                          if (sel && sel.toString().trim().length > 0) {
+                            return;
+                          }
+                          handleLoadHistoryRecord(rec);
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
