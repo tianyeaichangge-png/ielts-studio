@@ -8,13 +8,21 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { DeepSeekConfig, NoteCategory, NoteItem } from '../types/ielts';
+import {
+  DeepSeekConfig,
+  NoteCategory,
+  NoteItem,
+  NoteSubType,
+} from '../types/ielts';
 import {
   expandNoteWithDeepSeek,
   formatCompactNoteDate,
+  formatNoteClassificationLabel,
   getCleanNoteExcerpt,
+  getNoteSubTypeSortOrder,
   normalizeNoteCategory,
-  NOTE_CATEGORIES,
+  normalizeNoteSubType,
+  NOTE_CLASSIFICATION_OPTIONS,
   NOTE_FILTER_TABS,
 } from '../lib/defaultNotes';
 
@@ -29,7 +37,7 @@ interface NotesModuleProps {
  * Renders inline text in Reading Mode:
  * - Converts `**text**` into highlighted bold text (hiding the `**` symbols completely)
  * - Converts `` `code` `` into clean inline text (hiding backticks)
- * - Strips any stray unmatched `**` or `##` so raw Markdown symbols are never exposed
+ * - Strips any stray unmatched `**` so raw Markdown symbols are never exposed
  */
 function renderFormattedInline(rawText: string): React.ReactNode {
   if (!rawText) return null;
@@ -154,16 +162,12 @@ function renderNoteReadingBody(content: string): React.ReactNode {
           className="my-4 border-l-2 border-[#EA5B25] bg-[#F5F2EA]/75 py-2.5 pl-4 pr-3"
         >
           {quoteLines.map((qLine, qIdx) => {
-            const isFormulaHeader =
-              /^(?:FORMULA|STRUCTURE|PROMPT|公式)/i.test(qLine) && qIdx === 0;
             const isPureEn = isPredominantlyEnglishSentence(qLine);
             return (
               <p
                 key={qIdx}
                 className={
-                  isFormulaHeader
-                    ? 'font-mono text-xs font-semibold tracking-wider text-[#5C5852]'
-                    : isPureEn
+                  isPureEn
                     ? 'mt-1 font-serif text-[16px] leading-relaxed text-[#2C2A29] first:mt-0'
                     : 'mt-1 font-sans text-[13.5px] leading-relaxed text-[#2C2A29] first:mt-0'
                 }
@@ -207,7 +211,7 @@ function renderNoteReadingBody(content: string): React.ReactNode {
           <span className="h-1 w-1 shrink-0 translate-y-[-2px] rounded-full bg-[#EA5B25]" />
           {labelMatch ? (
             <p className="font-sans text-[14px] leading-[1.75] text-[#2C2A29]">
-              <span className="font-mono text-xs text-[#8C867E]">
+              <span className="font-sans text-xs text-[#8C867E]">
                 {labelMatch[1]}
               </span>
               <span className="font-serif text-[16.5px] leading-[1.8] text-[#2C2A29]">
@@ -282,7 +286,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
   // Reading vs Editing mode ('read' is default as specified)
   const [editorMode, setEditorMode] = useState<'read' | 'edit'>('read');
 
-  // Custom Category Dropdown state in Right Toolbar (Zero native <select>!)
+  // Custom Classification Dropdown state in Right Toolbar (Zero native <select>!)
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
 
   // AI Refinement / Expansion state
@@ -293,7 +297,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
   const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Close custom category popover when clicking outside
+  // Close custom classification popover when clicking outside
   useEffect(() => {
     if (!isCategoryMenuOpen) return;
     const handleOutside = (e: MouseEvent) => {
@@ -308,7 +312,10 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
     return () => window.removeEventListener('mousedown', handleOutside);
   }, [isCategoryMenuOpen]);
 
-  // Sorted & Filtered Notes (Pinned first, then by updatedAt descending)
+  // Sorted & Filtered Notes:
+  // - Pinned first
+  // - When filtering by 'Task 1' or 'Task 2', automatically group/sort by subType order (Line graph -> Bar chart -> ...)
+  // - Then by updatedAt descending
   const filteredNotes = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return [...notes]
@@ -318,15 +325,21 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
           return false;
         }
         if (!q) return true;
+        const label = formatNoteClassificationLabel(n).toLowerCase();
         return (
           n.title.toLowerCase().includes(q) ||
           n.content.toLowerCase().includes(q) ||
-          normCat.toLowerCase().includes(q)
+          label.includes(q)
         );
       })
       .sort((a, b) => {
         if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
           return a.isPinned ? -1 : 1;
+        }
+        if (selectedFilter === 'Task 1' || selectedFilter === 'Task 2') {
+          const rankDiff =
+            getNoteSubTypeSortOrder(a) - getNoteSubTypeSortOrder(b);
+          if (rankDiff !== 0) return rankDiff;
         }
         return (
           new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
@@ -334,7 +347,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
       });
   }, [notes, selectedFilter, searchQuery]);
 
-  // Strictly resolve activeNote from filteredNotes so top category filter & right pane NEVER desync!
+  // Strictly resolve activeNote from filteredNotes so top category filter & right pane remain 100% consistent!
   const activeNote = useMemo(() => {
     const foundInFiltered = filteredNotes.find((n) => n.id === activeNoteId);
     if (foundInFiltered) return foundInFiltered;
@@ -361,11 +374,13 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
     setAiErrorMsg(null);
     const defaultCategory: NoteCategory =
       selectedFilter === 'ALL' ? 'Task 1' : selectedFilter;
+    const defaultSubType: NoteSubType = normalizeNoteSubType(defaultCategory);
     const nowIso = new Date().toISOString();
     const newNote: NoteItem = {
       id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       title: '未命名笔记',
       category: defaultCategory,
+      subType: defaultSubType,
       content: '',
       isPinned: false,
       updatedAt: nowIso,
@@ -382,7 +397,9 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
 
   // Update active note fields in real time (saved immediately to localStorage 'ielts_studio_notes')
   const handleUpdateActiveNote = (
-    patch: Partial<Pick<NoteItem, 'title' | 'category' | 'content' | 'isPinned'>>
+    patch: Partial<
+      Pick<NoteItem, 'title' | 'category' | 'subType' | 'content' | 'isPinned'>
+    >
   ) => {
     if (!activeNote) return;
     const nowIso = new Date().toISOString();
@@ -398,8 +415,8 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
       )
     );
 
-    // Fix category filter sync: if user changes the note's category while a specific top filter is active,
-    // automatically switch the top filter to the new category so top bar & right pane never desync!
+    // Fix category filter sync: if user changes the note's category in the right dropdown while a conflicting top filter is active,
+    // automatically switch the top filter bar to the new category so left and right views stay 100% consistent!
     if (
       patch.category &&
       selectedFilter !== 'ALL' &&
@@ -444,9 +461,10 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
 
     setIsAiExpanding(true);
     try {
+      const classificationLabel = formatNoteClassificationLabel(activeNote);
       const refined = await expandNoteWithDeepSeek({
         title: activeNote.title,
-        category: normalizeNoteCategory(activeNote.category),
+        classificationLabel,
         content: activeNote.content,
         apiKey: aiConfig.apiKey,
         endpoint: aiConfig.endpoint,
@@ -467,6 +485,9 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
   };
 
   const charCount = activeNote ? activeNote.content.trim().length : 0;
+  const activeClassificationLabel = activeNote
+    ? formatNoteClassificationLabel(activeNote)
+    : 'Task 1 · Line graph';
 
   return (
     <div className="mx-auto w-[92vw] max-w-[1280px] pb-14 pt-1">
@@ -478,12 +499,10 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
         </div>
 
         {/* ===================================================================
-            1. 纸面顶部单行「分类与检索栏」
-            Left: 全部 | Task 1 | Task 2 | 句法词伙 | 摘录复盘
-            Right: Minimalist Search Input + [ + 新建笔记 ] Braun Orange Button
+            1. 纸面顶部筛选栏（仅固定 4 个大类：全部 | Task 1 | Task 2 | 摘录复盘）
            =================================================================== */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E3DA] px-6 py-4 font-sans sm:px-8">
-          {/* Left Category Pills */}
+          {/* Left 4 Top-Level Category Pills */}
           <div className="flex flex-wrap items-center gap-1.5">
             {NOTE_FILTER_TABS.map((tab) => {
               const isSelected = selectedFilter === tab.key;
@@ -492,7 +511,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                   key={tab.key}
                   type="button"
                   onClick={() => setSelectedFilter(tab.key)}
-                  className={`rounded-lg px-3 py-1.5 text-xs transition-all ${
+                  className={`rounded-lg px-3.5 py-1.5 text-xs transition-all ${
                     isSelected
                       ? 'skeuo-switch-thumb font-semibold text-[#262523]'
                       : 'text-[#8C867E] hover:text-[#262523]'
@@ -533,7 +552,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
               className="skeuo-btn-orange inline-flex h-8 items-center gap-1.5 rounded-lg px-3.5 font-sans text-xs font-semibold text-white"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span>+ 新建笔记</span>
+              <span>新建笔记</span>
             </button>
           </div>
         </div>
@@ -544,7 +563,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
         {notes.length === 0 ? (
           <div className="flex min-h-[540px] items-center justify-center px-8 py-24 text-center">
             <p className="font-sans text-sm text-[#8C867E]">
-              暂无笔记，点击右上角「+ 新建笔记」或从写作批改中一键摘录
+              暂无笔记，点击右上角「+ 新建笔记」或从写作批改/小练习中一键摘录
             </p>
           </div>
         ) : (
@@ -554,7 +573,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
               {filteredNotes.length === 0 ? (
                 <div className="px-6 py-20 text-center">
                   <p className="font-sans text-xs text-[#8C867E]">
-                    暂无笔记，点击右上角「+ 新建笔记」或从写作批改中一键摘录
+                    暂无笔记，点击右上角「+ 新建笔记」或从写作批改/小练习中一键摘录
                   </p>
                 </div>
               ) : (
@@ -563,9 +582,8 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                     const isSelected = activeNote?.id === item.id;
                     const excerpt = getCleanNoteExcerpt(item.content);
                     const compactDate = formatCompactNoteDate(item.updatedAt);
-                    const displayCategory = normalizeNoteCategory(
-                      item.category
-                    );
+                    const sentenceCaseLabel =
+                      formatNoteClassificationLabel(item);
 
                     return (
                       <div
@@ -591,7 +609,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                             : 'border-l-[3px] border-l-transparent hover:bg-[#F3F0E7]'
                         }`}
                       >
-                        {/* Row 1: Left Monospace Category Nameplate (+ Orange Dot if Pinned) | Right Date / Hover Actions */}
+                        {/* Row 1: Left Sentence-case SubType Label (font-sans text-[12px] text-[#8C867E]) | Right Date / Hover Actions */}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5 min-w-0">
                             {item.isPinned && (
@@ -600,19 +618,14 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                                 title="已置顶笔记"
                               />
                             )}
-                            <span className="truncate font-mono text-[11px] uppercase tracking-wider text-[#8C867E]">
-                              {displayCategory}
+                            <span className="truncate font-sans text-[12px] text-[#8C867E]">
+                              {sentenceCaseLabel}
                             </span>
                           </div>
 
                           <div className="relative flex shrink-0 items-center justify-end">
-                            {/* Compact Date MM.DD (fades out on row hover to make room for Pin/Delete) */}
-                            <span
-                              style={{
-                                fontVariantNumeric: 'lining-nums tabular-nums',
-                              }}
-                              className="whitespace-nowrap font-mono text-[11px] text-[#ACA79C] transition-opacity duration-150 group-hover:opacity-0 select-none"
-                            >
+                            {/* Gentle Date MM/DD (fades out on row hover to make room for Pin/Delete) */}
+                            <span className="whitespace-nowrap font-sans text-[12px] text-[#ACA79C] transition-opacity duration-150 group-hover:opacity-0 select-none">
                               {compactDate}
                             </span>
 
@@ -664,7 +677,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                 <div>
                   {/* Right Column Top Toolbar (Single-line justified) */}
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EBE6DF] px-8 py-3.5">
-                    {/* Left: Custom Ivory Rounded Category Switcher + SAVED TO LOCALSTORAGE Nameplate */}
+                    {/* Left: Custom Ivory Rounded SubType Switcher (Sentence case, e.g. Task 1 · Line graph) */}
                     <div className="flex flex-wrap items-center gap-3">
                       <div ref={categoryDropdownRef} className="relative">
                         <button
@@ -674,24 +687,24 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                           }
                           className="skeuo-btn-light inline-flex items-center gap-1.5 rounded-lg px-3 py-1 font-sans text-xs font-medium text-[#2C2A29]"
                         >
-                          <span>
-                            {normalizeNoteCategory(activeNote.category)}
-                          </span>
+                          <span>{activeClassificationLabel}</span>
                           <ChevronDown className="h-3 w-3 text-[#8C867E]" />
                         </button>
 
                         {isCategoryMenuOpen && (
-                          <div className="skeuo-paper absolute left-0 top-full z-30 mt-1.5 w-36 rounded-xl border border-[#DFDBD0] p-1 shadow-lg">
-                            {NOTE_CATEGORIES.map((cat) => {
+                          <div className="skeuo-paper absolute left-0 top-full z-30 mt-1.5 w-52 rounded-xl border border-[#DFDBD0] p-1.5 shadow-lg">
+                            {NOTE_CLASSIFICATION_OPTIONS.map((opt) => {
                               const isCurrent =
-                                normalizeNoteCategory(activeNote.category) ===
-                                cat;
+                                activeClassificationLabel === opt.displayLabel;
                               return (
                                 <button
-                                  key={cat}
+                                  key={opt.displayLabel}
                                   type="button"
                                   onClick={() => {
-                                    handleUpdateActiveNote({ category: cat });
+                                    handleUpdateActiveNote({
+                                      category: opt.category,
+                                      subType: opt.subType,
+                                    });
                                     setIsCategoryMenuOpen(false);
                                   }}
                                   className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left font-sans text-xs transition-colors ${
@@ -700,9 +713,9 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                                       : 'text-[#2C2A29] hover:bg-[#F4F1E8]'
                                   }`}
                                 >
-                                  <span>{cat}</span>
+                                  <span>{opt.displayLabel}</span>
                                   {isCurrent && (
-                                    <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
+                                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#EA5B25]" />
                                   )}
                                 </button>
                               );
@@ -711,13 +724,8 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                         )}
                       </div>
 
-                      <span
-                        style={{
-                          fontVariantNumeric: 'lining-nums tabular-nums',
-                        }}
-                        className="font-mono text-[11px] tracking-wider text-[#9E988E]"
-                      >
-                        {charCount} CHARS · SAVED TO LOCALSTORAGE
+                      <span className="font-sans text-xs text-[#9E988E]">
+                        已自动保存 · {charCount} 字
                       </span>
                     </div>
 
@@ -818,7 +826,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
               ) : (
                 <div className="flex h-full min-h-[540px] flex-col items-center justify-center px-8 py-24 text-center">
                   <p className="font-sans text-sm text-[#8C867E]">
-                    暂无笔记，点击右上角「+ 新建笔记」或从写作批改中一键摘录
+                    暂无笔记，点击右上角「+ 新建笔记」或从写作批改/小练习中一键摘录
                   </p>
                 </div>
               )}

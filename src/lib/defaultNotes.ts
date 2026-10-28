@@ -1,15 +1,14 @@
-import { NoteCategory } from '../types/ielts';
+import {
+  NoteCategory,
+  NoteItem,
+  NoteSubType,
+  Task1NoteSubType,
+  Task2NoteSubType,
+} from '../types/ielts';
 import {
   DEFAULT_DEEPSEEK_ENDPOINT,
   extractAndParseJson,
 } from './geminiEvaluator';
-
-export const NOTE_CATEGORIES: NoteCategory[] = [
-  'Task 1',
-  'Task 2',
-  '句法词伙',
-  '摘录复盘',
-];
 
 export const NOTE_FILTER_TABS: Array<{
   key: 'ALL' | NoteCategory;
@@ -18,26 +17,154 @@ export const NOTE_FILTER_TABS: Array<{
   { key: 'ALL', label: '全部' },
   { key: 'Task 1', label: 'Task 1' },
   { key: 'Task 2', label: 'Task 2' },
-  { key: '句法词伙', label: '句法词伙' },
   { key: '摘录复盘', label: '摘录复盘' },
+];
+
+export const TASK1_NOTE_SUBTYPES: Task1NoteSubType[] = [
+  'Line graph',
+  'Bar chart',
+  'Pie chart',
+  'Table',
+  'Map',
+  'Process',
+];
+
+export const TASK2_NOTE_SUBTYPES: Task2NoteSubType[] = [
+  'Agree / Disagree',
+  'Discuss both views',
+  'Outweigh',
+  'Report',
+];
+
+export interface NoteClassificationOption {
+  category: NoteCategory;
+  subType: NoteSubType;
+  displayLabel: string;
+}
+
+export const NOTE_CLASSIFICATION_OPTIONS: NoteClassificationOption[] = [
+  ...TASK1_NOTE_SUBTYPES.map((sub) => ({
+    category: 'Task 1' as const,
+    subType: sub,
+    displayLabel: `Task 1 · ${sub}`,
+  })),
+  ...TASK2_NOTE_SUBTYPES.map((sub) => ({
+    category: 'Task 2' as const,
+    subType: sub,
+    displayLabel: `Task 2 · ${sub}`,
+  })),
+  {
+    category: '摘录复盘',
+    subType: '摘录复盘',
+    displayLabel: 'Review · 摘录复盘',
+  },
 ];
 
 export const REVIEW_NOTEBOOK_ID = 'note-review-archive';
 export const REVIEW_NOTEBOOK_TITLE = '批改与小练习复盘手账';
 
+const LEGACY_BUILTIN_NOTE_TITLES = new Set([
+  'Task 1 动态图 vs 静态图：Band 7.5+ 核心句型骨架全解',
+  'Task 1 地图题与流程图：方位变迁与被动工序满分公式',
+  'Task 2 四大题型审题破题与段落推进逻辑（TR & CC 核心）',
+  '告别中式口语：雅思写作「名词化与无灵主语」升格指南',
+]);
+
 /**
- * Normalizes legacy note category labels into the 4 clean categories:
- * 'Task 1' | 'Task 2' | '句法词伙' | '摘录复盘'
+ * Detects whether a note in localStorage is one of the removed built-in default notes.
+ */
+export function isLegacyBuiltInNote(note: {
+  id?: string;
+  title?: string;
+}): boolean {
+  const id = String(note?.id || '');
+  const title = String(note?.title || '').trim();
+  return id.startsWith('builtin-note-') || LEGACY_BUILTIN_NOTE_TITLES.has(title);
+}
+
+/**
+ * Normalizes legacy note category labels into the 3 clean top-level categories:
+ * 'Task 1' | 'Task 2' | '摘录复盘'
  */
 export function normalizeNoteCategory(raw?: string): NoteCategory {
   const val = (raw || '').trim();
   if (val === 'Task 1' || val === 'Task 1 技巧') return 'Task 1';
-  if (val === 'Task 2' || val === 'Task 2 逻辑') return 'Task 2';
-  if (val === '句法词伙' || val === '句法与词伙' || val === '核心讲义') {
-    return '句法词伙';
+  if (
+    val === 'Task 2' ||
+    val === 'Task 2 逻辑' ||
+    val === '句法词伙' ||
+    val === '句法与词伙' ||
+    val === '核心讲义'
+  ) {
+    return 'Task 2';
   }
   if (val === '摘录复盘' || val === '批改复盘') return '摘录复盘';
   return 'Task 1';
+}
+
+/**
+ * Resolves a valid Sentence-case subType for a given category.
+ */
+export function normalizeNoteSubType(
+  category: NoteCategory,
+  rawSubType?: string
+): NoteSubType {
+  if (category === '摘录复盘') {
+    return '摘录复盘';
+  }
+  if (category === 'Task 1') {
+    if (
+      rawSubType &&
+      (TASK1_NOTE_SUBTYPES as string[]).includes(rawSubType)
+    ) {
+      return rawSubType as Task1NoteSubType;
+    }
+    return 'Line graph';
+  }
+  if (
+    rawSubType &&
+    (TASK2_NOTE_SUBTYPES as string[]).includes(rawSubType)
+  ) {
+    return rawSubType as Task2NoteSubType;
+  }
+  return 'Agree / Disagree';
+}
+
+/**
+ * Formats the display label for a note's classification in natural Sentence case:
+ * - 'Task 1 · Line graph'
+ * - 'Task 2 · Discuss both views'
+ * - 'Review · 摘录复盘'
+ */
+export function formatNoteClassificationLabel(
+  note: Pick<NoteItem, 'category' | 'subType'>
+): string {
+  const cat = normalizeNoteCategory(note.category);
+  const sub = normalizeNoteSubType(cat, note.subType);
+  if (cat === '摘录复盘') {
+    return 'Review · 摘录复盘';
+  }
+  return `${cat} · ${sub}`;
+}
+
+/**
+ * Returns the sort rank of a note's subType so notes under 'Task 1' or 'Task 2'
+ * are cleanly grouped by subType in the left directory list.
+ */
+export function getNoteSubTypeSortOrder(
+  note: Pick<NoteItem, 'category' | 'subType'>
+): number {
+  const cat = normalizeNoteCategory(note.category);
+  const sub = normalizeNoteSubType(cat, note.subType);
+  if (cat === 'Task 1') {
+    const idx = TASK1_NOTE_SUBTYPES.indexOf(sub as Task1NoteSubType);
+    return idx !== -1 ? idx : 99;
+  }
+  if (cat === 'Task 2') {
+    const idx = TASK2_NOTE_SUBTYPES.indexOf(sub as Task2NoteSubType);
+    return idx !== -1 ? 10 + idx : 99;
+  }
+  return 50;
 }
 
 /**
@@ -46,7 +173,7 @@ export function normalizeNoteCategory(raw?: string): NoteCategory {
 export function getCleanNoteExcerpt(content: string): string {
   const plain = content
     .replace(/^#+\s*/gm, '')
-    .replace(/^>\s*/gm, '')
+    .replace(/^>+\s*/gm, '')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*/g, '')
     .replace(/`([^`]+)`/g, '$1')
@@ -56,17 +183,17 @@ export function getCleanNoteExcerpt(content: string): string {
 }
 
 /**
- * Formats an ISO date string into compact Braun monospace MM.DD format (e.g. "10.28").
+ * Formats an ISO date string into gentle MM/DD format (e.g. "10/28").
  */
 export function formatCompactNoteDate(isoString: string): string {
   try {
     const d = new Date(isoString);
-    if (Number.isNaN(d.getTime())) return '10.28';
+    if (Number.isNaN(d.getTime())) return '10/28';
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
-    return `${mm}.${dd}`;
+    return `${mm}/${dd}`;
   } catch {
-    return '10.28';
+    return '10/28';
   }
 }
 
@@ -76,7 +203,7 @@ export function formatCompactNoteDate(isoString: string): string {
  */
 export async function expandNoteWithDeepSeek(params: {
   title: string;
-  category: NoteCategory;
+  classificationLabel: string;
   content: string;
   apiKey: string;
   endpoint?: string;
@@ -88,12 +215,12 @@ export async function expandNoteWithDeepSeek(params: {
   const cleanEndpoint =
     (params.endpoint || '').trim() || DEFAULT_DEEPSEEK_ENDPOINT;
 
-  const systemPrompt = `你是一位资深雅思考官兼学术写作讲义主编。请基于用户当前笔记的【标题】、【所属分类】与【已有零散笔记或指令】，将其提炼扩写为一份条理清晰、干净整洁的雅思写作高分笔记。
+  const systemPrompt = `你是一位资深雅思考官兼学术写作讲义主编。请基于用户当前笔记的【标题】、【所属题型分类】与【已有零散笔记或指令】，将其提炼扩写为一份条理清晰、干净整洁的雅思写作高分笔记。
 
 【排版与内容规范（严禁彩色 Emoji 与杂乱符号）】：
 1. **严禁使用任何彩色 Emoji 图标**，拒绝堆砌繁杂的特殊符号，保持纸面干净整洁。
 2. 正文请使用简洁清晰的分段排版：
-   - 大模块小标题以 \`## 一、 ...\` 开头（不嵌套多余符号）；
+   - 大模块小标题以 \`## 一、 ...\` 开头；
    - 核心句型公式行以 \`> \` 开头（单行或多行简洁公式）；
    - 提供 2~3 组地道 Band 8.0 英文示范句或低分升格对照，仅将英文句中最核心的 1~2 个高分词伙用 \`**词伙**\` 标记；
    - 易错避坑要点用简洁的 \`- \` 列表呈现。
@@ -118,11 +245,11 @@ export async function expandNoteWithDeepSeek(params: {
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
-          content: `所属分类：${params.category}\n当前标题：${
+          content: `所属分类：${params.classificationLabel}\n当前标题：${
             params.title.trim() || '未命名笔记'
           }\n当前笔记内容或扩写指令：\n${
             params.content.trim() ||
-            `请围绕「${params.title.trim() || params.category}」生成一份包含核心句型公式、易错避坑与 Band 8.0 地道例句对照的精炼笔记。`
+            `请围绕「${params.title.trim() || params.classificationLabel}」生成一份包含核心句型公式、易错避坑与 Band 8.0 地道例句对照的精炼笔记。`
           }`,
         },
       ],

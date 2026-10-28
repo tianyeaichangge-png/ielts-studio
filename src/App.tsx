@@ -10,7 +10,9 @@ import {
 } from './types/ielts';
 import { DEFAULT_IELTS_VOCABULARY } from './lib/defaultVocabulary';
 import {
+  isLegacyBuiltInNote,
   normalizeNoteCategory,
+  normalizeNoteSubType,
   REVIEW_NOTEBOOK_ID,
   REVIEW_NOTEBOOK_TITLE,
 } from './lib/defaultNotes';
@@ -600,25 +602,30 @@ export function App() {
     []
   );
 
-  // Automatically purge any legacy built-in notes ('builtin-note-*') & migrate legacy category names
+  // Automatically purge any legacy built-in notes ('builtin-note-*' or old built-in titles) & normalize category + subType
   useEffect(() => {
     if (!Array.isArray(notes)) {
       setNotes([]);
       return;
     }
-    const hasLegacyBuiltInOrOldCat = notes.some(
-      (n) =>
-        n.id.startsWith('builtin-note-') ||
-        normalizeNoteCategory(n.category) !== n.category
-    );
-    if (hasLegacyBuiltInOrOldCat) {
+    const needsMigration = notes.some((n) => {
+      if (isLegacyBuiltInNote(n)) return true;
+      const normCat = normalizeNoteCategory(n.category);
+      const normSub = normalizeNoteSubType(normCat, n.subType);
+      return normCat !== n.category || normSub !== n.subType;
+    });
+    if (needsMigration) {
       setNotes((prev) =>
         (Array.isArray(prev) ? prev : [])
-          .filter((n) => !n.id.startsWith('builtin-note-'))
-          .map((n) => ({
-            ...n,
-            category: normalizeNoteCategory(n.category),
-          }))
+          .filter((n) => !isLegacyBuiltInNote(n))
+          .map((n) => {
+            const normCat = normalizeNoteCategory(n.category);
+            return {
+              ...n,
+              category: normCat,
+              subType: normalizeNoteSubType(normCat, n.subType),
+            };
+          })
       );
     }
   }, [notes, setNotes]);
@@ -659,6 +666,7 @@ export function App() {
           list[reviewIdx] = {
             ...existing,
             category: '摘录复盘',
+            subType: '摘录复盘',
             content: nextContent,
             updatedAt: nowIso,
             sourceKeys: [...existingKeys, payload.sourceKey],
@@ -670,6 +678,7 @@ export function App() {
           id: REVIEW_NOTEBOOK_ID,
           title: REVIEW_NOTEBOOK_TITLE,
           category: '摘录复盘',
+          subType: '摘录复盘',
           content: payload.markdownBlock,
           isPinned: true,
           updatedAt: nowIso,

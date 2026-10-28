@@ -2,12 +2,29 @@ export type MasteryStatus = 'unlearned' | 'learning' | 'vague' | 'mastered';
 
 export type ActiveTab = 'vocabulary' | 'writing' | 'notes';
 
-export type NoteCategory = 'Task 1' | 'Task 2' | '句法词伙' | '摘录复盘';
+export type NoteCategory = 'Task 1' | 'Task 2' | '摘录复盘';
+
+export type Task1NoteSubType =
+  | 'Line graph'
+  | 'Bar chart'
+  | 'Pie chart'
+  | 'Table'
+  | 'Map'
+  | 'Process';
+
+export type Task2NoteSubType =
+  | 'Agree / Disagree'
+  | 'Discuss both views'
+  | 'Outweigh'
+  | 'Report';
+
+export type NoteSubType = Task1NoteSubType | Task2NoteSubType | '摘录复盘';
 
 export interface NoteItem {
   id: string;
   title: string;
   category: NoteCategory;
+  subType?: NoteSubType;
   content: string;
   isPinned?: boolean;
   updatedAt: string;
