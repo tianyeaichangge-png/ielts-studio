@@ -34,7 +34,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Center: Core Module Switcher [ 背单词 | 写作 ] */}
+        {/* Center: Core 3-Segment Symmetrical Module Switcher [ 背单词 | 写作 | 笔记 ] */}
         <div className="flex justify-center">
           <nav
             aria-label="主导航"
@@ -62,6 +62,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               写作
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectTab('notes')}
+              className={`relative rounded-lg px-6 py-1.5 text-xs font-medium tracking-wide transition-all duration-150 ${
+                activeTab === 'notes'
+                  ? 'skeuo-switch-thumb text-[#262523] font-semibold'
+                  : 'text-[#7A7873] hover:text-[#262523]'
+              }`}
+            >
+              笔记
             </button>
           </nav>
         </div>

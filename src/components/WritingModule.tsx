@@ -54,6 +54,11 @@ interface WritingModuleProps {
   onIngestVocab: (
     newCard: Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'>
   ) => void;
+  onExcerptToNotes?: (payload: {
+    sourceKey: string;
+    markdownBlock: string;
+  }) => void;
+  excerptedKeys?: Set<string>;
   onOpenApiKeyModal?: () => void;
 }
 
@@ -151,6 +156,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   onDeleteReport,
   vocabCards,
   onIngestVocab,
+  onExcerptToNotes,
+  excerptedKeys,
   onOpenApiKeyModal,
 }) => {
   // 1. Strictly Isolated Dual-Track LocalStorage States (Task 1 vs Task 2) + Micro-Practice Submodule
@@ -1554,6 +1561,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
           aiConfig={aiConfig}
           vocabCards={vocabCards}
           onIngestVocab={onIngestVocab}
+          onExcerptToNotes={onExcerptToNotes}
+          excerptedKeys={excerptedKeys}
           onOpenApiKeyModal={onOpenApiKeyModal}
         />
       ) : !isHistoryMode &&
@@ -3017,9 +3026,88 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     模块三：三、 突破分数天花板的核心策略 (Top 3 Actionable Strategies)
                    ============================================================ */}
                 <section className="py-6">
-                  <h3 className="font-sans text-[13px] font-bold tracking-[0.06em] text-[#262523]">
-                    三、 突破分数天花板的核心策略
-                  </h3>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="font-sans text-[13px] font-bold tracking-[0.06em] text-[#262523]">
+                      三、 突破分数天花板的核心策略
+                    </h3>
+
+                    {onExcerptToNotes &&
+                      (() => {
+                        const reportKey = `report:${activeRightReport.id}`;
+                        const isExcerpted =
+                          excerptedKeys?.has(reportKey) ?? false;
+
+                        const handleExcerptReport = () => {
+                          if (isExcerpted) return;
+                          const taskLabel =
+                            activeRightReport.taskType === 'task1'
+                              ? 'Task 1 图表作文'
+                              : 'Task 2 大作文';
+                          const strategies =
+                            activeRightReport.breakthroughStrategies &&
+                            activeRightReport.breakthroughStrategies.length > 0
+                              ? activeRightReport.breakthroughStrategies
+                              : [
+                                  ...(activeRightReport.trTa.improvements ||
+                                    []),
+                                  ...(activeRightReport.cc.improvements || []),
+                                  ...(activeRightReport.lr.improvements || []),
+                                  ...(activeRightReport.gra.improvements || []),
+                                ]
+                                  .slice(0, 3)
+                                  .map((advice, idx) => ({
+                                    title: `核心提分维度策略 0${idx + 1}`,
+                                    actionableAdvice: advice,
+                                  }));
+
+                          const strategyLines = strategies.map(
+                            (st, idx) =>
+                              `${idx + 1}. **${st.title}**：${st.actionableAdvice}`
+                          );
+
+                          const reconstructedLines = (
+                            activeRightReport.paragraphReviews || []
+                          )
+                            .filter((p) => Boolean(p.reconstructedParagraph))
+                            .map(
+                              (p) =>
+                                `- ${p.paragraphIndex} 考官重构：\n${p.reconstructedParagraph}`
+                            );
+
+                          const mdLines = [
+                            `## 【${taskLabel}批改复盘】BAND ${activeRightReport.overallBand.toFixed(1)} · ${activeRightReport.topicTag || '核心提分复盘'}`,
+                            `> PROMPT: ${activeRightReport.prompt}`,
+                            ...strategyLines,
+                            ...(reconstructedLines.length > 0
+                              ? [
+                                  '### 考官高分重构段落（Band 7.5+）',
+                                  ...reconstructedLines,
+                                ]
+                              : []),
+                          ];
+
+                          onExcerptToNotes({
+                            sourceKey: reportKey,
+                            markdownBlock: mdLines.join('\n'),
+                          });
+                        };
+
+                        return (
+                          <button
+                            type="button"
+                            disabled={isExcerpted}
+                            onClick={handleExcerptReport}
+                            className={`shrink-0 font-mono text-xs transition-colors ${
+                              isExcerpted
+                                ? 'cursor-default text-[#ACA79C]'
+                                : 'text-[#8C867E] hover:text-[#EA5B25]'
+                            }`}
+                          >
+                            {isExcerpted ? '✓ 已摘录' : '[ + 摘录至笔记 ]'}
+                          </button>
+                        );
+                      })()}
+                  </div>
 
                   <div className="mt-3.5 space-y-3">
                     {(activeRightReport.breakthroughStrategies &&

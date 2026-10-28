@@ -1,13 +1,19 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   ActiveTab,
   DeepSeekConfig,
   MasteryStatus,
+  NoteItem,
   VocabularyCard,
   WritingEvaluationReport,
   WritingTaskType,
 } from './types/ielts';
 import { DEFAULT_IELTS_VOCABULARY } from './lib/defaultVocabulary';
+import {
+  BUILTIN_EXAMINER_NOTES,
+  REVIEW_NOTEBOOK_ID,
+  REVIEW_NOTEBOOK_TITLE,
+} from './lib/defaultNotes';
 import {
   DEFAULT_DEEPSEEK_ENDPOINT,
   deriveConciseMeaning,
@@ -17,6 +23,7 @@ import { Navbar } from './components/Navbar';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { VocabularyModule } from './components/VocabularyModule';
 import { WritingModule } from './components/WritingModule';
+import { NotesModule } from './components/NotesModule';
 
 export function App() {
   const [activeTab, setActiveTab] = useLocalStorage<ActiveTab>(
@@ -581,7 +588,82 @@ export function App() {
   );
 
   const currentTab: ActiveTab =
-    activeTab === 'writing' ? 'writing' : 'vocabulary';
+    activeTab === 'writing'
+      ? 'writing'
+      : activeTab === 'notes'
+      ? 'notes'
+      : 'vocabulary';
+
+  // Knowledge Studio / Notes ('ielts_studio_notes') initialized with 4 built-in Examiner Handbooks
+  const [notes, setNotes] = useLocalStorage<NoteItem[]>(
+    'ielts_studio_notes',
+    BUILTIN_EXAMINER_NOTES
+  );
+
+  // Ensure built-in examiner notes are seeded if 'ielts_studio_notes' is empty on initialization
+  useEffect(() => {
+    if (!Array.isArray(notes) || notes.length === 0) {
+      setNotes(BUILTIN_EXAMINER_NOTES);
+    }
+  }, [notes, setNotes]);
+
+  const excerptedNoteKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const note of notes) {
+      if (Array.isArray(note.sourceKeys)) {
+        for (const k of note.sourceKeys) {
+          keys.add(k);
+        }
+      }
+    }
+    return keys;
+  }, [notes]);
+
+  const handleExcerptToNotes = useCallback(
+    (payload: { sourceKey: string; markdownBlock: string }) => {
+      const nowIso = new Date().toISOString();
+      setNotes((prev) => {
+        const list = Array.isArray(prev) ? [...prev] : [];
+        const reviewIdx = list.findIndex(
+          (n) =>
+            n.id === REVIEW_NOTEBOOK_ID || n.title === REVIEW_NOTEBOOK_TITLE
+        );
+
+        if (reviewIdx !== -1) {
+          const existing = list[reviewIdx];
+          const existingKeys = Array.isArray(existing.sourceKeys)
+            ? existing.sourceKeys
+            : [];
+          if (existingKeys.includes(payload.sourceKey)) {
+            return list;
+          }
+          const nextContent = existing.content.trim()
+            ? `${existing.content.trim()}\n\n---\n\n${payload.markdownBlock}`
+            : payload.markdownBlock;
+          list[reviewIdx] = {
+            ...existing,
+            category: '批改复盘',
+            content: nextContent,
+            updatedAt: nowIso,
+            sourceKeys: [...existingKeys, payload.sourceKey],
+          };
+          return list;
+        }
+
+        const newReviewNote: NoteItem = {
+          id: REVIEW_NOTEBOOK_ID,
+          title: REVIEW_NOTEBOOK_TITLE,
+          category: '批改复盘',
+          content: payload.markdownBlock,
+          isPinned: true,
+          updatedAt: nowIso,
+          sourceKeys: [payload.sourceKey],
+        };
+        return [newReviewNote, ...list];
+      });
+    },
+    [setNotes]
+  );
 
   return (
     <div className="desk-surface min-h-screen text-[#262523]">
@@ -602,7 +684,7 @@ export function App() {
             onDeleteCard={handleDeleteVocabCard}
             onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
           />
-        ) : (
+        ) : currentTab === 'writing' ? (
           <WritingModule
             aiConfig={aiConfig}
             task1Reports={task1Reports}
@@ -611,6 +693,15 @@ export function App() {
             onDeleteReport={handleDeleteWritingReport}
             vocabCards={vocabCards}
             onIngestVocab={handleIngestVocabFromWriting}
+            onExcerptToNotes={handleExcerptToNotes}
+            excerptedKeys={excerptedNoteKeys}
+            onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
+          />
+        ) : (
+          <NotesModule
+            notes={notes}
+            onUpdateNotes={setNotes}
+            aiConfig={aiConfig}
             onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
           />
         )}

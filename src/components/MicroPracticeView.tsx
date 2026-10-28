@@ -22,6 +22,11 @@ interface MicroPracticeViewProps {
   onIngestVocab: (
     newCard: Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'>
   ) => void;
+  onExcerptToNotes?: (payload: {
+    sourceKey: string;
+    markdownBlock: string;
+  }) => void;
+  excerptedKeys?: Set<string>;
   onOpenApiKeyModal?: () => void;
 }
 
@@ -72,6 +77,8 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
   aiConfig,
   vocabCards,
   onIngestVocab,
+  onExcerptToNotes,
+  excerptedKeys,
   onOpenApiKeyModal,
 }) => {
   // View mode: 'practice' (main typewriter workbench) | 'history' (sentence history archive)
@@ -927,7 +934,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                       </p>
                     </div>
 
-                    {/* 3. BAND 8.0 · 高分重写 + STRUCTURE 公式 */}
+                    {/* 3. BAND 8.0 · 高分重写 + STRUCTURE 公式 + [ + 摘录至笔记 ] */}
                     <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
                       <span
                         style={{
@@ -944,11 +951,72 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                             activeEvaluation.band8Sentence
                           )}
                         </p>
-                        {activeEvaluation.structureFormula && (
-                          <p className="mt-1.5 font-mono text-xs leading-relaxed text-[#8C867E]">
-                            STRUCTURE: {activeEvaluation.structureFormula}
-                          </p>
-                        )}
+
+                        <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-3">
+                          {activeEvaluation.structureFormula ? (
+                            <p className="font-mono text-xs leading-relaxed text-[#8C867E]">
+                              STRUCTURE: {activeEvaluation.structureFormula}
+                            </p>
+                          ) : (
+                            <span />
+                          )}
+
+                          {onExcerptToNotes &&
+                            (() => {
+                              const excerptSourceKey = `mp:${activeQuestionKey}:${activeEvaluation.band8Sentence.slice(0, 40)}`;
+                              const isExcerpted =
+                                excerptedKeys?.has(excerptSourceKey) ?? false;
+
+                              const handleExcerptClick = () => {
+                                if (isExcerpted) return;
+                                const headerTag = isFreeRewrite
+                                  ? `${taskGroup} · ${currentSubTypeMeta.label} · 自由改写`
+                                  : `${taskGroup} · ${currentSubTypeMeta.label}${
+                                      currentQuestion?.targetWord
+                                        ? ` · TARGET: ${currentQuestion.targetWord}`
+                                        : ''
+                                    }`;
+                                const lines = [
+                                  `## 【小练习复盘】${headerTag}（BAND ${activeEvaluation.band.toFixed(1)} ➔ 8.0）`,
+                                  ...( !isFreeRewrite &&
+                                  currentQuestion?.chineseMeaning
+                                    ? [
+                                        `- 中文原意：${currentQuestion.chineseMeaning}`,
+                                      ]
+                                    : []),
+                                  `- 您的原句：${userSentence.trim()}`,
+                                  `- 考官诊断：${activeEvaluation.diagnosis}`,
+                                  `- Band 8.0 重写：${activeEvaluation.band8Sentence}`,
+                                  ...(activeEvaluation.structureFormula
+                                    ? [
+                                        `> STRUCTURE: ${activeEvaluation.structureFormula}`,
+                                      ]
+                                    : []),
+                                ];
+                                onExcerptToNotes({
+                                  sourceKey: excerptSourceKey,
+                                  markdownBlock: lines.join('\n'),
+                                });
+                              };
+
+                              return (
+                                <button
+                                  type="button"
+                                  disabled={isExcerpted}
+                                  onClick={handleExcerptClick}
+                                  className={`shrink-0 font-mono text-xs transition-colors ${
+                                    isExcerpted
+                                      ? 'cursor-default text-[#ACA79C]'
+                                      : 'text-[#8C867E] hover:text-[#EA5B25]'
+                                  }`}
+                                >
+                                  {isExcerpted
+                                    ? '✓ 已摘录'
+                                    : '[ + 摘录至笔记 ]'}
+                                </button>
+                              );
+                            })()}
+                        </div>
                       </div>
                     </div>
 

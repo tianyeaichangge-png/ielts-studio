@@ -1,6 +1,23 @@
 export type MasteryStatus = 'unlearned' | 'learning' | 'vague' | 'mastered';
 
-export type ActiveTab = 'vocabulary' | 'writing';
+export type ActiveTab = 'vocabulary' | 'writing' | 'notes';
+
+export type NoteCategory =
+  | 'Task 1 技巧'
+  | 'Task 2 逻辑'
+  | '句法与词伙'
+  | '批改复盘'
+  | '核心讲义';
+
+export interface NoteItem {
+  id: string;
+  title: string;
+  category: NoteCategory;
+  content: string;
+  isPinned?: boolean;
+  updatedAt: string;
+  sourceKeys?: string[];
+}
 
 export interface VocabularyCard {
   id: string;
