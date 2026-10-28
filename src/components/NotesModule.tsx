@@ -10,9 +10,11 @@ import {
 } from 'lucide-react';
 import {
   DeepSeekConfig,
+  HighlightMarkerColor,
   NoteCategory,
   NoteItem,
   NoteSubType,
+  VocabularyCard,
 } from '../types/ielts';
 import {
   expandNoteWithDeepSeek,
@@ -25,24 +27,40 @@ import {
   NOTE_CLASSIFICATION_OPTIONS,
   NOTE_FILTER_TABS,
 } from '../lib/defaultNotes';
+import {
+  applyNoteHighlightToContent,
+  escapeRegExp,
+  formatNoteHighlightToken,
+  MARKER_CLASS_MAP,
+  removeNoteHighlightFromContent,
+} from '../lib/textHighlightUtils';
+import { SelectionHighlightPopover } from './SelectionHighlightPopover';
 
 interface NotesModuleProps {
   notes: NoteItem[];
   onUpdateNotes: React.Dispatch<React.SetStateAction<NoteItem[]>>;
   aiConfig: DeepSeekConfig;
+  onIngestVocab: (
+    newCard: Omit<VocabularyCard, 'id' | 'reviewCount' | 'status'>
+  ) => void;
+  onExcerptToNotes?: (payload: {
+    sourceKey: string;
+    markdownBlock: string;
+  }) => void;
   onOpenApiKeyModal?: () => void;
 }
 
 /**
  * Renders inline text in Reading Mode:
+ * - Converts `==text==` (yellow), `==o:text==` (orange), `==g:text==` (green) into warm paper marker `<mark>` spans
  * - Converts `**text**` into highlighted bold text (hiding the `**` symbols completely)
  * - Converts `` `code` `` into clean inline text (hiding backticks)
- * - Strips any stray unmatched `**` so raw Markdown symbols are never exposed
+ * - Strips any stray unmatched `**` or `==` so raw Markdown symbols are never exposed
  */
 function renderFormattedInline(rawText: string): React.ReactNode {
   if (!rawText) return null;
   const cleanedBackticks = rawText.replace(/`([^`]+)`/g, '$1');
-  const tokenRegex = /\*\*([^*]+?)\*\*/g;
+  const tokenRegex = /==(o:|g:)?([\s\S]+?)==|\*\*([^*]+?)\*\*/g;
   const nodes: React.ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -54,22 +72,44 @@ function renderFormattedInline(rawText: string): React.ReactNode {
         .replace(/\*\*/g, '');
       nodes.push(plainSeg);
     }
-    const highlighted = match[1].trim();
-    if (highlighted) {
-      const hasLatin = /[A-Za-z]/.test(highlighted);
-      nodes.push(
-        <span
-          key={`hl-${match.index}`}
-          className={
-            hasLatin
-              ? 'font-semibold text-[#EA5B25]'
-              : 'font-semibold text-[#2C2A29]'
-          }
-        >
-          {highlighted}
-        </span>
-      );
+
+    if (match[2] !== undefined) {
+      const prefix = (match[1] || '').toLowerCase();
+      const color: HighlightMarkerColor =
+        prefix === 'o:' ? 'orange' : prefix === 'g:' ? 'green' : 'yellow';
+      const innerText = match[2].replace(/\*\*/g, '').trim();
+      if (innerText) {
+        nodes.push(
+          <mark
+            key={`mk-${match.index}`}
+            data-highlight-text={innerText}
+            data-highlight-color={color}
+            title="点击可切换颜色或擦除高亮"
+            className={MARKER_CLASS_MAP[color]}
+          >
+            {innerText}
+          </mark>
+        );
+      }
+    } else if (match[3] !== undefined) {
+      const highlighted = match[3].trim();
+      if (highlighted) {
+        const hasLatin = /[A-Za-z]/.test(highlighted);
+        nodes.push(
+          <span
+            key={`hl-${match.index}`}
+            className={
+              hasLatin
+                ? 'font-semibold text-[#EA5B25]'
+                : 'font-semibold text-[#2C2A29]'
+            }
+          >
+            {highlighted}
+          </span>
+        );
+      }
     }
+
     lastIndex = match.index + match[0].length;
   }
 
@@ -273,6 +313,8 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
   notes,
   onUpdateNotes,
   aiConfig,
+  onIngestVocab,
+  onExcerptToNotes,
   onOpenApiKeyModal,
 }) => {
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | NoteCategory>(
@@ -296,6 +338,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
   const categoryDropdownRef = useRef<HTMLDivElement | null>(null);
   const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const noteBodyContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Close custom classification popover when clicking outside
   useEffect(() => {
@@ -488,6 +531,76 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
   const activeClassificationLabel = activeNote
     ? formatNoteClassificationLabel(activeNote)
     : 'Task 1 · Line graph';
+
+  // Selection Highlight Handlers for Notes (Both Reading Mode & Editing Mode)
+  const isNoteTextAlreadyHighlighted = (text: string): boolean => {
+    if (!activeNote) return false;
+    const clean = text.trim();
+    if (!clean) return false;
+    const escaped = escapeRegExp(clean);
+    const regex = new RegExp(`==(?:[og]:)?${escaped}==`);
+    return regex.test(activeNote.content);
+  };
+
+  const handleApplyNoteHighlight = (
+    text: string,
+    color: HighlightMarkerColor,
+    textareaSelection?: {
+      textarea: HTMLTextAreaElement;
+      start: number;
+      end: number;
+    }
+  ) => {
+    if (!activeNote) return;
+    if (textareaSelection && editorMode === 'edit') {
+      const { start, end } = textareaSelection;
+      const before = activeNote.content.slice(0, start);
+      const selectedRaw = activeNote.content.slice(start, end);
+      const after = activeNote.content.slice(end);
+      const token = formatNoteHighlightToken(selectedRaw || text, color);
+      handleUpdateActiveNote({
+        content: `${before}${token}${after}`,
+      });
+      return;
+    }
+
+    const updatedContent = applyNoteHighlightToContent(
+      activeNote.content,
+      text,
+      color
+    );
+    handleUpdateActiveNote({ content: updatedContent });
+  };
+
+  const handleEraseNoteHighlight = (
+    text: string,
+    textareaSelection?: {
+      textarea: HTMLTextAreaElement;
+      start: number;
+      end: number;
+    }
+  ) => {
+    if (!activeNote) return;
+    if (textareaSelection && editorMode === 'edit') {
+      const { start, end } = textareaSelection;
+      const before = activeNote.content.slice(0, start);
+      const selectedRaw = activeNote.content.slice(start, end);
+      const after = activeNote.content.slice(end);
+      const unwrapped = selectedRaw
+        .replace(/^==(?:[og]:)?/i, '')
+        .replace(/==$/, '');
+      handleUpdateActiveNote({
+        content: `${before}${unwrapped}${after}`,
+      });
+      return;
+    }
+
+    const updatedContent = removeNoteHighlightFromContent(
+      activeNote.content,
+      text
+    );
+    handleUpdateActiveNote({ content: updatedContent });
+  };
 
   return (
     <div className="mx-auto w-[92vw] max-w-[1280px] pb-14 pt-1">
@@ -786,7 +899,22 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                   )}
 
                   {/* Main Sheet Content Area: Large Borderless Title Input + Reading/Editing Body */}
-                  <div className="px-8 py-7 sm:px-12">
+                  <div
+                    ref={noteBodyContainerRef}
+                    className="relative px-8 py-7 sm:px-12"
+                  >
+                    <SelectionHighlightPopover
+                      containerRef={noteBodyContainerRef}
+                      aiConfig={aiConfig}
+                      sourceLabel={activeNote.title || activeClassificationLabel}
+                      isTextHighlighted={isNoteTextAlreadyHighlighted}
+                      onApplyHighlight={handleApplyNoteHighlight}
+                      onEraseHighlight={handleEraseNoteHighlight}
+                      onIngestVocab={onIngestVocab}
+                      onExcerptToNotes={onExcerptToNotes}
+                      onOpenApiKeyModal={onOpenApiKeyModal}
+                    />
+
                     {/* Large Borderless Title Input */}
                     <input
                       ref={titleInputRef}

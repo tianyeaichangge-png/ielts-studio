@@ -1,4 +1,4 @@
-import { VocabularyCard } from '../types/ielts';
+import { TextHighlightItem, VocabularyCard } from '../types/ielts';
 import {
   DEFAULT_DEEPSEEK_ENDPOINT,
   deriveConciseMeaning,
@@ -64,6 +64,7 @@ export interface MicroPracticeEvaluation {
   band8Sentence: string;
   structureFormula: string;
   lexicon: MicroPracticeLexiconItem[];
+  highlights?: TextHighlightItem[];
 }
 
 export interface MicroPracticeHistoryRecord {
@@ -82,6 +83,7 @@ export interface MicroPracticeHistoryRecord {
   band8Sentence: string;
   structureFormula: string;
   lexicon: MicroPracticeLexiconItem[];
+  highlights?: TextHighlightItem[];
 }
 
 /**

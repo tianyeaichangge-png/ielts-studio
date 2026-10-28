@@ -174,6 +174,7 @@ export function getCleanNoteExcerpt(content: string): string {
   const plain = content
     .replace(/^#+\s*/gm, '')
     .replace(/^>+\s*/gm, '')
+    .replace(/==(?:[og]:)?([\s\S]+?)==/g, '$1')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*/g, '')
     .replace(/`([^`]+)`/g, '$1')

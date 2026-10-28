@@ -19,6 +19,7 @@ import {
 import {
   DeepSeekConfig,
   GrammarCorrectionItem,
+  HighlightMarkerColor,
   LexicalUpgradeItem,
   ParagraphKeyCorrection,
   Task1ChartType,
@@ -41,14 +42,21 @@ import {
   MasterWritingPrompt,
   TASK1_CHART_TYPE_ENGLISH,
 } from '../lib/samplePrompts';
+import {
+  removeHighlightFromList,
+  renderTextWithHighlights,
+  upsertHighlightInList,
+} from '../lib/textHighlightUtils';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { MicroPracticeView } from './MicroPracticeView';
+import { SelectionHighlightPopover } from './SelectionHighlightPopover';
 
 interface WritingModuleProps {
   aiConfig: DeepSeekConfig;
   task1Reports: WritingEvaluationReport[];
   task2Reports: WritingEvaluationReport[];
   onSaveReport: (report: WritingEvaluationReport) => void;
+  onUpdateReport?: (report: WritingEvaluationReport) => void;
   onDeleteReport: (reportId: string, taskType: WritingTaskType) => void;
   vocabCards: VocabularyCard[];
   onIngestVocab: (
@@ -153,6 +161,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   task1Reports,
   task2Reports,
   onSaveReport,
+  onUpdateReport,
   onDeleteReport,
   vocabCards,
   onIngestVocab,
@@ -243,6 +252,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const customPromptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const reportSheetBodyRef = useRef<HTMLDivElement | null>(null);
 
   // Automatically backfill & sync Task 1 historical reports + built-in SVG chart topics into task1TopicBank
   useEffect(() => {
@@ -474,6 +484,37 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const draftReport = activeTaskType === 'task1' ? task1Report : task2Report;
   const activeRightReport = isHistoryMode ? activeHistoryReport : draftReport;
+
+  const handleApplyReportHighlight = useCallback(
+    (selectedText: string, color: HighlightMarkerColor) => {
+      if (!activeRightReport || !onUpdateReport) return;
+      const nextHighlights = upsertHighlightInList(
+        activeRightReport.userHighlights || [],
+        selectedText,
+        color
+      );
+      onUpdateReport({
+        ...activeRightReport,
+        userHighlights: nextHighlights,
+      });
+    },
+    [activeRightReport, onUpdateReport]
+  );
+
+  const handleEraseReportHighlight = useCallback(
+    (selectedText: string) => {
+      if (!activeRightReport || !onUpdateReport) return;
+      const nextHighlights = removeHighlightFromList(
+        activeRightReport.userHighlights || [],
+        selectedText
+      );
+      onUpdateReport({
+        ...activeRightReport,
+        userHighlights: nextHighlights,
+      });
+    },
+    [activeRightReport, onUpdateReport]
+  );
 
   // Displayed values on the Left Sheet (Strictly isolated by activeTaskType)
   const displayedTaskType: WritingTaskType = isHistoryMode
@@ -2585,7 +2626,32 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               </div>
 
               {/* Four-Module Examiner Report Body on Cream Paper */}
-              <div className="max-h-[680px] flex-1 divide-y divide-[#E6E1D8] overflow-y-auto px-8 py-6 text-xs leading-relaxed text-[#262523]">
+              <div
+                ref={reportSheetBodyRef}
+                className="relative max-h-[680px] flex-1 divide-y divide-[#E6E1D8] overflow-y-auto px-8 py-6 text-xs leading-relaxed text-[#262523]"
+              >
+                <SelectionHighlightPopover
+                  containerRef={reportSheetBodyRef}
+                  isTextHighlighted={(text) =>
+                    (activeRightReport.userHighlights || []).some(
+                      (h) =>
+                        h.text.trim().toLowerCase() ===
+                        text.trim().toLowerCase()
+                    )
+                  }
+                  onApplyHighlight={handleApplyReportHighlight}
+                  onEraseHighlight={handleEraseReportHighlight}
+                  aiConfig={aiConfig}
+                  onIngestVocab={onIngestVocab}
+                  onExcerptToNotes={onExcerptToNotes}
+                  onOpenApiKeyModal={onOpenApiKeyModal}
+                  sourceLabel={
+                    activeRightReport.taskType === 'task1'
+                      ? 'Task 1 批改报告摘录'
+                      : 'Task 2 批改报告摘录'
+                  }
+                />
+
                 {/* ============================================================
                     模块一：一、 雅思官方四维评分诊断 (Band Descriptors)
                    ============================================================ */}
@@ -2693,7 +2759,10 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                         </div>
 
                         <p className="mt-2 font-sans text-xs leading-relaxed text-[#262523]">
-                          {dim.diagnosis}
+                          {renderTextWithHighlights(
+                            dim.diagnosis,
+                            activeRightReport.userHighlights
+                          )}
                         </p>
 
                         {(dim.strengths.length > 0 ||
@@ -2707,7 +2776,10 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                                 <span className="font-mono font-semibold text-[#262523]">
                                   + 亮点：
                                 </span>
-                                {s}
+                                {renderTextWithHighlights(
+                                  s,
+                                  activeRightReport.userHighlights
+                                )}
                               </div>
                             ))}
                             {dim.weaknesses.slice(0, 2).map((w, idx) => (
@@ -2718,7 +2790,10 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                                 <span className="font-mono font-semibold text-[#EA5B25]">
                                   - 失分：
                                 </span>
-                                {w}
+                                {renderTextWithHighlights(
+                                  w,
+                                  activeRightReport.userHighlights
+                                )}
                               </div>
                             ))}
                           </div>
@@ -2735,8 +2810,11 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                         OVERALL SUMMARY · 考官总体优缺点综述
                       </div>
                       <p className="mt-1 font-sans text-xs leading-relaxed text-[#262523]">
-                        {activeRightReport.dimensions?.overallSummary ||
-                          activeRightReport.examinerSummary}
+                        {renderTextWithHighlights(
+                          activeRightReport.dimensions?.overallSummary ||
+                            activeRightReport.examinerSummary,
+                          activeRightReport.userHighlights
+                        )}
                       </p>
                     </div>
                   )}
@@ -2782,7 +2860,10 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                                 【批注诊断】
                               </div>
                               <p className="mt-1 font-sans text-xs leading-relaxed text-[#262523]">
-                                {para.logicAndLanguageCritique}
+                                {renderTextWithHighlights(
+                                  para.logicAndLanguageCritique,
+                                  activeRightReport.userHighlights
+                                )}
                               </p>
                             </div>
                           )}
@@ -2794,7 +2875,10 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                                 【考官逻辑重构段 · Band 7.5+】
                               </div>
                               <p className="mt-1.5 font-serif text-[13px] leading-[1.75] text-[#262523]">
-                                {para.reconstructedParagraph}
+                                {renderTextWithHighlights(
+                                  para.reconstructedParagraph,
+                                  activeRightReport.userHighlights
+                                )}
                               </p>
                             </div>
                           )}
@@ -3139,10 +3223,16 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                         </span>
                         <div className="min-w-0 flex-1 space-y-1">
                           <div className="font-sans text-xs font-semibold text-[#262523]">
-                            {strategy.title}
+                            {renderTextWithHighlights(
+                              strategy.title,
+                              activeRightReport.userHighlights
+                            )}
                           </div>
                           <p className="font-sans text-xs leading-relaxed text-[#595650]">
-                            {strategy.actionableAdvice}
+                            {renderTextWithHighlights(
+                              strategy.actionableAdvice,
+                              activeRightReport.userHighlights
+                            )}
                           </p>
                         </div>
                       </div>
@@ -3252,7 +3342,10 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                         key={idx}
                         className="font-serif text-[14px] leading-[1.85] text-[#262523]"
                       >
-                        {pText}
+                        {renderTextWithHighlights(
+                          pText,
+                          activeRightReport.userHighlights
+                        )}
                       </p>
                     ))}
                   </div>
@@ -3272,7 +3365,12 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                                 className="flex items-start gap-2 font-sans text-xs leading-relaxed text-[#262523]"
                               >
                                 <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[#EA5B25]" />
-                                <span>{hl}</span>
+                                <span>
+                                  {renderTextWithHighlights(
+                                    hl,
+                                    activeRightReport.userHighlights
+                                  )}
+                                </span>
                               </li>
                             )
                           )}

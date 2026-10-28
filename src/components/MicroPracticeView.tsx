@@ -1,6 +1,11 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Loader2, Trash2 } from 'lucide-react';
-import { DeepSeekConfig, VocabularyCard } from '../types/ielts';
+import {
+  DeepSeekConfig,
+  HighlightMarkerColor,
+  TextHighlightItem,
+  VocabularyCard,
+} from '../types/ielts';
 import {
   BUILTIN_MICRO_QUESTIONS,
   evaluateMicroPracticeSentence,
@@ -14,7 +19,13 @@ import {
   MicroPracticeTaskGroup,
   pickCandidateWordForMicroPractice,
 } from '../lib/microPracticeData';
+import {
+  removeHighlightFromList,
+  renderTextWithHighlights,
+  upsertHighlightInList,
+} from '../lib/textHighlightUtils';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { SelectionHighlightPopover } from './SelectionHighlightPopover';
 
 interface MicroPracticeViewProps {
   aiConfig: DeepSeekConfig;
@@ -124,12 +135,16 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
   const [userSentence, setUserSentence] = useState('');
   const [activeEvaluation, setActiveEvaluation] =
     useState<MicroPracticeEvaluation | null>(null);
+  const [activeHistoryRecordId, setActiveHistoryRecordId] = useState<
+    string | null
+  >(null);
 
   const [isGeneratingQuestion, setIsGeneratingQuestion] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const feedbackContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Sub-types belonging to the active T1 / T2 group
   const groupSubTypes = useMemo(
@@ -177,11 +192,13 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
     if (isFreeRewrite) {
       setUserSentence('');
       setActiveEvaluation(null);
+      setActiveHistoryRecordId(null);
       return;
     }
     if (!currentQuestion) {
       setUserSentence('');
       setActiveEvaluation(null);
+      setActiveHistoryRecordId(null);
       return;
     }
     const matchedRecord = sentenceHistory.find(
@@ -189,6 +206,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
     );
     if (matchedRecord) {
       setUserSentence(matchedRecord.userSentence);
+      setActiveHistoryRecordId(matchedRecord.id);
       setActiveEvaluation({
         band: matchedRecord.bandScore,
         diagnosis: matchedRecord.diagnosis,
@@ -199,10 +217,14 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
         lexicon: Array.isArray(matchedRecord.lexicon)
           ? matchedRecord.lexicon
           : [],
+        highlights: Array.isArray(matchedRecord.highlights)
+          ? matchedRecord.highlights
+          : [],
       });
     } else {
       setUserSentence('');
       setActiveEvaluation(null);
+      setActiveHistoryRecordId(null);
     }
     // Only trigger when switching question or toggling free-rewrite mode
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -352,11 +374,15 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
         endpoint: aiConfig.endpoint,
       });
 
-      setActiveEvaluation(result);
+      const newRecordId = `mp-hist-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 6)}`;
+      setActiveEvaluation({ ...result, highlights: [] });
+      setActiveHistoryRecordId(newRecordId);
 
       // Persist to localStorage ('ielts_studio_sentence_history')
       const newHistoryRecord: MicroPracticeHistoryRecord = {
-        id: `mp-hist-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: newRecordId,
         timestamp: new Date().toISOString(),
         taskType: isFreeRewrite ? 'FREE' : taskGroup,
         category: currentSubTypeMeta.key,
@@ -377,6 +403,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
         band8Sentence: result.band8Sentence,
         structureFormula: result.structureFormula,
         lexicon: result.lexicon,
+        highlights: [],
       };
 
       setSentenceHistory((prev) => [newHistoryRecord, ...prev]);
@@ -405,6 +432,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
       setViewMode('practice');
       setTimeout(() => {
         setUserSentence(record.userSentence);
+        setActiveHistoryRecordId(record.id);
         setActiveEvaluation({
           band: record.bandScore,
           diagnosis: record.diagnosis,
@@ -413,6 +441,9 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
           band8Sentence: record.band8Sentence,
           structureFormula: record.structureFormula,
           lexicon: Array.isArray(record.lexicon) ? record.lexicon : [],
+          highlights: Array.isArray(record.highlights)
+            ? record.highlights
+            : [],
         });
       }, 0);
       return;
@@ -458,6 +489,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
     setViewMode('practice');
     setTimeout(() => {
       setUserSentence(record.userSentence);
+      setActiveHistoryRecordId(record.id);
       setActiveEvaluation({
         band: record.bandScore,
         diagnosis: record.diagnosis,
@@ -466,6 +498,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
         band8Sentence: record.band8Sentence,
         structureFormula: record.structureFormula,
         lexicon: Array.isArray(record.lexicon) ? record.lexicon : [],
+        highlights: Array.isArray(record.highlights) ? record.highlights : [],
       });
     }, 0);
   };
@@ -477,6 +510,57 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
   ) => {
     e.stopPropagation();
     setSentenceHistory((prev) => prev.filter((r) => r.id !== recordId));
+  };
+
+  // Persistent Highlight Handlers for Micro-Practice Evaluation & History
+  const updateMicroPracticeHighlights = (nextHighlights: TextHighlightItem[]) => {
+    setActiveEvaluation((prev) =>
+      prev ? { ...prev, highlights: nextHighlights } : null
+    );
+    setSentenceHistory((prev) =>
+      prev.map((rec) => {
+        if (activeHistoryRecordId && rec.id === activeHistoryRecordId) {
+          return { ...rec, highlights: nextHighlights };
+        }
+        if (
+          !activeHistoryRecordId &&
+          !isFreeRewrite &&
+          currentQuestion &&
+          rec.questionId === currentQuestion.id
+        ) {
+          return { ...rec, highlights: nextHighlights };
+        }
+        return rec;
+      })
+    );
+  };
+
+  const handleApplyMicroHighlight = (
+    text: string,
+    color: HighlightMarkerColor
+  ) => {
+    if (!activeEvaluation) return;
+    const next = upsertHighlightInList(
+      activeEvaluation.highlights,
+      text,
+      color
+    );
+    updateMicroPracticeHighlights(next);
+  };
+
+  const handleEraseMicroHighlight = (text: string) => {
+    if (!activeEvaluation) return;
+    const next = removeHighlightFromList(activeEvaluation.highlights, text);
+    updateMicroPracticeHighlights(next);
+  };
+
+  const isMicroTextHighlighted = (text: string): boolean => {
+    const clean = text.trim().toLowerCase();
+    return Boolean(
+      activeEvaluation?.highlights?.some(
+        (h) => h.text.trim().toLowerCase() === clean
+      )
+    );
   };
 
   // Silent 1-click vocabulary ingestion into '写作积累' word-box (with both meaning & fullMeaning)
@@ -672,7 +756,11 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                           >
                             BAND 8.0:
                           </span>
-                          {renderHighlightedSentence(rec.band8Sentence)}
+                          {renderTextWithHighlights(
+                            rec.band8Sentence,
+                            rec.highlights,
+                            { parseMarkdownBoldOrange: true }
+                          )}
                         </p>
                       </div>
                     );
@@ -888,9 +976,24 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                 </div>
               </div>
 
-              {/* 三、考官三阶批改反馈（原地展开、瑞士网格对齐） */}
+              {/* 三、考官三阶批改反馈（原地展开、瑞士网格对齐 + 划词马克笔高亮） */}
               {activeEvaluation && (
-                <div className="mt-8 border-t border-dashed border-[#D8D3C8] pt-7">
+                <div
+                  ref={feedbackContainerRef}
+                  className="relative mt-8 border-t border-dashed border-[#D8D3C8] pt-7"
+                >
+                  <SelectionHighlightPopover
+                    containerRef={feedbackContainerRef}
+                    aiConfig={aiConfig}
+                    sourceLabel={`小练习 · ${taskGroup} ${currentSubTypeMeta.label}`}
+                    isTextHighlighted={isMicroTextHighlighted}
+                    onApplyHighlight={handleApplyMicroHighlight}
+                    onEraseHighlight={handleEraseMicroHighlight}
+                    onIngestVocab={onIngestVocab}
+                    onExcerptToNotes={onExcerptToNotes}
+                    onOpenApiKeyModal={onOpenApiKeyModal}
+                  />
+
                   <div className="space-y-6">
                     {/* 1. DIAGNOSIS · 诊断（附带等高对齐分数 ● BAND 6.0） */}
                     <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
@@ -902,7 +1005,10 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
 
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <p className="font-sans text-sm leading-relaxed text-[#2C2A29]">
-                          {activeEvaluation.diagnosis}
+                          {renderTextWithHighlights(
+                            activeEvaluation.diagnosis,
+                            activeEvaluation.highlights
+                          )}
                         </p>
                         <span
                           style={{
@@ -928,8 +1034,10 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                       </span>
 
                       <p className="font-serif text-[17px] leading-relaxed text-[#2C2A29]">
-                        {renderHighlightedSentence(
-                          activeEvaluation.band7Sentence
+                        {renderTextWithHighlights(
+                          activeEvaluation.band7Sentence,
+                          activeEvaluation.highlights,
+                          { parseMarkdownBoldOrange: true }
                         )}
                       </p>
                     </div>
@@ -947,15 +1055,21 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
 
                       <div>
                         <p className="font-serif text-[17px] leading-relaxed text-[#2C2A29]">
-                          {renderHighlightedSentence(
-                            activeEvaluation.band8Sentence
+                          {renderTextWithHighlights(
+                            activeEvaluation.band8Sentence,
+                            activeEvaluation.highlights,
+                            { parseMarkdownBoldOrange: true }
                           )}
                         </p>
 
                         <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-3">
                           {activeEvaluation.structureFormula ? (
                             <p className="font-mono text-xs leading-relaxed text-[#8C867E]">
-                              STRUCTURE: {activeEvaluation.structureFormula}
+                              STRUCTURE:{' '}
+                              {renderTextWithHighlights(
+                                activeEvaluation.structureFormula,
+                                activeEvaluation.highlights
+                              )}
                             </p>
                           ) : (
                             <span />

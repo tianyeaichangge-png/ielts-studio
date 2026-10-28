@@ -589,6 +589,21 @@ export function App() {
     [setTask1Reports, setTask2Reports]
   );
 
+  const handleUpdateWritingReport = useCallback(
+    (updatedReport: WritingEvaluationReport) => {
+      if (updatedReport.taskType === 'task1') {
+        setTask1Reports((prev) =>
+          prev.map((r) => (r.id === updatedReport.id ? updatedReport : r))
+        );
+      } else {
+        setTask2Reports((prev) =>
+          prev.map((r) => (r.id === updatedReport.id ? updatedReport : r))
+        );
+      }
+    },
+    [setTask1Reports, setTask2Reports]
+  );
+
   const currentTab: ActiveTab =
     activeTab === 'writing'
       ? 'writing'
@@ -715,6 +730,7 @@ export function App() {
             task1Reports={task1Reports}
             task2Reports={task2Reports}
             onSaveReport={handleSaveWritingReport}
+            onUpdateReport={handleUpdateWritingReport}
             onDeleteReport={handleDeleteWritingReport}
             vocabCards={vocabCards}
             onIngestVocab={handleIngestVocabFromWriting}
@@ -728,6 +744,8 @@ export function App() {
             onUpdateNotes={setNotes}
             aiConfig={aiConfig}
             onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
+            onIngestVocab={handleIngestVocabFromWriting}
+            onExcerptToNotes={handleExcerptToNotes}
           />
         )}
       </main>

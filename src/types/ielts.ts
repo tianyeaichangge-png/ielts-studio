@@ -150,6 +150,13 @@ export interface BreakthroughStrategyItem {
   actionableAdvice: string;
 }
 
+export type HighlightMarkerColor = 'yellow' | 'orange' | 'green';
+
+export interface TextHighlightItem {
+  text: string;
+  color: HighlightMarkerColor;
+}
+
 export interface ExaminerModelEssay {
   bandScore: string;
   paragraphs: string[];
@@ -176,6 +183,7 @@ export interface WritingEvaluationReport {
   breakthroughStrategies?: BreakthroughStrategyItem[];
   modelEssay?: ExaminerModelEssay;
   vocabularyUpgrades?: ParagraphKeyCorrection[];
+  userHighlights?: TextHighlightItem[];
   // Legacy fields retained for full backward compatibility
   trTa: CriterionEvaluation;
   cc: CriterionEvaluation;
