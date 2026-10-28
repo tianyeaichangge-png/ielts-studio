@@ -95,6 +95,9 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
   // View mode: 'practice' (main typewriter workbench) | 'history' (sentence history archive)
   const [viewMode, setViewMode] = useState<'practice' | 'history'>('practice');
   const [historyFilter, setHistoryFilter] = useState<HistoryFilterType>('ALL');
+  const [expandedHistoryIds, setExpandedHistoryIds] = useState<
+    Record<string, boolean>
+  >({});
 
   const [taskGroup, setTaskGroup] = useLocalStorage<MicroPracticeTaskGroup>(
     'ielts_micro_practice_group_v1',
@@ -624,9 +627,22 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
 
   const formattedIdx = String(safeIndex + 1).padStart(2, '0');
   const formattedTotal = String(subTypeQuestions.length).padStart(2, '0');
+  const taskGroupTitle = taskGroup === 'T1' ? 'Task 1' : 'Task 2';
   const nameplateText = isFreeRewrite
-    ? `TASK ${taskGroup === 'T1' ? '1' : '2'} · ${currentSubTypeMeta.enCode} · FREE REWRITE`
-    : `TASK ${taskGroup === 'T1' ? '1' : '2'} · ${currentSubTypeMeta.enCode} · ${formattedIdx} / ${formattedTotal}`;
+    ? `${taskGroupTitle} · ${currentSubTypeMeta.enCode} · Free Rewrite`
+    : `${taskGroupTitle} · ${currentSubTypeMeta.enCode} · ${formattedIdx} / ${formattedTotal}`;
+
+  const tactileMicroBtnClass =
+    'bg-[#FAF8F5] hover:bg-[#F2EFE9] active:translate-y-[0.5px] text-[#5C5852] hover:text-[#2C2A29] border border-[#DCD6CC] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-md px-3 py-1 text-xs font-sans transition-all';
+  const tactileMicroBtnDisabledClass =
+    'bg-[#EFECE6] text-[#8C867E] border border-[#DCD6CC] rounded-md px-3 py-1 text-xs font-sans cursor-default';
+
+  const toggleHistoryItemExpand = (recordId: string) => {
+    setExpandedHistoryIds((prev) => ({
+      ...prev,
+      [recordId]: !prev[recordId],
+    }));
+  };
 
   return (
     <div className="mx-auto w-[92vw] max-w-[920px]">
@@ -639,24 +655,26 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
 
         {viewMode === 'history' ? (
           /* =================================================================
-              HISTORY ARCHIVE VIEW: 极简「小练习历史档案」视图
+              HISTORY ARCHIVE VIEW: 极简「小练习历史记录」视图
              ================================================================= */
           <div>
-            {/* Top Header: Left [ ← 返回练习 ] | Center 小练习历史档案 | Right 全部 | T1 | T2 | 生词造句 */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E3DA] px-8 py-4 font-sans">
-              <button
-                type="button"
-                onClick={() => setViewMode('practice')}
-                className="skeuo-btn-light rounded-lg px-3 py-1.5 font-sans text-xs font-medium text-[#262523]"
-              >
-                ← 返回练习
-              </button>
+            {/* Top Header: Left ← 返回练习 | Center 小练习历史记录 | Right 全部 | T1 | T2 | 生词造句 */}
+            <div className="grid grid-cols-1 items-center gap-3 border-b border-[#E6E3DA] px-8 py-4 font-sans sm:grid-cols-[1fr_auto_1fr]">
+              <div className="flex items-center justify-start">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('practice')}
+                  className={`${tactileMicroBtnClass} font-medium text-[#2C2A29]`}
+                >
+                  ← 返回练习
+                </button>
+              </div>
 
-              <span className="font-sans text-sm font-semibold tracking-tight text-[#262523]">
-                小练习历史档案
-              </span>
+              <div className="text-center font-sans text-sm font-semibold tracking-tight text-[#2C2A29]">
+                小练习历史记录
+              </div>
 
-              <div className="flex flex-wrap items-center gap-4 text-xs">
+              <div className="flex flex-wrap items-center justify-start gap-1.5 text-xs sm:justify-end">
                 {(
                   [
                     { key: 'ALL', label: '全部' },
@@ -671,10 +689,10 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                       key={tab.key}
                       type="button"
                       onClick={() => setHistoryFilter(tab.key)}
-                      className={`relative py-1 transition-colors ${
+                      className={`rounded-lg text-xs transition-all ${
                         isActive
-                          ? 'font-semibold text-[#262523] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#EA5B25]'
-                          : 'text-[#8C867E] hover:text-[#262523]'
+                          ? 'border border-[#DCD6CC] bg-[#FAF8F5] px-3.5 py-1 font-medium text-[#2C2A29] shadow-xs'
+                          : 'px-3.5 py-1 text-[#8C867E] hover:text-[#2C2A29]'
                       }`}
                     >
                       {tab.label}
@@ -685,11 +703,14 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
             </div>
 
             {/* History List Body (Separated by thin stationery horizontal lines, zero nested card boxes) */}
-            <div ref={historyContainerRef} className="relative px-8 py-4 sm:px-10">
+            <div
+              ref={historyContainerRef}
+              className="relative px-8 py-4 sm:px-10"
+            >
               <SelectionHighlightPopover
                 containerRef={historyContainerRef}
                 aiConfig={aiConfig}
-                sourceLabel="小练习 · 历史档案"
+                sourceLabel="小练习 · 历史记录"
                 isTextHighlighted={isMicroTextHighlighted}
                 onApplyHighlight={handleApplyMicroHighlight}
                 onEraseHighlight={handleEraseMicroHighlight}
@@ -713,7 +734,8 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                     const catLabel =
                       rec.taskType === 'FREE'
                         ? '自由改写'
-                        : `${rec.taskType} · ${getSubTypeLabel(rec.category)}`;
+                        : `${rec.taskType === 'T1' ? 'Task 1' : 'Task 2'} · ${getSubTypeLabel(rec.category)}`;
+                    const isExpanded = Boolean(expandedHistoryIds[rec.id]);
 
                     return (
                       <div
@@ -725,34 +747,34 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                           if (sel && sel.toString().trim().length > 0) {
                             return;
                           }
-                          handleLoadHistoryRecord(rec);
+                          toggleHistoryItemExpand(rec.id);
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            handleLoadHistoryRecord(rec);
+                            toggleHistoryItemExpand(rec.id);
                           }
                         }}
-                        className="group cursor-pointer py-5 transition-colors hover:bg-[#F4F1E8]/60 -mx-3 px-3 rounded-lg"
+                        className="group -mx-3 cursor-pointer rounded-lg px-3 py-5 transition-colors hover:bg-[#F4F1E8]/60"
                       >
-                        {/* Top Row: Left ● BAND x.x + Task Nameplate + TARGET | Right Timestamp + Hover Delete */}
+                        {/* Top Row: Left ● Band x.x + Task Nameplate + Target | Right Timestamp + 重新练习 → + Hover Delete */}
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div
                             style={{
                               fontVariantNumeric: 'lining-nums tabular-nums',
                             }}
-                            className="flex flex-wrap items-center gap-3 font-mono text-xs"
+                            className="flex flex-wrap items-center gap-3 font-sans text-xs"
                           >
-                            <span className="inline-flex items-center gap-1.5 font-semibold text-[#262523]">
+                            <span className="inline-flex items-center gap-1.5 font-mono font-semibold text-[#262523]">
                               <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
-                              <span>BAND {rec.bandScore.toFixed(1)}</span>
+                              <span>Band {rec.bandScore.toFixed(1)}</span>
                             </span>
 
                             <span className="text-[#8C867E]">{catLabel}</span>
 
                             {rec.targetWord && (
-                              <span className="font-medium text-[#EA5B25]">
-                                TARGET: {rec.targetWord}
+                              <span className="font-mono font-medium text-[#EA5B25]">
+                                Target: {rec.targetWord}
                               </span>
                             )}
                           </div>
@@ -769,6 +791,17 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
 
                             <button
                               type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleLoadHistoryRecord(rec);
+                              }}
+                              className={tactileMicroBtnClass}
+                            >
+                              重新练习 →
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={(e) =>
                                 handleDeleteHistoryRecord(rec.id, e)
                               }
@@ -781,7 +814,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                           </div>
                         </div>
 
-                        {/* Middle Row: Muted gray Chinese meaning + User's sentence YOU: ... */}
+                        {/* Middle Row: Muted gray Chinese meaning + User's sentence */}
                         <div className="mt-2 space-y-1">
                           {rec.chineseMeaning && (
                             <p className="font-sans text-xs text-[#8C867E]">
@@ -790,13 +823,13 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                           )}
                           <p className="font-serif text-sm text-[#7A7873]">
                             <span className="mr-2 font-mono text-[11px] text-[#ACA79C]">
-                              YOU:
+                              You:
                             </span>
                             <span>{rec.userSentence}</span>
                           </p>
                         </div>
 
-                        {/* Bottom Row: Newsreader Serif Examiner BAND 8.0 Rewrite */}
+                        {/* Bottom Row: Newsreader Serif Examiner Band 8.0 Rewrite */}
                         <p className="mt-2 font-serif text-[16px] leading-relaxed text-[#2C2A29]">
                           <span
                             style={{
@@ -804,7 +837,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                             }}
                             className="mr-2 font-mono text-[11px] font-medium text-[#8C867E]"
                           >
-                            BAND 8.0:
+                            Band 8.0:
                           </span>
                           {renderTextWithHighlights(
                             rec.band8Sentence,
@@ -812,6 +845,98 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                             { parseMarkdownBoldOrange: true }
                           )}
                         </p>
+
+                        {/* Expandable Full Details when clicking the history row */}
+                        {isExpanded && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="mt-4 space-y-3 border-t border-dashed border-[#DFDBD1] pt-3.5 cursor-default"
+                          >
+                            {rec.diagnosis && (
+                              <div className="font-sans text-xs leading-relaxed text-[#5C5852]">
+                                <span className="mr-2 font-mono text-[11px] font-medium text-[#8C867E]">
+                                  诊断:
+                                </span>
+                                {renderTextWithHighlights(
+                                  rec.diagnosis,
+                                  rec.highlights
+                                )}
+                              </div>
+                            )}
+
+                            {rec.band7Sentence && (
+                              <div className="font-serif text-[15px] leading-relaxed text-[#2C2A29]">
+                                <span
+                                  style={{
+                                    fontVariantNumeric:
+                                      'lining-nums tabular-nums',
+                                  }}
+                                  className="mr-2 font-mono text-[11px] font-medium text-[#8C867E]"
+                                >
+                                  Band 7.0:
+                                </span>
+                                {renderTextWithHighlights(
+                                  rec.band7Sentence,
+                                  rec.highlights,
+                                  { parseMarkdownBoldOrange: true }
+                                )}
+                              </div>
+                            )}
+
+                            {rec.structureFormula && (
+                              <div className="font-mono text-xs text-[#8C867E]">
+                                Structure:{' '}
+                                {renderTextWithHighlights(
+                                  rec.structureFormula,
+                                  rec.highlights
+                                )}
+                              </div>
+                            )}
+
+                            {Array.isArray(rec.lexicon) &&
+                              rec.lexicon.length > 0 && (
+                                <div className="space-y-2 pt-1">
+                                  {rec.lexicon.map((lex, lIdx) => {
+                                    const alreadyInBank = isWordInVocabBank(
+                                      lex.word
+                                    );
+                                    return (
+                                      <div
+                                        key={`${lex.word}-${lIdx}`}
+                                        className="flex flex-wrap items-center justify-between gap-2"
+                                      >
+                                        <div className="flex flex-wrap items-baseline gap-2">
+                                          <span className="font-serif text-[15px] font-medium text-[#2C2A29]">
+                                            {lex.word}
+                                          </span>
+                                          <span className="font-mono text-xs text-[#8C867E]">
+                                            {lex.pos}
+                                          </span>
+                                          <span className="font-sans text-xs text-[#5C5852]">
+                                            {lex.meaning}
+                                          </span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          disabled={alreadyInBank}
+                                          onClick={() =>
+                                            handleIngestLexicon(lex)
+                                          }
+                                          className={
+                                            alreadyInBank
+                                              ? tactileMicroBtnDisabledClass
+                                              : tactileMicroBtnClass
+                                          }
+                                        >
+                                          {alreadyInBank ? '✓ 已入库' : '+ 入库'}
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -826,7 +951,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
           <div>
             {/* 一、纸面顶部单行「题型分类栏」 */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E3DA] px-8 py-4 font-sans">
-              <div className="flex flex-wrap items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3">
                 {/* Micro T1 / T2 Switcher */}
                 <div className="inline-flex items-center rounded-lg bg-[#EFECE3] p-0.5">
                   {(['T1', 'T2'] as const).map((grp) => {
@@ -853,8 +978,8 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                   aria-hidden="true"
                 />
 
-                {/* 4 Core Sub-Types for the active T1 / T2 Group */}
-                <div className="flex flex-wrap items-center gap-5">
+                {/* 4 Core Sub-Types for the active T1 / T2 Group (Tactile Raised Capsule Buttons) */}
+                <div className="flex flex-wrap items-center gap-1.5">
                   {groupSubTypes.map((sub) => {
                     const isSelected =
                       !isFreeRewrite && currentSubTypeMeta.key === sub.key;
@@ -863,10 +988,10 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                         key={sub.key}
                         type="button"
                         onClick={() => handleSelectSubType(sub.key)}
-                        className={`relative py-1 text-xs transition-colors ${
+                        className={`rounded-lg text-xs transition-all ${
                           isSelected
-                            ? 'font-semibold text-[#262523] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#EA5B25]'
-                            : 'text-[#8C867E] hover:text-[#262523]'
+                            ? 'border border-[#DCD6CC] bg-[#FAF8F5] px-3.5 py-1 font-medium text-[#2C2A29] shadow-xs'
+                            : 'px-3.5 py-1 text-[#8C867E] hover:text-[#2C2A29]'
                         }`}
                       >
                         {sub.label}
@@ -876,52 +1001,52 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                 </div>
               </div>
 
-              {/* Rightmost: [ 自由改写 ] Toggle */}
+              {/* Rightmost: 自由改写 Toggle (Tactile Entity Micro-Button, Zero Brackets) */}
               <button
                 type="button"
                 onClick={() => {
                   setErrorMsg(null);
                   setIsFreeRewrite((prev) => !prev);
                 }}
-                className={`relative py-1 font-sans text-xs transition-colors ${
+                className={
                   isFreeRewrite
-                    ? 'font-semibold text-[#262523] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#EA5B25]'
-                    : 'text-[#8C867E] hover:text-[#262523]'
-                }`}
+                    ? 'rounded-md border border-[#EA5B25]/50 bg-[#FAF8F5] px-3 py-1 font-sans text-xs font-medium text-[#EA5B25] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all active:translate-y-[0.5px]'
+                    : tactileMicroBtnClass
+                }
               >
-                [ 自由改写 ]
+                自由改写
               </button>
             </div>
 
             {/* 二、纸面核心练习区（克制留白、打字机质感） */}
             <div className="px-8 py-8 sm:px-10">
-              {/* 1. 第一层：微型铅字铭牌 + 已练状态标识 + 切题触发器（单行两端对齐） */}
+              {/* 1. 第一层：柔和首字母大写题号铭牌 + 已练状态标识 + 轻拟物切题实体小按钮 */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div
                   style={{ fontVariantNumeric: 'lining-nums tabular-nums' }}
-                  className="flex flex-wrap items-center gap-3 font-mono text-xs"
+                  className="flex flex-wrap items-center gap-3 font-sans text-xs"
                 >
-                  <span className="tracking-wider text-[#8C867E]">
+                  <span className="font-medium tracking-wide text-[#8C867E]">
                     {nameplateText}
                   </span>
 
                   {latestRecordForCurrentQuestion && (
-                    <span className="inline-flex items-center gap-1.5 text-[#262523]">
+                    <span className="inline-flex items-center gap-1.5 font-mono text-[#262523]">
                       <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
                       <span>
-                        已练 (BAND{' '}
+                        已练 (Band{' '}
                         {latestRecordForCurrentQuestion.bandScore.toFixed(1)})
                       </span>
                     </span>
                   )}
                 </div>
 
-                <div className="flex items-center gap-4 font-sans text-xs">
+                <div className="flex items-center gap-2.5 font-sans text-xs">
                   <button
                     type="button"
                     disabled={isGeneratingQuestion}
                     onClick={handleGenerateVocabQuestion}
-                    className="inline-flex items-center gap-1 text-[#8C867E] transition-colors hover:text-[#EA5B25] disabled:opacity-50"
+                    className={`${tactileMicroBtnClass} inline-flex items-center gap-1 disabled:opacity-50`}
                   >
                     {isGeneratingQuestion ? (
                       <>
@@ -929,16 +1054,16 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                         <span>出题中...</span>
                       </>
                     ) : (
-                      <span>[ ↻ 用生词出题 ]</span>
+                      <span>↻ 用生词出题</span>
                     )}
                   </button>
 
                   <button
                     type="button"
                     onClick={handleNextQuestion}
-                    className="text-[#8C867E] transition-colors hover:text-[#262523]"
+                    className={tactileMicroBtnClass}
                   >
-                    [ 下一题 → ]
+                    下一题 →
                   </button>
                 </div>
               </div>
@@ -952,19 +1077,19 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
 
                   <p className="mt-2 font-serif text-[17px] italic leading-relaxed text-[#8C867E]">
                     <span className="mr-2 font-mono text-[11px] not-italic tracking-wider text-[#ACA79C]">
-                      RAW
+                      Raw:
                     </span>
                     <span>{currentQuestion.rawLowBandSentence}</span>
                     {currentQuestion.targetWord && (
                       <span className="ml-3 inline-block font-mono text-xs not-italic font-medium text-[#EA5B25]">
-                        TARGET: {currentQuestion.targetWord}
+                        Target: {currentQuestion.targetWord}
                       </span>
                     )}
                   </p>
                 </div>
               )}
 
-              {/* 3. 第三层：无边框打字机输入槽 + 底部左右对称操作栏 */}
+              {/* 3. 第三层：无边框打字机输入槽（消除原生滚动条） + 底部左右对称操作栏 */}
               <div className={isFreeRewrite ? 'mt-5' : 'mt-7'}>
                 <textarea
                   ref={textareaRef}
@@ -973,6 +1098,11 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                   onChange={(e) => {
                     setUserSentence(e.target.value);
                     if (errorMsg) setErrorMsg(null);
+                  }}
+                  onInput={(e) => {
+                    const el = e.currentTarget;
+                    el.style.height = 'auto';
+                    el.style.height = `${Math.max(64, el.scrollHeight)}px`;
                   }}
                   onKeyDown={(e) => {
                     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -985,7 +1115,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                       ? '直接输入任意需要升格的英文句子...'
                       : '在此输入您的高分改写句...'
                   }
-                  className="w-full resize-none border-0 border-b border-[#D8D3C8] bg-transparent pb-3 font-serif text-[19px] leading-relaxed text-[#2C2A29] placeholder:font-serif placeholder:italic placeholder:text-[#B8B2A6] focus:border-[#EA5B25] focus:outline-none transition-colors"
+                  className="w-full overflow-hidden resize-none border-0 border-b border-[#D8D3C8] bg-transparent pb-3 font-serif text-[19px] leading-relaxed text-[#2C2A29] placeholder:font-serif placeholder:italic placeholder:text-[#B8B2A6] focus:border-[#EA5B25] focus:outline-none transition-colors"
                 />
 
                 {errorMsg && (
@@ -994,7 +1124,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                   </p>
                 )}
 
-                {/* Bottom Symmetrical Action Bar: Left [ 历史记录 (x) ] | Right [ 批改这一句 ] */}
+                {/* Bottom Symmetrical Action Bar: Left 历史记录 (x) | Right 批改这一句 */}
                 <div className="mt-4 flex items-center justify-between gap-4">
                   <button
                     type="button"
@@ -1003,9 +1133,9 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                       setViewMode('history');
                     }}
                     style={{ fontVariantNumeric: 'lining-nums tabular-nums' }}
-                    className="font-mono text-xs text-[#8C867E] transition-colors hover:text-[#262523]"
+                    className={tactileMicroBtnClass}
                   >
-                    [ 历史记录 ({sentenceHistory.length}) ]
+                    历史记录 ({sentenceHistory.length})
                   </button>
 
                   <button
@@ -1035,7 +1165,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                   <SelectionHighlightPopover
                     containerRef={feedbackContainerRef}
                     aiConfig={aiConfig}
-                    sourceLabel={`小练习 · ${taskGroup} ${currentSubTypeMeta.label}`}
+                    sourceLabel={`小练习 · ${taskGroupTitle} ${currentSubTypeMeta.label}`}
                     isTextHighlighted={isMicroTextHighlighted}
                     onApplyHighlight={handleApplyMicroHighlight}
                     onEraseHighlight={handleEraseMicroHighlight}
@@ -1045,11 +1175,11 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                   />
 
                   <div className="space-y-6">
-                    {/* 1. DIAGNOSIS · 诊断（附带等高对齐分数 ● BAND 6.0） */}
+                    {/* 1. Diagnosis · 诊断（附带等高对齐分数 ● Band 6.0） */}
                     <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
                       <div className="flex items-baseline justify-between sm:justify-start sm:gap-2.5">
                         <span className="font-mono text-xs tracking-wider text-[#8C867E]">
-                          DIAGNOSIS · 诊断
+                          Diagnosis · 诊断
                         </span>
                       </div>
 
@@ -1067,12 +1197,12 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                           className="inline-flex shrink-0 items-center gap-1.5 font-mono text-xs font-semibold text-[#262523]"
                         >
                           <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
-                          <span>BAND {activeEvaluation.band.toFixed(1)}</span>
+                          <span>Band {activeEvaluation.band.toFixed(1)}</span>
                         </span>
                       </div>
                     </div>
 
-                    {/* 2. BAND 7.0 · 顺畅修改 */}
+                    {/* 2. Band 7.0 · 顺畅修改 */}
                     <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
                       <span
                         style={{
@@ -1080,7 +1210,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                         }}
                         className="font-mono text-xs tracking-wider text-[#8C867E]"
                       >
-                        BAND 7.0 · 顺畅修改
+                        Band 7.0 · 顺畅修改
                       </span>
 
                       <p className="font-serif text-[17px] leading-relaxed text-[#2C2A29]">
@@ -1092,7 +1222,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                       </p>
                     </div>
 
-                    {/* 3. BAND 8.0 · 高分重写 + STRUCTURE 公式 + [ + 摘录至笔记 ] */}
+                    {/* 3. Band 8.0 · 高分重写 + Structure 公式 + + 摘录至笔记 */}
                     <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
                       <span
                         style={{
@@ -1100,7 +1230,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                         }}
                         className="font-mono text-xs tracking-wider text-[#8C867E]"
                       >
-                        BAND 8.0 · 高分重写
+                        Band 8.0 · 高分重写
                       </span>
 
                       <div>
@@ -1112,10 +1242,10 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                           )}
                         </p>
 
-                        <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-3">
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
                           {activeEvaluation.structureFormula ? (
                             <p className="font-mono text-xs leading-relaxed text-[#8C867E]">
-                              STRUCTURE:{' '}
+                              Structure:{' '}
                               {renderTextWithHighlights(
                                 activeEvaluation.structureFormula,
                                 activeEvaluation.highlights
@@ -1134,15 +1264,15 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                               const handleExcerptClick = () => {
                                 if (isExcerpted) return;
                                 const headerTag = isFreeRewrite
-                                  ? `${taskGroup} · ${currentSubTypeMeta.label} · 自由改写`
-                                  : `${taskGroup} · ${currentSubTypeMeta.label}${
+                                  ? `${taskGroupTitle} · ${currentSubTypeMeta.label} · 自由改写`
+                                  : `${taskGroupTitle} · ${currentSubTypeMeta.label}${
                                       currentQuestion?.targetWord
-                                        ? ` · TARGET: ${currentQuestion.targetWord}`
+                                        ? ` · Target: ${currentQuestion.targetWord}`
                                         : ''
                                     }`;
                                 const lines = [
-                                  `## 【小练习复盘】${headerTag}（BAND ${activeEvaluation.band.toFixed(1)} ➔ 8.0）`,
-                                  ...( !isFreeRewrite &&
+                                  `## 【小练习复盘】${headerTag}（Band ${activeEvaluation.band.toFixed(1)} ➔ 8.0）`,
+                                  ...(!isFreeRewrite &&
                                   currentQuestion?.chineseMeaning
                                     ? [
                                         `- 中文原意：${currentQuestion.chineseMeaning}`,
@@ -1153,7 +1283,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                                   `- Band 8.0 重写：${activeEvaluation.band8Sentence}`,
                                   ...(activeEvaluation.structureFormula
                                     ? [
-                                        `> STRUCTURE: ${activeEvaluation.structureFormula}`,
+                                        `> Structure: ${activeEvaluation.structureFormula}`,
                                       ]
                                     : []),
                                 ];
@@ -1168,15 +1298,13 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                                   type="button"
                                   disabled={isExcerpted}
                                   onClick={handleExcerptClick}
-                                  className={`shrink-0 font-mono text-xs transition-colors ${
+                                  className={`shrink-0 ${
                                     isExcerpted
-                                      ? 'cursor-default text-[#ACA79C]'
-                                      : 'text-[#8C867E] hover:text-[#EA5B25]'
+                                      ? tactileMicroBtnDisabledClass
+                                      : tactileMicroBtnClass
                                   }`}
                                 >
-                                  {isExcerpted
-                                    ? '✓ 已摘录'
-                                    : '[ + 摘录至笔记 ]'}
+                                  {isExcerpted ? '✓ 已摘录' : '+ 摘录至笔记'}
                                 </button>
                               );
                             })()}
@@ -1184,20 +1312,20 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                       </div>
                     </div>
 
-                    {/* 4. LEXICON · 重点词伙 */}
+                    {/* 4. Lexicon · 重点词伙 */}
                     {activeEvaluation.lexicon.length > 0 && (
                       <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
                         <span className="font-mono text-xs tracking-wider text-[#8C867E]">
-                          LEXICON · 重点词伙
+                          Lexicon · 重点词伙
                         </span>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2.5">
                           {activeEvaluation.lexicon.map((lex, idx) => {
                             const alreadyInBank = isWordInVocabBank(lex.word);
                             return (
                               <div
                                 key={`${lex.word}-${idx}`}
-                                className="flex flex-wrap items-baseline justify-between gap-3"
+                                className="flex flex-wrap items-center justify-between gap-3"
                               >
                                 <div className="flex flex-wrap items-baseline gap-2">
                                   <span className="font-serif text-[16px] font-medium text-[#2C2A29]">
@@ -1215,13 +1343,13 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                                   type="button"
                                   disabled={alreadyInBank}
                                   onClick={() => handleIngestLexicon(lex)}
-                                  className={`shrink-0 font-mono text-xs transition-colors ${
+                                  className={`shrink-0 ${
                                     alreadyInBank
-                                      ? 'cursor-default text-[#ACA79C]'
-                                      : 'text-[#8C867E] hover:text-[#EA5B25]'
+                                      ? tactileMicroBtnDisabledClass
+                                      : tactileMicroBtnClass
                                   }`}
                                 >
-                                  {alreadyInBank ? '[ 已入库 ]' : '[ + 入库 ]'}
+                                  {alreadyInBank ? '✓ 已入库' : '+ 入库'}
                                 </button>
                               </div>
                             );

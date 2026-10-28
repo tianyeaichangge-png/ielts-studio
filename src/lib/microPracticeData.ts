@@ -26,15 +26,15 @@ export interface MicroPracticeSubTypeMeta {
 
 export const MICRO_PRACTICE_SUBTYPES: MicroPracticeSubTypeMeta[] = [
   // T1 (图表)
-  { key: 'dynamic', group: 'T1', label: '动态图', enCode: 'DYNAMIC' },
-  { key: 'static', group: 'T1', label: '静态图', enCode: 'STATIC' },
-  { key: 'map', group: 'T1', label: '地图', enCode: 'MAP' },
-  { key: 'process', group: 'T1', label: '流程图', enCode: 'PROCESS' },
+  { key: 'dynamic', group: 'T1', label: '动态图', enCode: 'Dynamic' },
+  { key: 'static', group: 'T1', label: '静态图', enCode: 'Static' },
+  { key: 'map', group: 'T1', label: '地图', enCode: 'Map' },
+  { key: 'process', group: 'T1', label: '流程图', enCode: 'Process' },
   // T2 (大作文)
-  { key: 'opinion', group: 'T2', label: '观点类', enCode: 'OPINION' },
-  { key: 'discussion', group: 'T2', label: '双边讨论', enCode: 'DISCUSSION' },
-  { key: 'pros_cons', group: 'T2', label: '利弊类', enCode: 'PROS & CONS' },
-  { key: 'report', group: 'T2', label: '报告类', enCode: 'REPORT' },
+  { key: 'opinion', group: 'T2', label: '观点类', enCode: 'Opinion' },
+  { key: 'discussion', group: 'T2', label: '双边讨论', enCode: 'Discussion' },
+  { key: 'pros_cons', group: 'T2', label: '利弊类', enCode: 'Pros & Cons' },
+  { key: 'report', group: 'T2', label: '报告类', enCode: 'Report' },
 ];
 
 export interface MicroPracticeQuestion {

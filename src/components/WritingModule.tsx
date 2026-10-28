@@ -3181,13 +3181,13 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                             type="button"
                             disabled={isExcerpted}
                             onClick={handleExcerptReport}
-                            className={`shrink-0 font-mono text-xs transition-colors ${
+                            className={`shrink-0 rounded-md border border-[#DCD6CC] px-3 py-1 font-sans text-xs transition-all ${
                               isExcerpted
-                                ? 'cursor-default text-[#ACA79C]'
-                                : 'text-[#8C867E] hover:text-[#EA5B25]'
+                                ? 'cursor-default bg-[#EFECE6] text-[#8C867E]'
+                                : 'bg-[#FAF8F5] text-[#5C5852] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-[#F2EFE9] hover:text-[#2C2A29] active:translate-y-[0.5px]'
                             }`}
                           >
-                            {isExcerpted ? '✓ 已摘录' : '[ + 摘录至笔记 ]'}
+                            {isExcerpted ? '✓ 已摘录' : '+ 摘录至笔记'}
                           </button>
                         );
                       })()}
