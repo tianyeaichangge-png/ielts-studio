@@ -10,7 +10,7 @@ import {
 } from './types/ielts';
 import { DEFAULT_IELTS_VOCABULARY } from './lib/defaultVocabulary';
 import {
-  BUILTIN_EXAMINER_NOTES,
+  normalizeNoteCategory,
   REVIEW_NOTEBOOK_ID,
   REVIEW_NOTEBOOK_TITLE,
 } from './lib/defaultNotes';
@@ -594,16 +594,32 @@ export function App() {
       ? 'notes'
       : 'vocabulary';
 
-  // Knowledge Studio / Notes ('ielts_studio_notes') initialized with 4 built-in Examiner Handbooks
+  // Knowledge Studio / Notes ('ielts_studio_notes') — purely user-created or excerpted notes (empty array by default)
   const [notes, setNotes] = useLocalStorage<NoteItem[]>(
     'ielts_studio_notes',
-    BUILTIN_EXAMINER_NOTES
+    []
   );
 
-  // Ensure built-in examiner notes are seeded if 'ielts_studio_notes' is empty on initialization
+  // Automatically purge any legacy built-in notes ('builtin-note-*') & migrate legacy category names
   useEffect(() => {
-    if (!Array.isArray(notes) || notes.length === 0) {
-      setNotes(BUILTIN_EXAMINER_NOTES);
+    if (!Array.isArray(notes)) {
+      setNotes([]);
+      return;
+    }
+    const hasLegacyBuiltInOrOldCat = notes.some(
+      (n) =>
+        n.id.startsWith('builtin-note-') ||
+        normalizeNoteCategory(n.category) !== n.category
+    );
+    if (hasLegacyBuiltInOrOldCat) {
+      setNotes((prev) =>
+        (Array.isArray(prev) ? prev : [])
+          .filter((n) => !n.id.startsWith('builtin-note-'))
+          .map((n) => ({
+            ...n,
+            category: normalizeNoteCategory(n.category),
+          }))
+      );
     }
   }, [notes, setNotes]);
 
@@ -642,7 +658,7 @@ export function App() {
             : payload.markdownBlock;
           list[reviewIdx] = {
             ...existing,
-            category: '批改复盘',
+            category: '摘录复盘',
             content: nextContent,
             updatedAt: nowIso,
             sourceKeys: [...existingKeys, payload.sourceKey],
@@ -653,7 +669,7 @@ export function App() {
         const newReviewNote: NoteItem = {
           id: REVIEW_NOTEBOOK_ID,
           title: REVIEW_NOTEBOOK_TITLE,
-          category: '批改复盘',
+          category: '摘录复盘',
           content: payload.markdownBlock,
           isPinned: true,
           updatedAt: nowIso,

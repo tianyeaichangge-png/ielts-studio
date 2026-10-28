@@ -2,12 +2,7 @@ export type MasteryStatus = 'unlearned' | 'learning' | 'vague' | 'mastered';
 
 export type ActiveTab = 'vocabulary' | 'writing' | 'notes';
 
-export type NoteCategory =
-  | 'Task 1 技巧'
-  | 'Task 2 逻辑'
-  | '句法与词伙'
-  | '批改复盘'
-  | '核心讲义';
+export type NoteCategory = 'Task 1' | 'Task 2' | '句法词伙' | '摘录复盘';
 
 export interface NoteItem {
   id: string;
