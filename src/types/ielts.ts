@@ -60,6 +60,8 @@ export type Task1ChartType =
   | '柱状图'
   | '饼图'
   | '表格'
+  | '组合图'
+  | 'mixed'
   | '地图'
   | '流程图';
 
@@ -200,6 +202,8 @@ export interface WritingEvaluationReport {
 }
 
 export interface Task1DraftState {
+  chartType?: Task1ChartType;
+  chartTypeManuallySelected?: boolean;
   selectedTopicId?: string | 'custom';
   viewStep?: 'catalog' | 'writing';
   prompt: string;

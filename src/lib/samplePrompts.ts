@@ -1,3 +1,4 @@
+import { detectTask1ChartType } from './task1ChartClassification';
 import {
   Task1ChartType,
   Task1TopicBankItem,
@@ -16,6 +17,8 @@ export const TASK1_CHART_TYPE_ENGLISH: Record<Task1ChartType, string> = {
   柱状图: 'BAR CHART',
   饼图: 'PIE CHART',
   表格: 'TABLE',
+  组合图: 'Mix Charts',
+  mixed: 'Mix Charts',
   地图: 'MAP',
   流程图: 'PROCESS DIAGRAM',
 };
@@ -25,6 +28,8 @@ const VALID_TASK1_CHART_TYPES: Task1ChartType[] = [
   '柱状图',
   '饼图',
   '表格',
+  '组合图',
+  'mixed',
   '地图',
   '流程图',
 ];
@@ -39,8 +44,9 @@ export function inferTask1ChartType(
 ): Task1ChartType {
   const cleanedRaw = (rawChartType || '').trim();
   if (VALID_TASK1_CHART_TYPES.includes(cleanedRaw as Task1ChartType)) {
-    return cleanedRaw as Task1ChartType;
+    return cleanedRaw === 'mixed' ? '组合图' : cleanedRaw as Task1ChartType;
   }
+  if (/组合|混合|mix(?:ed)?[\s_-]*charts?|combination/i.test(cleanedRaw)) return '组合图';
   if (cleanedRaw.includes('折线') || /line/i.test(cleanedRaw)) return '折线图';
   if (cleanedRaw.includes('柱状') || /bar/i.test(cleanedRaw)) return '柱状图';
   if (cleanedRaw.includes('饼') || /pie/i.test(cleanedRaw)) return '饼图';
@@ -50,6 +56,8 @@ export function inferTask1ChartType(
     return '流程图';
   }
 
+  const detected = detectTask1ChartType(prompt) || detectTask1ChartType(essay);
+  if (detected) return detected;
   const combined = `${prompt} ${essay}`.toLowerCase();
   if (
     /\b(map|maps|layout|town|island|redevelop|redeveloped|floor plan|village|coastal)\b|地图/.test(

@@ -48,6 +48,7 @@ import {
   upsertHighlightInList,
 } from '../lib/textHighlightUtils';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { detectTask1ChartType, identifyTask1ChartTypeWithAI } from '../lib/task1ChartClassification';
 import { MicroPracticeView } from './MicroPracticeView';
 import { SelectionHighlightPopover } from './SelectionHighlightPopover';
 
@@ -78,6 +79,7 @@ const TASK1_CATALOG_FILTERS = [
   { key: '柱状图', label: '柱状图' },
   { key: '饼图', label: '饼图' },
   { key: '表格', label: '表格' },
+  { key: '组合图', label: 'Mix Charts · 组合图' },
   { key: '地图', label: '地图' },
   { key: '流程图', label: '流程图' },
 ] as const;
@@ -185,6 +187,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       viewStep: 'catalog',
       prompt: '',
       image: null,
+      chartType: undefined,
+      chartTypeManuallySelected: false,
       content: '',
       timer: 1200,
       gradedReportId: null,
@@ -243,6 +247,9 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [classificationStatus, setClassificationStatus] = useState('');
+  const [classificationRetry, setClassificationRetry] = useState(0);
+  const classificationController = useRef<AbortController | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [apiAlertModal, setApiAlertModal] = useState<{
     title: string;
@@ -384,6 +391,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const filteredTask1TopicBank = useMemo(() => {
     if (selectedTask1Category === 'all') return task1TopicBank;
+    if (
+      selectedTask1Category === '组合图' ||
+      selectedTask1Category === 'mixed'
+    ) {
+      return task1TopicBank.filter(
+        (p) => p.chartType === '组合图' || p.chartType === 'mixed'
+      );
+    }
     return task1TopicBank.filter((p) => p.chartType === selectedTask1Category);
   }, [task1TopicBank, selectedTask1Category]);
 
@@ -437,18 +452,72 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   );
 
   const task1ResolvedTopicTag = useMemo(() => {
+    if (task1Draft.chartType) return `${TASK1_CHART_TYPE_ENGLISH[task1Draft.chartType]} · ${task1Draft.chartType === 'mixed' ? '组合图' : task1Draft.chartType}`;
     if (selectedTask1TopicItem) {
-      return `${TASK1_CHART_TYPE_ENGLISH[selectedTask1TopicItem.chartType]} · ${selectedTask1TopicItem.chartType}`;
+      const zh =
+        selectedTask1TopicItem.chartType === 'mixed'
+          ? '组合图'
+          : selectedTask1TopicItem.chartType;
+      const en =
+        TASK1_CHART_TYPE_ENGLISH[selectedTask1TopicItem.chartType] ||
+        'Mixed chart';
+      return `${en} · ${zh}`;
     }
-    if (task1Draft.prompt.trim()) {
-      const guessed = inferTask1ChartType(
-        task1Draft.prompt,
-        task1Draft.content
-      );
-      return `${TASK1_CHART_TYPE_ENGLISH[guessed]} · ${guessed}`;
+    if (task1Draft.chartType || task1Draft.prompt.trim()) {
+      const guessed = task1Draft.chartType || detectTask1ChartType(task1Draft.prompt);
+      if (!guessed) return '待识别 · 自由命题图表';
+      const zh = guessed === 'mixed' ? '组合图' : guessed;
+      const en = TASK1_CHART_TYPE_ENGLISH[guessed] || 'Mixed chart';
+      return `${en} · ${zh}`;
     }
     return 'CUSTOM CHART · 自由命题图表';
-  }, [selectedTask1TopicItem, task1Draft.prompt, task1Draft.content]);
+  }, [selectedTask1TopicItem, task1Draft.prompt, task1Draft.chartType]);
+
+  // Debounce text edits; cancel previous recognition when changing input, topic or module.
+  useEffect(() => {
+    if (activeTaskType !== 'task1' || isHistoryMode || task1Draft.viewStep !== 'writing' || selectedTask1TopicItem?.isBuiltIn) {
+      setClassificationStatus('');
+      return;
+    }
+    if (task1Draft.chartTypeManuallySelected && task1Draft.chartType) {
+      setClassificationStatus('已手动选择题型');
+      return;
+    }
+    const controller = new AbortController();
+    classificationController.current = controller;
+    const prompt = task1Draft.prompt;
+    const image = task1Draft.image;
+    const localType = detectTask1ChartType(prompt);
+    const saveType = (chartType?: Task1ChartType) => {
+      if (controller.signal.aborted) return;
+      setTask1Draft(prev => prev.prompt === prompt && prev.image === image
+        ? { ...prev, chartType, chartTypeManuallySelected: false } : prev);
+      if (chartType && task1Draft.selectedTopicId !== 'custom') {
+        setTask1TopicBank(prev => prev.map(item => item.id === task1Draft.selectedTopicId && !item.isBuiltIn
+          ? { ...item, chartType } : item));
+      }
+    };
+    saveType(image ? undefined : localType);
+    const needsAI = Boolean(image || (prompt.trim() && !localType));
+    setClassificationStatus(needsAI
+      ? aiConfig.apiKey.trim() ? '正在识别题型…' : '请配置 API Key 以自动识别，或手动选择题型。'
+      : localType ? '已根据题干自动归类' : '输入题干或上传图片后自动识别');
+    const timer = window.setTimeout(async () => {
+      if (controller.signal.aborted || !needsAI || !aiConfig.apiKey.trim()) return;
+      try {
+        const result = await identifyTask1ChartTypeWithAI({ prompt, image, apiKey: aiConfig.apiKey,
+          endpoint: aiConfig.endpoint, signal: controller.signal });
+        if (controller.signal.aborted) return;
+        saveType(result.chartType);
+        setClassificationStatus('已自动归类');
+      } catch (error) {
+        if (!controller.signal.aborted) setClassificationStatus(error instanceof Error ? error.message : '识别失败，请重试或手动选择。');
+      }
+    }, 700);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [activeTaskType, isHistoryMode, task1Draft.viewStep, selectedTask1TopicItem?.isBuiltIn, task1Draft.selectedTopicId,
+    task1Draft.prompt, task1Draft.image, aiConfig.apiKey, aiConfig.endpoint, classificationRetry,
+    setTask1Draft, setTask1TopicBank]);
 
   const currentStep =
     activeTaskType === 'task1'
@@ -700,6 +769,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         setTask1Draft((prev) => ({
           ...prev,
           image: dataUrl,
+          chartType: undefined,
+          chartTypeManuallySelected: false,
         }));
         setErrorMsg(null);
       } catch {
@@ -761,6 +832,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     setTask1Draft((prev) => ({
       ...prev,
       image: null,
+      chartType: undefined,
+      chartTypeManuallySelected: false,
     }));
   };
 
@@ -894,6 +967,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         ...prev,
         selectedTopicId: 'custom',
         viewStep: 'writing',
+        chartType: keepDraft ? prev.chartType : undefined,
+        chartTypeManuallySelected: keepDraft ? prev.chartTypeManuallySelected : false,
         prompt: keepDraft ? prev.prompt : '',
         image: keepDraft ? prev.image : null,
         content: keepDraft ? prev.content : '',
@@ -915,6 +990,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         ...prev,
         selectedTopicId: item.id,
         viewStep: 'writing',
+        chartType: item.chartType,
+        chartTypeManuallySelected: false,
         prompt: item.prompt,
         image: item.chartImage || null,
         content: isSameUnfinishedTopic ? prev.content : '',
@@ -1077,6 +1154,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       setTask1Draft((prev) => ({
         ...prev,
         prompt: newPromptText,
+        chartType: undefined,
+        chartTypeManuallySelected: false,
       }));
     } else {
       setTask2Draft((prev) => ({
@@ -1166,9 +1245,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       return;
     }
 
+    if (activeTaskType === 'task1' && !selectedTask1TopicItem?.isBuiltIn && !task1Draft.chartType) {
+      setErrorMsg('请等待题型识别完成，或手动选择题型后再批改。');
+      return;
+    }
+
     // Even before API returns, if Task 1 custom prompt is submitted, archive the prompt & image into personal topic bank
     if (activeTaskType === 'task1') {
-      const initialChartType = inferTask1ChartType(activePrompt, activeEssay);
+      const initialChartType = task1Draft.chartType || inferTask1ChartType(activePrompt, activeEssay);
       upsertTask1TopicBank({
         topicId: task1Draft.selectedTopicId,
         prompt: activePrompt.trim(),
@@ -1207,7 +1291,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
       const resolvedChartType: Task1ChartType | undefined =
         activeTaskType === 'task1'
-          ? inferTask1ChartType(
+          ? task1Draft.chartType || inferTask1ChartType(
               activePrompt,
               activeEssay,
               newReport.chartType
@@ -2090,6 +2174,40 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               </div>
 
               {/* Left Page Lower Half: Task 1 Exclusive High-Res Chart Area */}
+              {displayedTaskType === 'task1' && !isHistoryMode && !selectedTask1TopicItem?.isBuiltIn && (
+                <div className="border-t border-[#ECE8DF] px-7 py-3">
+                  <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-[#8C867E]">
+                    <span role="status">{selectedTask1TopicItem?.isBuiltIn ? '题型' : classificationStatus}</span>
+                    {!selectedTask1TopicItem?.isBuiltIn && (
+                      <button type="button" onClick={() => {
+                        setTask1Draft(prev => ({ ...prev, chartTypeManuallySelected: false }));
+                        setClassificationRetry(n => n + 1);
+                      }}
+                        className="skeuo-btn-light rounded-md px-2 py-1">重新识别</button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5" aria-label="Task 1 题型">
+                    {TASK1_CATALOG_FILTERS.filter(item => item.key !== 'all').map(item => (
+                      <button key={item.key} type="button"
+                        aria-pressed={(task1Draft.chartType || selectedTask1TopicItem?.chartType) === item.key}
+                        onClick={() => {
+                          classificationController.current?.abort();
+                          setTask1Draft(prev => ({ ...prev, chartType: item.key as Task1ChartType, chartTypeManuallySelected: true }));
+                          setTask1TopicBank(prev => prev.map(topic => topic.id === task1Draft.selectedTopicId && !topic.isBuiltIn
+                            ? { ...topic, chartType: item.key as Task1ChartType } : topic));
+                          setClassificationStatus('已手动选择题型');
+                        }}
+                        className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                          (task1Draft.chartType || selectedTask1TopicItem?.chartType) === item.key
+                            ? 'border-[#DCD6CC] bg-[#FAF8F5] font-medium text-[#2C2A29] shadow-sm'
+                            : 'border-transparent text-[#8C867E] hover:text-[#2C2A29]'}`}>
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                  {!selectedTask1TopicItem?.isBuiltIn && <p className="mt-2 text-[11px] text-[#8C867E]">图片自动识别会发送至 API 设置中的服务。未识别正确时可点击题型修正。</p>}
+                </div>
+              )}
               {displayedTaskType === 'task1' && (
                 <div className="flex-1 border-t border-dashed border-[#DFDBD0] px-7 pt-4 pb-7">
                   <div className="mb-2.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
