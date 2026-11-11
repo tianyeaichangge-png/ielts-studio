@@ -71,7 +71,7 @@ test('switching inputs can cancel an in-flight classification', async () => {
   await assert.rejects(pending, /取消或超时/);
 });
 
-test('catalog and saved custom draft render the Mix Charts controls without real storage or API access', () => {
+test('catalog retains the Mix Charts filter and the custom draft shows only the saved type label', () => {
   const React = require('react');
   const { renderToStaticMarkup } = require('react-dom/server');
   const stored = {
@@ -85,7 +85,7 @@ test('catalog and saved custom draft render the Mix Charts controls without real
     stored.ielts_draft_task1 = { ...stored.ielts_draft_task1, viewStep: 'writing',
       prompt: 'A pie chart and table show sales.', chartType: '组合图', chartTypeManuallySelected: true };
     const markup = renderToStaticMarkup(React.createElement(App));
-    assert.match(markup, /aria-label="Task 1 题型"/);
-    assert.match(markup, /aria-pressed="true"[^>]*>Mix Charts/);
+    assert.match(markup, />组合图 · Mix Charts<\/span>/);
+    assert.doesNotMatch(markup, /aria-label="Task 1 题型"|重新识别/);
   } finally { delete global.testWindow; }
 });
