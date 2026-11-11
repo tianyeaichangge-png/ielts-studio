@@ -43,6 +43,19 @@ interface MicroPracticeViewProps {
 
 type HistoryFilterType = 'ALL' | 'T1' | 'T2' | 'VOCAB';
 
+const toolbarClass =
+  'flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E3DA] px-4 py-4 font-sans sm:px-8';
+const keyboardFocusClass =
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA5B25]';
+
+function filterButtonClass(isActive: boolean): string {
+  return `min-h-8 rounded-lg border px-3 py-1.5 font-sans text-xs transition-colors ${keyboardFocusClass} ${
+    isActive
+      ? 'skeuo-switch-thumb font-semibold text-[#2C2A29]'
+      : 'border-transparent text-[#8C867E] hover:text-[#2C2A29]'
+  }`;
+}
+
 /**
  * Renders an English sentence in Newsreader serif, coloring `**highlighted**` segments
  * in pure Braun Signal Orange (#EA5B25) text without any background box.
@@ -629,13 +642,13 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
   const formattedTotal = String(subTypeQuestions.length).padStart(2, '0');
   const taskGroupTitle = taskGroup === 'T1' ? 'Task 1' : 'Task 2';
   const nameplateText = isFreeRewrite
-    ? `${taskGroupTitle} · ${currentSubTypeMeta.enCode} · Free Rewrite`
+    ? `${taskGroupTitle} · ${currentSubTypeMeta.enCode} · 自由改写`
     : `${taskGroupTitle} · ${currentSubTypeMeta.enCode} · ${formattedIdx} / ${formattedTotal}`;
 
   const tactileMicroBtnClass =
-    'bg-[#FAF8F5] hover:bg-[#F2EFE9] active:translate-y-[0.5px] text-[#5C5852] hover:text-[#2C2A29] border border-[#DCD6CC] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-md px-3 py-1 text-xs font-sans transition-all';
+    `skeuo-btn-light inline-flex min-h-8 items-center gap-1.5 rounded-lg px-3 py-1.5 font-sans text-xs font-medium ${keyboardFocusClass}`;
   const tactileMicroBtnDisabledClass =
-    'bg-[#EFECE6] text-[#8C867E] border border-[#DCD6CC] rounded-md px-3 py-1 text-xs font-sans cursor-default';
+    'inline-flex min-h-8 cursor-default items-center rounded-lg border border-[#DCD6CC] bg-[#EFECE6] px-3 py-1.5 font-sans text-xs text-[#8C867E]';
 
   const toggleHistoryItemExpand = (recordId: string) => {
     setExpandedHistoryIds((prev) => ({
@@ -645,7 +658,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
   };
 
   return (
-    <div className="mx-auto w-[92vw] max-w-[920px]">
+    <div className="w-full">
       <section className="skeuo-paper overflow-hidden rounded-2xl">
         {/* Smartisan Vintage Double Crimson Header Rule */}
         <div className="pt-4">
@@ -658,28 +671,24 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
               HISTORY ARCHIVE VIEW: 极简「小练习历史记录」视图
              ================================================================= */
           <div>
-            {/* Top Header: Left ← 返回练习 | Center 小练习历史记录 | Right 全部 | T1 | T2 | 生词造句 */}
-            <div className="grid grid-cols-1 items-center gap-3 border-b border-[#E6E3DA] px-8 py-4 font-sans sm:grid-cols-[1fr_auto_1fr]">
-              <div className="flex items-center justify-start">
+            <div className={toolbarClass}>
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setViewMode('practice')}
-                  className={`${tactileMicroBtnClass} font-medium text-[#2C2A29]`}
+                  className={tactileMicroBtnClass}
                 >
                   ← 返回练习
                 </button>
+                <h2 className="text-sm font-semibold text-[#2C2A29]">小练习历史记录</h2>
               </div>
 
-              <div className="text-center font-sans text-sm font-semibold tracking-tight text-[#2C2A29]">
-                小练习历史记录
-              </div>
-
-              <div className="flex flex-wrap items-center justify-start gap-1.5 text-xs sm:justify-end">
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="历史记录分类">
                 {(
                   [
                     { key: 'ALL', label: '全部' },
-                    { key: 'T1', label: 'T1' },
-                    { key: 'T2', label: 'T2' },
+                    { key: 'T1', label: 'Task 1' },
+                    { key: 'T2', label: 'Task 2' },
                     { key: 'VOCAB', label: '生词造句' },
                   ] as const
                 ).map((tab) => {
@@ -689,11 +698,8 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                       key={tab.key}
                       type="button"
                       onClick={() => setHistoryFilter(tab.key)}
-                      className={`rounded-lg text-xs transition-all ${
-                        isActive
-                          ? 'border border-[#DCD6CC] bg-[#FAF8F5] px-3.5 py-1 font-medium text-[#2C2A29] shadow-xs'
-                          : 'px-3.5 py-1 text-[#8C867E] hover:text-[#2C2A29]'
-                      }`}
+                      aria-pressed={isActive}
+                      className={filterButtonClass(isActive)}
                     >
                       {tab.label}
                     </button>
@@ -705,7 +711,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
             {/* History List Body (Separated by thin stationery horizontal lines, zero nested card boxes) */}
             <div
               ref={historyContainerRef}
-              className="relative px-8 py-4 sm:px-10"
+              className="relative px-4 py-4 sm:px-8"
             >
               <SelectionHighlightPopover
                 containerRef={historyContainerRef}
@@ -779,7 +785,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                             )}
                           </div>
 
-                          <div className="flex items-center gap-2.5">
+                          <div className="flex flex-wrap items-center gap-2.5">
                             <span
                               style={{
                                 fontVariantNumeric: 'lining-nums tabular-nums',
@@ -949,37 +955,23 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
               MAIN PRACTICE WORKBENCH VIEW: 纸面题型分类栏 + 打字机核心练习区
              ================================================================= */
           <div>
-            {/* 一、纸面顶部单行「题型分类栏」 */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E3DA] px-8 py-4 font-sans">
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Micro T1 / T2 Switcher */}
-                <div className="inline-flex items-center rounded-lg bg-[#EFECE3] p-0.5">
-                  {(['T1', 'T2'] as const).map((grp) => {
-                    const active = taskGroup === grp;
-                    return (
-                      <button
-                        key={grp}
-                        type="button"
-                        onClick={() => handleSelectGroup(grp)}
-                        className={`rounded-md px-2.5 py-1 font-mono text-xs transition-all ${
-                          active
-                            ? 'skeuo-switch-thumb font-semibold text-[#262523]'
-                            : 'text-[#8C867E] hover:text-[#262523]'
-                        }`}
-                      >
-                        {grp}
-                      </button>
-                    );
-                  })}
+            <div className={toolbarClass}>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+                <div className="skeuo-groove inline-flex items-center rounded-xl p-1" role="group" aria-label="练习任务">
+                  {(['T1', 'T2'] as const).map((group) => (
+                    <button
+                      key={group}
+                      type="button"
+                      aria-pressed={taskGroup === group}
+                      onClick={() => handleSelectGroup(group)}
+                      className={filterButtonClass(taskGroup === group)}
+                    >
+                      {group === 'T1' ? 'Task 1' : 'Task 2'}
+                    </button>
+                  ))}
                 </div>
 
-                <span
-                  className="h-3.5 w-[1px] bg-[#E2DFD5]"
-                  aria-hidden="true"
-                />
-
-                {/* 4 Core Sub-Types for the active T1 / T2 Group (Tactile Raised Capsule Buttons) */}
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="练习题型">
                   {groupSubTypes.map((sub) => {
                     const isSelected =
                       !isFreeRewrite && currentSubTypeMeta.key === sub.key;
@@ -988,11 +980,8 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                         key={sub.key}
                         type="button"
                         onClick={() => handleSelectSubType(sub.key)}
-                        className={`rounded-lg text-xs transition-all ${
-                          isSelected
-                            ? 'border border-[#DCD6CC] bg-[#FAF8F5] px-3.5 py-1 font-medium text-[#2C2A29] shadow-xs'
-                            : 'px-3.5 py-1 text-[#8C867E] hover:text-[#2C2A29]'
-                        }`}
+                        aria-pressed={isSelected}
+                        className={filterButtonClass(isSelected)}
                       >
                         {sub.label}
                       </button>
@@ -1001,52 +990,76 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                 </div>
               </div>
 
-              {/* Rightmost: 自由改写 Toggle (Tactile Entity Micro-Button, Zero Brackets) */}
-              <button
-                type="button"
-                onClick={() => {
-                  setErrorMsg(null);
-                  setIsFreeRewrite((prev) => !prev);
-                }}
-                className={
-                  isFreeRewrite
-                    ? 'rounded-md border border-[#EA5B25]/50 bg-[#FAF8F5] px-3 py-1 font-sans text-xs font-medium text-[#EA5B25] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all active:translate-y-[0.5px]'
-                    : tactileMicroBtnClass
-                }
-              >
-                自由改写
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  aria-pressed={isFreeRewrite}
+                  onClick={() => {
+                    setErrorMsg(null);
+                    setIsFreeRewrite((prev) => !prev);
+                  }}
+                  className={isFreeRewrite ? filterButtonClass(true) : tactileMicroBtnClass}
+                >
+                  自由改写
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMsg(null);
+                    setViewMode('history');
+                  }}
+                  className={tactileMicroBtnClass}
+                >
+                  历史记录 <span className="font-mono">({sentenceHistory.length})</span>
+                </button>
+              </div>
             </div>
 
-            {/* 二、纸面核心练习区（克制留白、打字机质感） */}
-            <div className="px-8 py-8 sm:px-10">
-              {/* 1. 第一层：柔和首字母大写题号铭牌 + 已练状态标识 + 轻拟物切题实体小按钮 */}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div
-                  style={{ fontVariantNumeric: 'lining-nums tabular-nums' }}
-                  className="flex flex-wrap items-center gap-3 font-sans text-xs"
-                >
-                  <span className="font-medium tracking-wide text-[#8C867E]">
-                    {nameplateText}
-                  </span>
+            <div className="grid grid-cols-1 lg:grid-cols-[45%_55%]">
+              <section className="flex min-w-0 flex-col border-b border-[#E6E1D8] lg:border-b-0 lg:border-r">
+                <div className="flex min-h-[54px] flex-wrap items-center justify-between gap-2 border-b border-[#ECE8DF] px-4 py-3 sm:px-7">
+                  <h2 className="font-sans text-xs font-semibold text-[#2C2A29]">练习题目</h2>
+                  <span className="font-mono text-[11px] tabular-nums text-[#8C867E]">{nameplateText}</span>
+                </div>
 
+                <div className="flex-1 px-4 py-5 sm:px-7 sm:py-6">
                   {latestRecordForCurrentQuestion && (
-                    <span className="inline-flex items-center gap-1.5 font-mono text-[#262523]">
+                    <p className="mb-3 inline-flex items-center gap-1.5 font-mono text-xs tabular-nums text-[#8C867E]">
                       <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
-                      <span>
-                        已练 (Band{' '}
-                        {latestRecordForCurrentQuestion.bandScore.toFixed(1)})
-                      </span>
-                    </span>
+                      已练 · Band {latestRecordForCurrentQuestion.bandScore.toFixed(1)}
+                    </p>
+                  )}
+                  {!isFreeRewrite && currentQuestion && (
+                    <>
+                      <p className="break-words font-sans text-[15px] font-medium leading-relaxed text-[#2C2A29]">
+                        {currentQuestion.chineseMeaning}
+                      </p>
+                      <div className="mt-4 border-t border-[#ECE8DF] pt-3">
+                        <p className="mb-1 font-mono text-[11px] text-[#8C867E]">原句</p>
+                        <p className="break-words font-serif text-[18px] leading-relaxed text-[#5C5852]">
+                          {currentQuestion.rawLowBandSentence}
+                        </p>
+                        {currentQuestion.targetWord && (
+                          <p className="mt-3 break-words font-mono text-xs text-[#8C867E]">
+                            目标词 · <span className="font-medium text-[#2C2A29]">{currentQuestion.targetWord}</span>
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  {isFreeRewrite && (
+                    <p className="font-sans text-sm leading-relaxed text-[#8C867E]">
+                      提交一句英文，查看诊断与两种改写示例。
+                    </p>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2.5 font-sans text-xs">
+                <div className="flex min-h-[68px] flex-wrap items-center gap-2 border-t border-[#ECE8DF] px-4 py-3 sm:px-7">
                   <button
                     type="button"
                     disabled={isGeneratingQuestion}
                     onClick={handleGenerateVocabQuestion}
-                    className={`${tactileMicroBtnClass} inline-flex items-center gap-1 disabled:opacity-50`}
+                    className={`${tactileMicroBtnClass} disabled:opacity-50`}
                   >
                     {isGeneratingQuestion ? (
                       <>
@@ -1066,83 +1079,51 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                     下一题 →
                   </button>
                 </div>
-              </div>
+              </section>
 
-              {/* 2. 第二层：题目原句（中文意思 + 5.5分低分句对照；自由改写模式下隐藏预设题目） */}
-              {!isFreeRewrite && currentQuestion && (
-                <div className="mt-6">
-                  <p className="font-sans text-[15px] font-medium leading-relaxed text-[#2C2A29]">
-                    {currentQuestion.chineseMeaning}
-                  </p>
-
-                  <p className="mt-2 font-serif text-[17px] italic leading-relaxed text-[#8C867E]">
-                    <span className="mr-2 font-mono text-[11px] not-italic tracking-wider text-[#ACA79C]">
-                      Raw:
-                    </span>
-                    <span>{currentQuestion.rawLowBandSentence}</span>
-                    {currentQuestion.targetWord && (
-                      <span className="ml-3 inline-block font-mono text-xs not-italic font-medium text-[#EA5B25]">
-                        Target: {currentQuestion.targetWord}
-                      </span>
-                    )}
-                  </p>
+              <section className="flex min-w-0 flex-col">
+                <div className="flex min-h-[54px] items-center border-b border-[#ECE8DF] px-4 py-3 sm:px-7">
+                  <label htmlFor="micro-practice-sentence" className="font-sans text-xs font-semibold text-[#2C2A29]">
+                    {isFreeRewrite ? '英文原句' : '改写书写区'}
+                  </label>
                 </div>
-              )}
-
-              {/* 3. 第三层：无边框打字机输入槽（消除原生滚动条） + 底部左右对称操作栏 */}
-              <div className={isFreeRewrite ? 'mt-5' : 'mt-7'}>
-                <textarea
-                  ref={textareaRef}
-                  rows={2}
-                  value={userSentence}
-                  onChange={(e) => {
-                    setUserSentence(e.target.value);
-                    if (errorMsg) setErrorMsg(null);
-                  }}
-                  onInput={(e) => {
-                    const el = e.currentTarget;
-                    el.style.height = 'auto';
-                    el.style.height = `${Math.max(64, el.scrollHeight)}px`;
-                  }}
-                  onKeyDown={(e) => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                      e.preventDefault();
-                      handleEvaluateSentence();
-                    }
-                  }}
-                  placeholder={
-                    isFreeRewrite
-                      ? '直接输入任意需要升格的英文句子...'
-                      : '在此输入您的高分改写句...'
-                  }
-                  className="w-full overflow-hidden resize-none border-0 border-b border-[#D8D3C8] bg-transparent pb-3 font-serif text-[19px] leading-relaxed text-[#2C2A29] placeholder:font-serif placeholder:italic placeholder:text-[#B8B2A6] focus:border-[#EA5B25] focus:outline-none transition-colors"
-                />
-
-                {errorMsg && (
-                  <p className="mt-2 font-sans text-xs text-[#EA5B25]">
-                    {errorMsg}
-                  </p>
-                )}
-
-                {/* Bottom Symmetrical Action Bar: Left 历史记录 (x) | Right 批改这一句 */}
-                <div className="mt-4 flex items-center justify-between gap-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setErrorMsg(null);
-                      setViewMode('history');
+                <div className="flex-1 px-4 py-5 sm:px-7 sm:py-6">
+                  <textarea
+                    id="micro-practice-sentence"
+                    ref={textareaRef}
+                    rows={2}
+                    value={userSentence}
+                    onChange={(e) => {
+                      setUserSentence(e.target.value);
+                      if (errorMsg) setErrorMsg(null);
                     }}
-                    style={{ fontVariantNumeric: 'lining-nums tabular-nums' }}
-                    className={tactileMicroBtnClass}
-                  >
-                    历史记录 ({sentenceHistory.length})
-                  </button>
+                    onInput={(e) => {
+                      const el = e.currentTarget;
+                      el.style.height = 'auto';
+                      el.style.height = `${Math.max(64, el.scrollHeight)}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        handleEvaluateSentence();
+                      }
+                    }}
+                    placeholder={isFreeRewrite ? '输入要修改的英文句子' : '在此输入你的英文改写'}
+                    className="block min-h-24 w-full resize-none overflow-hidden border-0 border-b border-[#DCD6CC] bg-transparent pb-3 font-serif text-[19px] leading-relaxed text-[#2C2A29] transition-colors placeholder:font-sans placeholder:text-sm placeholder:text-[#8C867E] focus:border-[#EA5B25] focus:outline-none"
+                  />
 
+                  {errorMsg && (
+                    <p role="alert" className="mt-2 font-sans text-xs text-[#EA5B25]">
+                      {errorMsg}
+                    </p>
+                  )}
+                </div>
+                <div className="flex min-h-[68px] items-center justify-end border-t border-[#ECE8DF] px-4 py-3 sm:px-7">
                   <button
                     type="button"
                     disabled={isEvaluating}
                     onClick={handleEvaluateSentence}
-                    className="skeuo-btn-orange inline-flex items-center gap-2 rounded-lg px-4 py-2 font-sans text-xs font-semibold tracking-wide text-white disabled:opacity-60"
+                    className={`skeuo-btn-orange inline-flex min-h-9 items-center gap-2 rounded-xl px-5 py-2 font-sans text-xs font-semibold text-white disabled:opacity-60 ${keyboardFocusClass}`}
                   >
                     {isEvaluating ? (
                       <>
@@ -1154,213 +1135,213 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                     )}
                   </button>
                 </div>
-              </div>
+              </section>
+            </div>
 
-              {/* 三、考官三阶批改反馈（原地展开、瑞士网格对齐 + 划词马克笔高亮） */}
-              {activeEvaluation && (
-                <div
-                  ref={feedbackContainerRef}
-                  className="relative mt-8 border-t border-dashed border-[#D8D3C8] pt-7"
-                >
-                  <SelectionHighlightPopover
-                    containerRef={feedbackContainerRef}
-                    aiConfig={aiConfig}
-                    sourceLabel={`小练习 · ${taskGroupTitle} ${currentSubTypeMeta.label}`}
-                    isTextHighlighted={isMicroTextHighlighted}
-                    onApplyHighlight={handleApplyMicroHighlight}
-                    onEraseHighlight={handleEraseMicroHighlight}
-                    onIngestVocab={onIngestVocab}
-                    onExcerptToNotes={onExcerptToNotes}
-                    onOpenApiKeyModal={onOpenApiKeyModal}
-                  />
+            {/* 三、考官三阶批改反馈（原地展开、瑞士网格对齐 + 划词马克笔高亮） */}
+            {activeEvaluation && (
+              <div
+                ref={feedbackContainerRef}
+                className="relative border-t border-[#E6E1D8] px-4 py-6 sm:px-8"
+              >
+                <SelectionHighlightPopover
+                  containerRef={feedbackContainerRef}
+                  aiConfig={aiConfig}
+                  sourceLabel={`小练习 · ${taskGroupTitle} ${currentSubTypeMeta.label}`}
+                  isTextHighlighted={isMicroTextHighlighted}
+                  onApplyHighlight={handleApplyMicroHighlight}
+                  onEraseHighlight={handleEraseMicroHighlight}
+                  onIngestVocab={onIngestVocab}
+                  onExcerptToNotes={onExcerptToNotes}
+                  onOpenApiKeyModal={onOpenApiKeyModal}
+                />
 
-                  <div className="space-y-6">
-                    {/* 1. Diagnosis · 诊断（附带等高对齐分数 ● Band 6.0） */}
-                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
-                      <div className="flex items-baseline justify-between sm:justify-start sm:gap-2.5">
-                        <span className="font-mono text-xs tracking-wider text-[#8C867E]">
-                          Diagnosis · 诊断
-                        </span>
-                      </div>
-
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <p className="font-sans text-sm leading-relaxed text-[#2C2A29]">
-                          {renderTextWithHighlights(
-                            activeEvaluation.diagnosis,
-                            activeEvaluation.highlights
-                          )}
-                        </p>
-                        <span
-                          style={{
-                            fontVariantNumeric: 'lining-nums tabular-nums',
-                          }}
-                          className="inline-flex shrink-0 items-center gap-1.5 font-mono text-xs font-semibold text-[#262523]"
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
-                          <span>Band {activeEvaluation.band.toFixed(1)}</span>
-                        </span>
-                      </div>
+                <div className="space-y-6">
+                  {/* 1. Diagnosis · 诊断（附带等高对齐分数 ● Band 6.0） */}
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
+                    <div className="flex items-baseline justify-between sm:justify-start sm:gap-2.5">
+                      <span className="font-mono text-xs tracking-wider text-[#8C867E]">
+                        Diagnosis · 诊断
+                      </span>
                     </div>
 
-                    {/* 2. Band 7.0 · 顺畅修改 */}
-                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p className="font-sans text-sm leading-relaxed text-[#2C2A29]">
+                        {renderTextWithHighlights(
+                          activeEvaluation.diagnosis,
+                          activeEvaluation.highlights
+                        )}
+                      </p>
                       <span
                         style={{
                           fontVariantNumeric: 'lining-nums tabular-nums',
                         }}
-                        className="font-mono text-xs tracking-wider text-[#8C867E]"
+                        className="inline-flex shrink-0 items-center gap-1.5 font-mono text-xs font-semibold text-[#262523]"
                       >
-                        Band 7.0 · 顺畅修改
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
+                        <span>Band {activeEvaluation.band.toFixed(1)}</span>
                       </span>
+                    </div>
+                  </div>
 
+                  {/* 2. Band 7.0 · 顺畅修改 */}
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
+                    <span
+                      style={{
+                        fontVariantNumeric: 'lining-nums tabular-nums',
+                      }}
+                      className="font-mono text-xs tracking-wider text-[#8C867E]"
+                    >
+                      Band 7.0 · 顺畅修改
+                    </span>
+
+                    <p className="font-serif text-[17px] leading-relaxed text-[#2C2A29]">
+                      {renderTextWithHighlights(
+                        activeEvaluation.band7Sentence,
+                        activeEvaluation.highlights,
+                        { parseMarkdownBoldOrange: true }
+                      )}
+                    </p>
+                  </div>
+
+                  {/* 3. Band 8.0 · 高分重写 + Structure 公式 + + 摘录至笔记 */}
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
+                    <span
+                      style={{
+                        fontVariantNumeric: 'lining-nums tabular-nums',
+                      }}
+                      className="font-mono text-xs tracking-wider text-[#8C867E]"
+                    >
+                      Band 8.0 · 高分重写
+                    </span>
+
+                    <div>
                       <p className="font-serif text-[17px] leading-relaxed text-[#2C2A29]">
                         {renderTextWithHighlights(
-                          activeEvaluation.band7Sentence,
+                          activeEvaluation.band8Sentence,
                           activeEvaluation.highlights,
                           { parseMarkdownBoldOrange: true }
                         )}
                       </p>
-                    </div>
 
-                    {/* 3. Band 8.0 · 高分重写 + Structure 公式 + + 摘录至笔记 */}
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                        {activeEvaluation.structureFormula ? (
+                          <p className="font-mono text-xs leading-relaxed text-[#8C867E]">
+                            Structure:{' '}
+                            {renderTextWithHighlights(
+                              activeEvaluation.structureFormula,
+                              activeEvaluation.highlights
+                            )}
+                          </p>
+                        ) : (
+                          <span />
+                        )}
+
+                        {onExcerptToNotes &&
+                          (() => {
+                            const excerptSourceKey = `mp:${activeQuestionKey}:${activeEvaluation.band8Sentence.slice(0, 40)}`;
+                            const isExcerpted =
+                              excerptedKeys?.has(excerptSourceKey) ?? false;
+
+                            const handleExcerptClick = () => {
+                              if (isExcerpted) return;
+                              const headerTag = isFreeRewrite
+                                ? `${taskGroupTitle} · ${currentSubTypeMeta.label} · 自由改写`
+                                : `${taskGroupTitle} · ${currentSubTypeMeta.label}${
+                                    currentQuestion?.targetWord
+                                      ? ` · Target: ${currentQuestion.targetWord}`
+                                      : ''
+                                  }`;
+                              const lines = [
+                                `## 【小练习复盘】${headerTag}（Band ${activeEvaluation.band.toFixed(1)} ➔ 8.0）`,
+                                ...(!isFreeRewrite &&
+                                currentQuestion?.chineseMeaning
+                                  ? [
+                                      `- 中文原意：${currentQuestion.chineseMeaning}`,
+                                    ]
+                                  : []),
+                                `- 您的原句：${userSentence.trim()}`,
+                                `- 考官诊断：${activeEvaluation.diagnosis}`,
+                                `- Band 8.0 重写：${activeEvaluation.band8Sentence}`,
+                                ...(activeEvaluation.structureFormula
+                                  ? [
+                                      `> Structure: ${activeEvaluation.structureFormula}`,
+                                    ]
+                                  : []),
+                              ];
+                              onExcerptToNotes({
+                                sourceKey: excerptSourceKey,
+                                markdownBlock: lines.join('\n'),
+                              });
+                            };
+
+                            return (
+                              <button
+                                type="button"
+                                disabled={isExcerpted}
+                                onClick={handleExcerptClick}
+                                className={`shrink-0 ${
+                                  isExcerpted
+                                    ? tactileMicroBtnDisabledClass
+                                    : tactileMicroBtnClass
+                                }`}
+                              >
+                                {isExcerpted ? '✓ 已摘录' : '+ 摘录至笔记'}
+                              </button>
+                            );
+                          })()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Lexicon · 重点词伙 */}
+                  {activeEvaluation.lexicon.length > 0 && (
                     <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
-                      <span
-                        style={{
-                          fontVariantNumeric: 'lining-nums tabular-nums',
-                        }}
-                        className="font-mono text-xs tracking-wider text-[#8C867E]"
-                      >
-                        Band 8.0 · 高分重写
+                      <span className="font-mono text-xs tracking-wider text-[#8C867E]">
+                        Lexicon · 重点词伙
                       </span>
 
-                      <div>
-                        <p className="font-serif text-[17px] leading-relaxed text-[#2C2A29]">
-                          {renderTextWithHighlights(
-                            activeEvaluation.band8Sentence,
-                            activeEvaluation.highlights,
-                            { parseMarkdownBoldOrange: true }
-                          )}
-                        </p>
+                      <div className="space-y-2.5">
+                        {activeEvaluation.lexicon.map((lex, idx) => {
+                          const alreadyInBank = isWordInVocabBank(lex.word);
+                          return (
+                            <div
+                              key={`${lex.word}-${idx}`}
+                              className="flex flex-wrap items-center justify-between gap-3"
+                            >
+                              <div className="flex flex-wrap items-baseline gap-2">
+                                <span className="font-serif text-[16px] font-medium text-[#2C2A29]">
+                                  {lex.word}
+                                </span>
+                                <span className="font-mono text-xs text-[#8C867E]">
+                                  {lex.pos}
+                                </span>
+                                <span className="font-sans text-xs text-[#5C5852]">
+                                  {lex.meaning}
+                                </span>
+                              </div>
 
-                        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-                          {activeEvaluation.structureFormula ? (
-                            <p className="font-mono text-xs leading-relaxed text-[#8C867E]">
-                              Structure:{' '}
-                              {renderTextWithHighlights(
-                                activeEvaluation.structureFormula,
-                                activeEvaluation.highlights
-                              )}
-                            </p>
-                          ) : (
-                            <span />
-                          )}
-
-                          {onExcerptToNotes &&
-                            (() => {
-                              const excerptSourceKey = `mp:${activeQuestionKey}:${activeEvaluation.band8Sentence.slice(0, 40)}`;
-                              const isExcerpted =
-                                excerptedKeys?.has(excerptSourceKey) ?? false;
-
-                              const handleExcerptClick = () => {
-                                if (isExcerpted) return;
-                                const headerTag = isFreeRewrite
-                                  ? `${taskGroupTitle} · ${currentSubTypeMeta.label} · 自由改写`
-                                  : `${taskGroupTitle} · ${currentSubTypeMeta.label}${
-                                      currentQuestion?.targetWord
-                                        ? ` · Target: ${currentQuestion.targetWord}`
-                                        : ''
-                                    }`;
-                                const lines = [
-                                  `## 【小练习复盘】${headerTag}（Band ${activeEvaluation.band.toFixed(1)} ➔ 8.0）`,
-                                  ...(!isFreeRewrite &&
-                                  currentQuestion?.chineseMeaning
-                                    ? [
-                                        `- 中文原意：${currentQuestion.chineseMeaning}`,
-                                      ]
-                                    : []),
-                                  `- 您的原句：${userSentence.trim()}`,
-                                  `- 考官诊断：${activeEvaluation.diagnosis}`,
-                                  `- Band 8.0 重写：${activeEvaluation.band8Sentence}`,
-                                  ...(activeEvaluation.structureFormula
-                                    ? [
-                                        `> Structure: ${activeEvaluation.structureFormula}`,
-                                      ]
-                                    : []),
-                                ];
-                                onExcerptToNotes({
-                                  sourceKey: excerptSourceKey,
-                                  markdownBlock: lines.join('\n'),
-                                });
-                              };
-
-                              return (
-                                <button
-                                  type="button"
-                                  disabled={isExcerpted}
-                                  onClick={handleExcerptClick}
-                                  className={`shrink-0 ${
-                                    isExcerpted
-                                      ? tactileMicroBtnDisabledClass
-                                      : tactileMicroBtnClass
-                                  }`}
-                                >
-                                  {isExcerpted ? '✓ 已摘录' : '+ 摘录至笔记'}
-                                </button>
-                              );
-                            })()}
-                        </div>
+                              <button
+                                type="button"
+                                disabled={alreadyInBank}
+                                onClick={() => handleIngestLexicon(lex)}
+                                className={`shrink-0 ${
+                                  alreadyInBank
+                                    ? tactileMicroBtnDisabledClass
+                                    : tactileMicroBtnClass
+                                }`}
+                              >
+                                {alreadyInBank ? '✓ 已入库' : '+ 入库'}
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-
-                    {/* 4. Lexicon · 重点词伙 */}
-                    {activeEvaluation.lexicon.length > 0 && (
-                      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[180px_1fr] sm:items-baseline sm:gap-6">
-                        <span className="font-mono text-xs tracking-wider text-[#8C867E]">
-                          Lexicon · 重点词伙
-                        </span>
-
-                        <div className="space-y-2.5">
-                          {activeEvaluation.lexicon.map((lex, idx) => {
-                            const alreadyInBank = isWordInVocabBank(lex.word);
-                            return (
-                              <div
-                                key={`${lex.word}-${idx}`}
-                                className="flex flex-wrap items-center justify-between gap-3"
-                              >
-                                <div className="flex flex-wrap items-baseline gap-2">
-                                  <span className="font-serif text-[16px] font-medium text-[#2C2A29]">
-                                    {lex.word}
-                                  </span>
-                                  <span className="font-mono text-xs text-[#8C867E]">
-                                    {lex.pos}
-                                  </span>
-                                  <span className="font-sans text-xs text-[#5C5852]">
-                                    {lex.meaning}
-                                  </span>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  disabled={alreadyInBank}
-                                  onClick={() => handleIngestLexicon(lex)}
-                                  className={`shrink-0 ${
-                                    alreadyInBank
-                                      ? tactileMicroBtnDisabledClass
-                                      : tactileMicroBtnClass
-                                  }`}
-                                >
-                                  {alreadyInBank ? '✓ 已入库' : '+ 入库'}
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
       </section>
