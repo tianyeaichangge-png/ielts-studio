@@ -247,9 +247,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
   const [isEvaluating, setIsEvaluating] = useState(false);
-  const [classificationStatus, setClassificationStatus] = useState('');
-  const [classificationRetry, setClassificationRetry] = useState(0);
-  const classificationController = useRef<AbortController | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [apiAlertModal, setApiAlertModal] = useState<{
     title: string;
@@ -463,9 +460,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         'Mixed chart';
       return `${en} · ${zh}`;
     }
-    if (task1Draft.chartType || task1Draft.prompt.trim()) {
-      const guessed = task1Draft.chartType || detectTask1ChartType(task1Draft.prompt);
-      if (!guessed) return '待识别 · 自由命题图表';
+    const guessed = detectTask1ChartType(task1Draft.prompt);
+    if (guessed) {
       const zh = guessed === 'mixed' ? '组合图' : guessed;
       const en = TASK1_CHART_TYPE_ENGLISH[guessed] || 'Mixed chart';
       return `${en} · ${zh}`;
@@ -475,16 +471,16 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   // Debounce text edits; cancel previous recognition when changing input, topic or module.
   useEffect(() => {
-    if (activeTaskType !== 'task1' || isHistoryMode || task1Draft.viewStep !== 'writing' || selectedTask1TopicItem?.isBuiltIn) {
-      setClassificationStatus('');
-      return;
-    }
-    if (task1Draft.chartTypeManuallySelected && task1Draft.chartType) {
-      setClassificationStatus('已手动选择题型');
+    if (
+      activeTaskType !== 'task1' ||
+      isHistoryMode ||
+      task1Draft.viewStep !== 'writing' ||
+      selectedTask1TopicItem?.isBuiltIn ||
+      task1Draft.chartTypeManuallySelected
+    ) {
       return;
     }
     const controller = new AbortController();
-    classificationController.current = controller;
     const prompt = task1Draft.prompt;
     const image = task1Draft.image;
     const localType = detectTask1ChartType(prompt);
@@ -499,24 +495,25 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     };
     saveType(image ? undefined : localType);
     const needsAI = Boolean(image || (prompt.trim() && !localType));
-    setClassificationStatus(needsAI
-      ? aiConfig.apiKey.trim() ? '正在识别题型…' : '请配置 API Key 以自动识别，或手动选择题型。'
-      : localType ? '已根据题干自动归类' : '输入题干或上传图片后自动识别');
+    if (!needsAI || !aiConfig.apiKey.trim()) return;
+
     const timer = window.setTimeout(async () => {
-      if (controller.signal.aborted || !needsAI || !aiConfig.apiKey.trim()) return;
       try {
-        const result = await identifyTask1ChartTypeWithAI({ prompt, image, apiKey: aiConfig.apiKey,
-          endpoint: aiConfig.endpoint, signal: controller.signal });
-        if (controller.signal.aborted) return;
+        const result = await identifyTask1ChartTypeWithAI({
+          prompt,
+          image,
+          apiKey: aiConfig.apiKey,
+          endpoint: aiConfig.endpoint,
+          signal: controller.signal,
+        });
         saveType(result.chartType);
-        setClassificationStatus('已自动归类');
-      } catch (error) {
-        if (!controller.signal.aborted) setClassificationStatus(error instanceof Error ? error.message : '识别失败，请重试或手动选择。');
+      } catch {
+        // Classification is optional. The user can still submit for evaluation.
       }
     }, 700);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [activeTaskType, isHistoryMode, task1Draft.viewStep, selectedTask1TopicItem?.isBuiltIn, task1Draft.selectedTopicId,
-    task1Draft.prompt, task1Draft.image, aiConfig.apiKey, aiConfig.endpoint, classificationRetry,
+    task1Draft.prompt, task1Draft.image, task1Draft.chartTypeManuallySelected, aiConfig.apiKey, aiConfig.endpoint,
     setTask1Draft, setTask1TopicBank]);
 
   const currentStep =
@@ -1245,14 +1242,13 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       return;
     }
 
-    if (activeTaskType === 'task1' && !selectedTask1TopicItem?.isBuiltIn && !task1Draft.chartType) {
-      setErrorMsg('请等待题型识别完成，或手动选择题型后再批改。');
-      return;
-    }
+    const initialChartType = activeTaskType === 'task1'
+      ? task1Draft.chartType ||
+        (selectedTask1TopicItem?.isBuiltIn ? selectedTask1TopicItem.chartType : undefined)
+      : undefined;
 
-    // Even before API returns, if Task 1 custom prompt is submitted, archive the prompt & image into personal topic bank
-    if (activeTaskType === 'task1') {
-      const initialChartType = task1Draft.chartType || inferTask1ChartType(activePrompt, activeEssay);
+    // Archive known chart types immediately. Otherwise use the evaluation result.
+    if (initialChartType) {
       upsertTask1TopicBank({
         topicId: task1Draft.selectedTopicId,
         prompt: activePrompt.trim(),
@@ -1291,7 +1287,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
       const resolvedChartType: Task1ChartType | undefined =
         activeTaskType === 'task1'
-          ? task1Draft.chartType || inferTask1ChartType(
+          ? initialChartType || inferTask1ChartType(
               activePrompt,
               activeEssay,
               newReport.chartType
@@ -2174,40 +2170,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               </div>
 
               {/* Left Page Lower Half: Task 1 Exclusive High-Res Chart Area */}
-              {displayedTaskType === 'task1' && !isHistoryMode && !selectedTask1TopicItem?.isBuiltIn && (
-                <div className="border-t border-[#ECE8DF] px-7 py-3">
-                  <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-[#8C867E]">
-                    <span role="status">{selectedTask1TopicItem?.isBuiltIn ? '题型' : classificationStatus}</span>
-                    {!selectedTask1TopicItem?.isBuiltIn && (
-                      <button type="button" onClick={() => {
-                        setTask1Draft(prev => ({ ...prev, chartTypeManuallySelected: false }));
-                        setClassificationRetry(n => n + 1);
-                      }}
-                        className="skeuo-btn-light rounded-md px-2 py-1">重新识别</button>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5" aria-label="Task 1 题型">
-                    {TASK1_CATALOG_FILTERS.filter(item => item.key !== 'all').map(item => (
-                      <button key={item.key} type="button"
-                        aria-pressed={(task1Draft.chartType || selectedTask1TopicItem?.chartType) === item.key}
-                        onClick={() => {
-                          classificationController.current?.abort();
-                          setTask1Draft(prev => ({ ...prev, chartType: item.key as Task1ChartType, chartTypeManuallySelected: true }));
-                          setTask1TopicBank(prev => prev.map(topic => topic.id === task1Draft.selectedTopicId && !topic.isBuiltIn
-                            ? { ...topic, chartType: item.key as Task1ChartType } : topic));
-                          setClassificationStatus('已手动选择题型');
-                        }}
-                        className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
-                          (task1Draft.chartType || selectedTask1TopicItem?.chartType) === item.key
-                            ? 'border-[#DCD6CC] bg-[#FAF8F5] font-medium text-[#2C2A29] shadow-sm'
-                            : 'border-transparent text-[#8C867E] hover:text-[#2C2A29]'}`}>
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                  {!selectedTask1TopicItem?.isBuiltIn && <p className="mt-2 text-[11px] text-[#8C867E]">图片自动识别会发送至 API 设置中的服务。未识别正确时可点击题型修正。</p>}
-                </div>
-              )}
               {displayedTaskType === 'task1' && (
                 <div className="flex-1 border-t border-dashed border-[#DFDBD0] px-7 pt-4 pb-7">
                   <div className="mb-2.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
