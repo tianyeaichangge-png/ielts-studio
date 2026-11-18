@@ -1,3 +1,4 @@
+import { useAutosizeTextarea } from '../hooks/useAutosizeTextarea';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   ChevronLeft,
@@ -40,6 +41,7 @@ import {
   inferTask1ChartType,
   MASTER_WRITING_PROMPTS,
   MasterWritingPrompt,
+  resolveTask1ChartImage,
   TASK1_CHART_TYPE_ENGLISH,
 } from '../lib/samplePrompts';
 import {
@@ -50,6 +52,7 @@ import {
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { detectTask1ChartType, identifyTask1ChartTypeWithAI } from '../lib/task1ChartClassification';
 import { MicroPracticeView } from './MicroPracticeView';
+import { WritingWorkspace } from './WritingWorkspace';
 import { SelectionHighlightPopover } from './SelectionHighlightPopover';
 
 interface WritingModuleProps {
@@ -187,8 +190,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       viewStep: 'catalog',
       prompt: '',
       image: null,
-      chartType: undefined,
-      chartTypeManuallySelected: false,
       content: '',
       timer: 1200,
       gradedReportId: null,
@@ -231,9 +232,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   >('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // 4. Anti-Accidental-Loss Confirmation State when returning to catalog
-  const [confirmBackToCatalog, setConfirmBackToCatalog] = useState(false);
-
   // 5. Countdown Timer Runtime Flags (Remaining seconds are stored inside task1Draft.timer / task2Draft.timer)
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
   const [isTask1TimeUpLocked, setIsTask1TimeUpLocked] =
@@ -255,7 +253,11 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const chartZoomButtonRef = useRef<HTMLButtonElement | null>(null);
+  const timerButtonRef = useRef<HTMLButtonElement | null>(null);
   const customPromptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const essayTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const gradedEssayTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const reportSheetBodyRef = useRef<HTMLDivElement | null>(null);
 
   // Automatically backfill & sync Task 1 historical reports + built-in SVG chart topics into task1TopicBank
@@ -521,6 +523,10 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       ? task1Draft.viewStep || 'catalog'
       : task2Draft.viewStep || 'catalog';
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeTaskType, currentStep, isHistoryMode, isMicroPracticeMode]);
+
   // Strictly isolated history list for the currently active task ('task1' vs 'task2')
   const activeTaskReports =
     activeTaskType === 'task1' ? task1Reports : task2Reports;
@@ -550,6 +556,16 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   const draftReport = activeTaskType === 'task1' ? task1Report : task2Report;
   const activeRightReport = isHistoryMode ? activeHistoryReport : draftReport;
+
+  const reportPaneRef = useRef<HTMLDivElement>(null);
+  const hasReport = Boolean(activeRightReport);
+
+  useEffect(() => {
+    if (hasReport && window.matchMedia('(max-width: 899px)').matches) {
+      reportPaneRef.current?.focus({ preventScroll: true });
+      reportPaneRef.current?.scrollIntoView({ block: 'start' });
+    }
+  }, [hasReport, isHistoryMode, isMicroPracticeMode]);
 
   const handleApplyReportHighlight = useCallback(
     (selectedText: string, color: HighlightMarkerColor) => {
@@ -602,12 +618,13 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     ? task1Draft.prompt
     : task2ResolvedPrompt;
 
+  const task1DraftChartImage = resolveTask1ChartImage(task1Draft.image);
   const displayedChartImage = isHistoryMode
-    ? activeHistoryReport?.image ||
-      activeHistoryReport?.chartImageDataUrl ||
-      null
+    ? resolveTask1ChartImage(
+      activeHistoryReport?.image || activeHistoryReport?.chartImageDataUrl
+    )
     : activeTaskType === 'task1'
-    ? task1Draft.image || null
+    ? task1DraftChartImage
     : null;
 
   const displayedEssay = isHistoryMode
@@ -655,19 +672,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     }
   };
 
-  // Auto-resize custom prompt textarea height smoothly
-  useEffect(() => {
-    const el = customPromptTextareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.max(68, el.scrollHeight)}px`;
-  }, [
-    displayedPrompt,
-    currentStep,
-    isTask2CustomPrompt,
-    displayedTaskType,
-    activeTaskType,
-  ]);
+  const isWritingDraft =
+    !isMicroPracticeMode && !isHistoryMode && currentStep !== 'catalog' && !activeRightReport;
+  useAutosizeTextarea(
+    customPromptTextareaRef,
+    isWritingDraft && (displayedTaskType === 'task1' || isTask2CustomPrompt) ? displayedPrompt : undefined
+  );
+  useAutosizeTextarea(essayTextareaRef, isWritingDraft ? displayedEssay : undefined);
+  useAutosizeTextarea(gradedEssayTextareaRef, activeRightReport && !isMicroPracticeMode ? displayedEssay : undefined);
 
   // Set of normalized words already in vocabCards for instant [ ✓ 已收录 ] state
   const existingVocabSet = useMemo(() => {
@@ -756,6 +768,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const handleResetTimer = () => {
     if (isHistoryMode) return;
     resetTimerForTask(activeTaskType);
+    timerButtonRef.current?.focus();
   };
 
   // Handle saving an image File/Blob to Task 1 draft state ('ielts_draft_task1')
@@ -802,18 +815,23 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     return () => window.removeEventListener('paste', handleGlobalPaste);
   }, [isHistoryMode, activeTaskType, handleAttachChartBlob]);
 
+  const closeChartPreview = useCallback(() => {
+    setIsLightboxOpen(false);
+    chartZoomButtonRef.current?.focus({ preventScroll: true });
+  }, []);
+
   // Close Lightbox or History Drawer on Escape key
   useEffect(() => {
     if (!isLightboxOpen && !isHistoryDrawerOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setIsLightboxOpen(false);
+        if (isLightboxOpen) closeChartPreview();
         setIsHistoryDrawerOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLightboxOpen, isHistoryDrawerOpen]);
+  }, [closeChartPreview, isLightboxOpen, isHistoryDrawerOpen]);
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -823,9 +841,9 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     e.target.value = '';
   };
 
-  const handleRemoveChartImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleRemoveChartImage = () => {
     if (isHistoryMode) return;
+    setIsLightboxOpen(false);
     setTask1Draft((prev) => ({
       ...prev,
       image: null,
@@ -842,7 +860,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     }
     setIsHistoryDrawerOpen(false);
     setIsTimerRunning(false);
-    setConfirmBackToCatalog(false);
     setErrorMsg(null);
     setActiveTaskType(nextType);
     if (nextType === 'task1') {
@@ -861,7 +878,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const handleEnterMicroPractice = () => {
     setIsTimerRunning(false);
     setIsHistoryDrawerOpen(false);
-    setConfirmBackToCatalog(false);
     setErrorMsg(null);
     setIsMicroPracticeMode(true);
   };
@@ -953,36 +969,61 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     [setDeletedTask1Keys, setTask1TopicBank]
   );
 
+  const task1ReferencePrompt = task1Report?.prompt ?? selectedTask1TopicItem?.prompt ?? '';
+  const task1ReferenceImage = resolveTask1ChartImage(
+    task1Report?.image ?? task1Report?.chartImageDataUrl ?? selectedTask1TopicItem?.chartImage
+  );
+  const hasTask1DraftChanges =
+    task1Draft.content.trim() !== (task1Report?.essay.trim() ?? '') ||
+    task1Draft.prompt.trim() !== task1ReferencePrompt.trim() ||
+    task1DraftChartImage !== task1ReferenceImage;
+  const hasTask2DraftChanges =
+    task2Draft.content.trim() !== (task2Report?.essay.trim() ?? '') ||
+    (isTask2CustomPrompt &&
+      task2Draft.customPrompt.trim() !== (task2Report?.prompt.trim() ?? ''));
+
+  const confirmTopicChange = (nextTopicId: string) => {
+    const currentTopicId = activeTaskType === 'task1'
+      ? task1Draft.selectedTopicId || 'custom'
+      : task2Draft.selectedTopicId;
+    const hasDraftChanges = activeTaskType === 'task1' ? hasTask1DraftChanges : hasTask2DraftChanges;
+    return currentTopicId === nextTopicId || !hasDraftChanges ||
+      window.confirm('每个 Task 只能保留一份草稿。换题会替换当前未提交的内容，继续吗？');
+  };
+
   // Select "自由命题 · 新建图表作文 (Custom Chart Prompt)" from Task 1 Catalog
   const handleSelectTask1CustomPromptMode = () => {
+    if (!confirmTopicChange('custom')) return;
     setIsTimerRunning(false);
     setTask1Draft((prev) => {
-      const isAlreadyCustom =
-        !prev.selectedTopicId || prev.selectedTopicId === 'custom';
-      const keepDraft = isAlreadyCustom && !prev.gradedReportId;
+      const isAlreadyCustom = !prev.selectedTopicId || prev.selectedTopicId === 'custom';
+      if (isAlreadyCustom && (!task1Report || hasTask1DraftChanges)) {
+        return { ...prev, selectedTopicId: 'custom', viewStep: 'writing' };
+      }
       return {
         ...prev,
         selectedTopicId: 'custom',
         viewStep: 'writing',
-        chartType: keepDraft ? prev.chartType : undefined,
-        chartTypeManuallySelected: keepDraft ? prev.chartTypeManuallySelected : false,
-        prompt: keepDraft ? prev.prompt : '',
-        image: keepDraft ? prev.image : null,
-        content: keepDraft ? prev.content : '',
-        timer: keepDraft ? prev.timer : 1200,
+        chartType: undefined,
+        chartTypeManuallySelected: false,
+        prompt: '',
+        image: null,
+        content: '',
+        timer: 1200,
         gradedReportId: null,
       };
     });
-    setConfirmBackToCatalog(false);
     setErrorMsg(null);
   };
 
   // Select a Task 1 Topic Card from Task 1 Catalog (Carries [原题目 + 原图表图片] into Dual-Column Workbench for Rewrite)
   const handleSelectTask1TopicCard = (item: Task1TopicBankItem) => {
+    if (!confirmTopicChange(item.id)) return;
     setIsTimerRunning(false);
     setTask1Draft((prev) => {
-      const isSameUnfinishedTopic =
-        prev.selectedTopicId === item.id && !prev.gradedReportId;
+      if (prev.selectedTopicId === item.id && (!task1Report || hasTask1DraftChanges)) {
+        return { ...prev, viewStep: 'writing' };
+      }
       return {
         ...prev,
         selectedTopicId: item.id,
@@ -991,16 +1032,15 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         chartTypeManuallySelected: false,
         prompt: item.prompt,
         image: item.chartImage || null,
-        content: isSameUnfinishedTopic ? prev.content : '',
-        timer: isSameUnfinishedTopic ? prev.timer : 1200,
+        content: '',
+        timer: 1200,
         gradedReportId: null,
       };
     });
-    setConfirmBackToCatalog(false);
     setErrorMsg(null);
   };
 
-  // Click [ 查看上次批改 ] on a Task 1 Topic Card
+  // Click 查看上次批改 on a Task 1 Topic Card
   const handleViewTask1TopicLastReport = (
     item: Task1TopicBankItem,
     e: React.MouseEvent
@@ -1038,6 +1078,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
   // Select "✍️ 自由命题 (Custom Prompt)" from Task 2 Catalog
   const handleSelectCustomPromptMode = () => {
+    if (!confirmTopicChange('custom')) return;
     setIsTimerRunning(false);
     setTask2Draft((prev) => {
       const isAlreadyCustom = prev.selectedTopicId === 'custom';
@@ -1050,12 +1091,12 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         gradedReportId: isAlreadyCustom ? prev.gradedReportId : null,
       };
     });
-    setConfirmBackToCatalog(false);
     setErrorMsg(null);
   };
 
   // Select a built-in Master Prompt from Task 2 Catalog
   const handleSelectBuiltInPrompt = (item: MasterWritingPrompt) => {
+    if (!confirmTopicChange(item.id)) return;
     setIsTimerRunning(false);
     setTask2Draft((prev) => {
       const isSameTopic = prev.selectedTopicId === item.id;
@@ -1068,80 +1109,18 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         gradedReportId: isSameTopic ? prev.gradedReportId : null,
       };
     });
-    setConfirmBackToCatalog(false);
     setErrorMsg(null);
   };
 
-  // Click [ ← 重选题目 ] from Task 1 or Task 2 immersive writing pad
-  const handleRequestBackToCatalog = () => {
-    if (isHistoryMode) {
-      setViewMode('draft');
-      return;
-    }
-    if (activeTaskType === 'task1') {
-      if (task1WordCount > 10 && !task1Report) {
-        setConfirmBackToCatalog(true);
-        return;
-      }
-      setIsTimerRunning(false);
-      setConfirmBackToCatalog(false);
-      setErrorMsg(null);
-      setTask1Draft((prev) => ({
-        ...prev,
-        viewStep: 'catalog',
-      }));
-      return;
-    }
-
-    if (task2WordCount > 10 && !task2Report) {
-      setConfirmBackToCatalog(true);
-      return;
-    }
+  // Returning to the catalog preserves the active task's draft.
+  const handleReturnToCatalog = () => {
     setIsTimerRunning(false);
-    setConfirmBackToCatalog(false);
-    setErrorMsg(null);
-    setTask2Draft((prev) => ({
-      ...prev,
-      viewStep: 'catalog',
-    }));
-  };
-
-  // Confirmed clearing of Task 1 or Task 2 draft when clicking [ ← 重选题目 ] -> [ 继续 ]
-  const handleConfirmReturnAndClear = () => {
-    setIsTimerRunning(false);
-    setConfirmBackToCatalog(false);
     setErrorMsg(null);
     if (activeTaskType === 'task1') {
-      setIsTask1TimeUpLocked(false);
-      setTask1TimedWords(null);
-      setTask1Draft((prev) => ({
-        ...prev,
-        viewStep: 'catalog',
-        prompt:
-          !prev.selectedTopicId || prev.selectedTopicId === 'custom'
-            ? ''
-            : prev.prompt,
-        image:
-          !prev.selectedTopicId || prev.selectedTopicId === 'custom'
-            ? null
-            : prev.image,
-        content: '',
-        timer: 1200,
-        gradedReportId: null,
-      }));
-      return;
+      setTask1Draft((prev) => ({ ...prev, viewStep: 'catalog' }));
+    } else {
+      setTask2Draft((prev) => ({ ...prev, viewStep: 'catalog' }));
     }
-
-    setIsTask2TimeUpLocked(false);
-    setTask2TimedWords(null);
-    setTask2Draft((prev) => ({
-      ...prev,
-      viewStep: 'catalog',
-      customPrompt: prev.selectedTopicId === 'custom' ? '' : prev.customPrompt,
-      content: '',
-      timer: 2400,
-      gradedReportId: null,
-    }));
   };
 
   // Strictly isolated prompt text change handler
@@ -1184,7 +1163,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const handleStartNewSheet = () => {
     setViewMode('draft');
     setIsTimerRunning(false);
-    setConfirmBackToCatalog(false);
     setErrorMsg(null);
     if (activeTaskType === 'task1') {
       setIsTask1TimeUpLocked(false);
@@ -1358,7 +1336,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   // Open the task-specific History Archive Drawer ('小作文历史记录' or '大作文历史记录')
   const handleEnterHistoryMode = () => {
     setIsTimerRunning(false);
-    setConfirmBackToCatalog(false);
     setErrorMsg(null);
     setIsHistoryDrawerOpen(true);
   };
@@ -1368,7 +1345,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
     setHistoryIndex(index);
     setViewMode('history');
     setIsHistoryDrawerOpen(false);
-    setConfirmBackToCatalog(false);
     setErrorMsg(null);
   };
 
@@ -1400,7 +1376,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const handleReturnToDraft = () => {
     setViewMode('draft');
     setIsHistoryDrawerOpen(false);
-    setConfirmBackToCatalog(false);
     setErrorMsg(null);
   };
 
@@ -1627,56 +1602,42 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   };
 
   const isFinalFiveMinutes = secondsLeft > 0 && secondsLeft <= 300;
-  const hasComparisonReport = Boolean(activeRightReport);
   const showTopTaskSwitcher =
     isMicroPracticeMode || isHistoryMode || currentStep === 'catalog';
 
   return (
-    <div className="mx-auto w-[92vw] max-w-[1280px] pb-14 pt-1">
+    <div className="workspace-module">
       {/* TOP 3-SEGMENT SUB-NAVIGATION BAR: [ Task 1 | Task 2 | 小练习 ] */}
       {showTopTaskSwitcher && (
-        <div className="mb-6 flex items-center justify-center select-none">
-          <div className="skeuo-groove inline-flex items-center rounded-xl p-1 font-sans">
+        <div className="workspace-toolbar workspace-toolbar--center select-none">
+          <nav aria-label="写作导航" className="segmented-control skeuo-groove">
             <button
               type="button"
               onClick={() => handleTopTaskTypeSwitch('task1')}
-              className={`rounded-lg px-5 py-1 text-xs font-medium tracking-wide transition-all ${
-                !isMicroPracticeMode && displayedTaskType === 'task1'
-                  ? 'skeuo-switch-thumb font-semibold text-[#262523]'
-                  : 'text-[#7A7873] hover:text-[#262523]'
-              }`}
+              aria-pressed={!isMicroPracticeMode && displayedTaskType === 'task1'}
+              className={!isMicroPracticeMode && displayedTaskType === 'task1' ? 'skeuo-switch-thumb' : ''}
             >
               Task 1
             </button>
             <button
               type="button"
               onClick={() => handleTopTaskTypeSwitch('task2')}
-              className={`rounded-lg px-5 py-1 text-xs font-medium tracking-wide transition-all ${
-                !isMicroPracticeMode && displayedTaskType === 'task2'
-                  ? 'skeuo-switch-thumb font-semibold text-[#262523]'
-                  : 'text-[#7A7873] hover:text-[#262523]'
-              }`}
+              aria-pressed={!isMicroPracticeMode && displayedTaskType === 'task2'}
+              className={!isMicroPracticeMode && displayedTaskType === 'task2' ? 'skeuo-switch-thumb' : ''}
             >
               Task 2
             </button>
             <button
               type="button"
               onClick={handleEnterMicroPractice}
-              className={`rounded-lg px-5 py-1 text-xs font-medium tracking-wide transition-all ${
-                isMicroPracticeMode
-                  ? 'skeuo-switch-thumb font-semibold text-[#262523]'
-                  : 'text-[#7A7873] hover:text-[#262523]'
-              }`}
+              aria-pressed={isMicroPracticeMode}
+              className={isMicroPracticeMode ? 'skeuo-switch-thumb' : ''}
             >
               小练习
             </button>
-          </div>
+          </nav>
         </div>
       )}
-
-      {/* =====================================================================
-          STEP 0: MICRO-PRACTICE SUBMODULE (小练习 · 单句升格工作台 · max-w-[920px])
-         ===================================================================== */}
       {isMicroPracticeMode ? (
         <MicroPracticeView
           aiConfig={aiConfig}
@@ -1689,16 +1650,10 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       ) : !isHistoryMode &&
         activeTaskType === 'task1' &&
         currentStep === 'catalog' ? (
-        <div className="mx-auto max-w-[1000px]">
-          <section className="skeuo-paper overflow-hidden rounded-2xl">
-            {/* Smartisan Vintage Double Crimson Header Rule */}
-            <div className="pt-4">
-              <div className="h-[2px] w-full bg-[#C97A63]/35" />
-              <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
-            </div>
+        <section>
 
             {/* Catalog Header & Top Chart Type Filter Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E3DA] px-8 py-5">
+            <div className="workspace-toolbar workspace-toolbar--inset">
               {/* Left Chart Type Filter Pills: 全部 | 折线图 | 柱状图 | 饼图 | 表格 | 地图 | 流程图 */}
               <div className="flex flex-wrap items-center gap-1.5">
                 {TASK1_CATALOG_FILTERS.map((cat) => {
@@ -1736,23 +1691,20 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             </div>
 
             {/* Catalog Body: Pinned Custom Chart Prompt Card + Left-Prompt / Right-Thumbnail Topic Cards */}
-            <div className="space-y-3.5 px-8 py-6">
+            <div className="workspace-inset workspace-catalog">
               {/* PINNED TOP SPECIAL CARD: 自由命题 · 新建图表作文 (Custom Chart Prompt) */}
               <button
                 type="button"
                 onClick={handleSelectTask1CustomPromptMode}
-                className="group relative w-full rounded-xl border-2 border-dashed border-[#CBC6B8] bg-[#F6F3EB]/80 p-5 text-left transition-all hover:border-[#262523]/45 hover:bg-[#F3EFE5]"
+                className="catalog-custom group"
               >
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2.5">
                     <span className="inline-flex items-center gap-1.5 font-serif text-base font-semibold text-[#262523]">
                       <PenLine className="h-4 w-4 text-[#EA5B25]" />
                       <span>
                         自由命题 · 新建图表作文 (Custom Chart Prompt)
                       </span>
-                    </span>
-                    <span className="rounded border border-[#D8D4C8] bg-[#FAF8F2] px-2 py-0.5 font-mono text-[10px] tracking-wider text-[#7A7873]">
-                      CUSTOM CHART
                     </span>
                   </div>
 
@@ -1786,15 +1738,18 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   </p>
                 </div>
               ) : (
-                <div className="space-y-3 pt-1">
+                <div className="catalog-grid">
                   {filteredTask1TopicBank.map((item) => {
+                    const chartImage = resolveTask1ChartImage(item.chartImage);
                     const globalIdx =
                       task1TopicBank.findIndex((p) => p.id === item.id) + 1;
                     const formattedNo = String(
                       globalIdx > 0 ? globalIdx : 1
                     ).padStart(2, '0');
                     const enType =
-                      TASK1_CHART_TYPE_ENGLISH[item.chartType] || 'CHART';
+                      TASK1_CHART_TYPE_ENGLISH[item.chartType] || 'Mixed chart';
+                    const zhType =
+                      item.chartType === 'mixed' ? '组合图' : item.chartType;
                     const normPrompt = item.prompt.trim().toLowerCase();
                     const matchingReports = task1Reports.filter(
                       (r) =>
@@ -1826,20 +1781,20 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                         tabIndex={0}
                         onClick={() => handleSelectTask1TopicCard(item)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
+                          if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
                             e.preventDefault();
                             handleSelectTask1TopicCard(item);
                           }
                         }}
-                        className="group relative flex w-full cursor-pointer items-center justify-between gap-5 rounded-xl border border-[#E2DFD5] bg-[#FAF8F2] p-5 text-left shadow-[0_2px_6px_rgba(38,37,35,0.03)] transition-all hover:border-[#C5C0B2] hover:bg-[#F6F3EB]"
+                        className="catalog-topic catalog-topic--chart group cursor-pointer"
                       >
                         {/* Left Column (78% width): Nameplate + Band Stamp + Newsreader Prompt + Bottom Actions */}
-                        <div className="flex w-[78%] min-w-0 flex-1 flex-col justify-between pr-2">
+                        <div className="min-w-0 flex-1">
                           {/* Top Monospace Nameplate + Practiced Band Score */}
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-mono text-xs font-semibold tracking-wider text-[#7A7873]">
-                                NO. {formattedNo} · {enType} · {item.chartType}
+                                NO. {formattedNo} · {enType} · {zhType}
                               </span>
 
                               {effectiveAttempts > 0 && (
@@ -1872,12 +1827,19 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                           </div>
 
                           {/* Middle Prompt Text (Newsreader Serif) */}
-                          <p className="mt-2.5 font-serif text-[14px] leading-relaxed text-[#262523]">
+                          <p
+                            style={{
+                              fontSize: '19px',
+                              lineHeight: '1.8',
+                              color: '#2C2A29',
+                            }}
+                            className="mt-2.5 font-serif text-[19px] leading-[1.8] text-[#2C2A29]"
+                          >
                             {item.prompt}
                           </p>
 
-                          {/* Bottom Right of Left Column: [ 查看上次批改 ] + Hover Delete Icon */}
-                          <div className="mt-3 flex items-center justify-between gap-3">
+                          {/* Bottom Right of Left Column: 查看上次批改 + Hover Delete Icon */}
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                             <span className="font-mono text-[11px] text-[#9E988E] transition-colors group-hover:text-[#262523]">
                               {effectiveAttempts > 0
                                 ? '点击卡片进入二刷重写 →'
@@ -1896,7 +1858,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                                   }
                                   className="rounded border border-[#D8D3C6] bg-[#EFECE3]/80 px-2.5 py-0.5 font-sans text-[11px] font-medium text-[#5C5852] transition-colors hover:border-[#EA5B25]/50 hover:bg-[#FAF0EC] hover:text-[#EA5B25]"
                                 >
-                                  [ 查看上次批改 ]
+                                  查看上次批改
                                 </button>
                               )}
 
@@ -1905,7 +1867,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                                 onClick={(e) =>
                                   handleDeleteTask1TopicCard(item, e)
                                 }
-                                className="rounded p-1 text-[#B5B0A4] opacity-0 transition-all hover:bg-[#EFECE3] hover:text-[#EA5B25] group-hover:opacity-100"
+                                className="rounded p-1 text-[#B5B0A4] transition-colors hover:bg-[#EFECE3] hover:text-[#EA5B25]"
                                 title="从个人图表题库中删除该题"
                                 aria-label="删除该题"
                               >
@@ -1916,18 +1878,18 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                         </div>
 
                         {/* Right Column (22% width, max-w-[160px]): Chart Miniature Thumbnail */}
-                        <div className="w-[22%] max-w-[160px] shrink-0">
-                          {item.chartImage ? (
+                        <div className="catalog-thumbnail">
+                          {chartImage ? (
                             <img
-                              src={item.chartImage}
-                              alt={`${item.chartType} preview`}
-                              className="h-[96px] w-full rounded border border-[#E5E0D5] bg-[#FAF8F5] object-contain p-1.5"
+                              src={chartImage}
+                              alt={`${zhType} preview`}
+                              className="w-full rounded border border-[#E5E0D5] bg-[#FAF8F5] object-contain p-1.5"
                             />
                           ) : (
-                            <div className="flex h-[96px] w-full flex-col items-center justify-center rounded border border-[#E5E0D5] bg-[#FAF8F5] p-1.5 text-center font-mono text-[10px] text-[#ACA79C]">
+                            <div className="flex w-full flex-col items-center justify-center rounded border border-[#E5E0D5] bg-[#FAF8F5] p-1.5 text-center font-mono text-[10px] text-[#ACA79C]">
                               <span>{enType}</span>
                               <span className="mt-0.5 font-sans text-[10px]">
-                                {item.chartType}
+                                {zhType}
                               </span>
                             </div>
                           )}
@@ -1938,21 +1900,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 </div>
               )}
             </div>
-          </section>
-        </div>
+        </section>
       ) : !isHistoryMode &&
         activeTaskType === 'task2' &&
         currentStep === 'catalog' ? (
-        <div className="mx-auto max-w-[1000px]">
-          <section className="skeuo-paper overflow-hidden rounded-2xl">
-            {/* Smartisan Vintage Double Crimson Header Rule */}
-            <div className="pt-4">
-              <div className="h-[2px] w-full bg-[#C97A63]/35" />
-              <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
-            </div>
+        <section>
 
             {/* Catalog Header & Top Theme Filter Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E3DA] px-8 py-5">
+            <div className="workspace-toolbar workspace-toolbar--inset">
               {/* Gentle Theme Filter Pills */}
               <div className="flex flex-wrap items-center gap-1.5">
                 {TASK2_CATALOG_FILTERS.map((cat) => {
@@ -1990,21 +1945,18 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             </div>
 
             {/* Catalog Body: Pinned Custom Prompt Card + Built-in Master Prompts */}
-            <div className="space-y-3.5 px-8 py-6">
+            <div className="workspace-inset workspace-catalog">
               {/* PINNED TOP SPECIAL CARD: 自由命题 (Custom Prompt) */}
               <button
                 type="button"
                 onClick={handleSelectCustomPromptMode}
-                className="group relative w-full rounded-xl border-2 border-dashed border-[#CBC6B8] bg-[#F6F3EB]/80 p-5 text-left transition-all hover:border-[#262523]/45 hover:bg-[#F3EFE5]"
+                className="catalog-custom group"
               >
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5">
                     <span className="inline-flex items-center gap-1.5 font-serif text-base font-semibold text-[#262523]">
                       <PenLine className="h-4 w-4 text-[#EA5B25]" />
                       <span>自由命题 (Custom Prompt)</span>
-                    </span>
-                    <span className="rounded border border-[#D8D4C8] bg-[#FAF8F2] px-2 py-0.5 font-mono text-[10px] tracking-wider text-[#7A7873]">
-                      CUSTOM PROMPT
                     </span>
                   </div>
 
@@ -2027,7 +1979,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               </button>
 
               {/* BUILT-IN MASTER PROMPT CARDS LIST */}
-              <div className="space-y-3 pt-1">
+              <div className="catalog-grid">
                 {filteredTask2Prompts.map((item) => {
                   const globalIdx =
                     task2Prompts.findIndex((p) => p.id === item.id) + 1;
@@ -2045,7 +1997,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                       key={item.id}
                       type="button"
                       onClick={() => handleSelectBuiltInPrompt(item)}
-                      className="group relative w-full rounded-xl border border-[#E2DFD5] bg-[#FAF8F2] p-5 text-left shadow-[0_2px_6px_rgba(38,37,35,0.03)] transition-all hover:border-[#C5C0B2] hover:bg-[#F6F3EB]"
+                      className="catalog-topic group"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5">
@@ -2073,7 +2025,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                         </div>
                       </div>
 
-                      <p className="mt-2.5 font-serif text-[14px] leading-relaxed text-[#262523]">
+                      <p
+                        style={{
+                          fontSize: '19px',
+                          lineHeight: '1.8',
+                          color: '#2C2A29',
+                        }}
+                        className="mt-2.5 font-serif text-[19px] leading-[1.8] text-[#2C2A29]"
+                      >
                         {item.prompt}
                       </p>
                     </button>
@@ -2081,72 +2040,47 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 })}
               </div>
             </div>
-          </section>
-        </div>
+        </section>
       ) : !activeRightReport ? (
         /* =====================================================================
-            STEP 2A: WIDE-SCREEN OPEN-SPREAD DUAL-COLUMN WORKBENCH (左审题 45% · 右书写 55%)
+            STEP 2A: 作文写作工作台
            ===================================================================== */
-        <section
-          className={`skeuo-paper relative overflow-hidden rounded-2xl transition-shadow ${
-            isTimeUpLocked && !isHistoryMode
-              ? 'ring-2 ring-[#EA5B25]/45'
-              : ''
-          }`}
-        >
-          {/* Smartisan Vintage Double Crimson Header Rule Across Open Spread */}
-          <div className="pt-4">
-            <div className="h-[2px] w-full bg-[#C97A63]/35" />
-            <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
-          </div>
+        <WritingWorkspace resizable={displayedTaskType === 'task1'}>
+          <div className="workspace-pane workspace-pane--reference">
+            {/* Left Page Top Header */}
+            <div className="pane-toolbar select-none">
+              <button
+                type="button"
+                onClick={handleReturnToCatalog}
+                className="skeuo-switch-thumb inline-flex h-7 shrink-0 items-center gap-1 rounded-lg px-3 text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
+              >
+                <span className="leading-none">← 返回</span>
+              </button>
+              <span className="workspace-label font-mono">
+                {formatPrintedStamp(displayedTopicTag)}
+              </span>
+              <button
+                type="button"
+                aria-controls="writing-essay"
+                onClick={(event) => {
+                  const editor = essayTextareaRef.current;
+                  if (!editor) return;
+                  editor.toggleAttribute('data-pointer-focus', event.detail > 0);
+                  editor.focus({ preventScroll: true });
+                  editor.scrollIntoView({ block: 'start' });
+                }}
+                className="writing-jump ml-auto text-xs font-medium text-[#6E675E] hover:text-[#2C2A29]"
+              >
+                去写正文 ↓
+              </button>
+            </div>
 
-          {/* Open-Spread 2-Column Grid: Left 45% (Sticky Prompt/Chart/Outline) | Right 55% (Essay Writing) */}
-          <div className="grid grid-cols-1 lg:grid-cols-[45%_55%]">
-            {/* ===============================================================
-                LEFT PAGE (45%): Prompt, High-Res Chart (Task 1) or Outline Notes (Task 2)
-               =============================================================== */}
-            <div className="flex flex-col border-b border-[#E6E1D8] lg:sticky lg:top-4 lg:self-start lg:border-b-0 lg:border-r lg:border-[#E6E1D8]">
-              {/* Left Page Top Header */}
-              <div className="flex min-h-[54px] items-center justify-between gap-3 border-b border-[#ECE8DF] px-7 py-3.5 select-none">
-                <button
-                  type="button"
-                  onClick={handleRequestBackToCatalog}
-                  className="skeuo-switch-thumb inline-flex h-7 shrink-0 items-center gap-1 rounded-lg px-3 text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
-                >
-                  <span className="leading-none">← 重选题目</span>
-                </button>
-                <span className="truncate font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#7A7873] leading-none translate-y-[1px]">
-                  {formatPrintedStamp(displayedTopicTag)}
-                </span>
-              </div>
+            <div id="writing-reference" className="pane-scroll" role="region" aria-label="题目和图表" tabIndex={0}>
 
-              {/* Anti-Loss Confirmation when clicking [ ← 重选题目 ] with >10 words */}
-              {confirmBackToCatalog && !isHistoryMode && (
-                <div className="mx-7 mt-4 flex items-center justify-between gap-3 rounded-xl border border-[#DFC5B8] bg-[#F9EFEA] px-4 py-2.5 text-xs text-[#262523]">
-                  <span>当前正文已有内容，重选题目将清空当前草稿，是否继续？</span>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setConfirmBackToCatalog(false)}
-                      className="skeuo-btn-light rounded-lg px-2.5 py-1 text-[11px] font-medium"
-                    >
-                      取消
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleConfirmReturnAndClear}
-                      className="skeuo-btn-orange rounded-lg px-2.5 py-1 text-[11px] font-semibold"
-                    >
-                      继续
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Left Page Upper Half: Prompt Presentation Area */}
-              <div className="px-7 pt-5 pb-4">
-                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
-                  PROMPT · 题目要求
+              {/* 题目要求 */}
+              <div className="pane-content">
+                <div className="workspace-label writing-prompt-label font-mono">
+                  题目要求
                 </div>
                 {displayedTaskType === 'task1' || isTask2CustomPrompt ? (
                   <textarea
@@ -2160,100 +2094,75 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                         : '在此粘贴或输入你的大作文题目...'
                     }
                     aria-label="作文题目"
-                    className="w-full resize-none overflow-hidden bg-transparent font-serif text-[15px] leading-relaxed text-[#262523] placeholder-[#B5B1A6] focus:outline-none"
+                    className="writing-prompt block w-full resize-none overflow-hidden border-none bg-transparent font-serif placeholder:font-sans placeholder:text-[17px] placeholder:text-[#8C867E]/60 outline-none focus:outline-none focus:ring-0"
                   />
                 ) : (
-                  <p className="font-serif text-[15px] leading-relaxed text-[#262523] select-text">
+                  <p className="writing-prompt select-text font-serif">
                     {displayedPrompt}
                   </p>
                 )}
-              </div>
+                {displayedTaskType === 'task1' && (
+                  <div className="writing-chart-section">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileInputChange}
+                      className="hidden"
+                    />
 
-              {/* Left Page Lower Half: Task 1 Exclusive High-Res Chart Area */}
-              {displayedTaskType === 'task1' && (
-                <div className="flex-1 border-t border-dashed border-[#DFDBD0] px-7 pt-4 pb-7">
-                  <div className="mb-2.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
-                    <span>CHART VISUAL · 图表原图</span>
-                    {displayedChartImage && (
-                      <span className="text-[#7A7873]">点击图片全屏放大</span>
-                    )}
-                  </div>
-
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileInputChange}
-                    className="hidden"
-                  />
-
-                  {displayedChartImage ? (
-                    <div
-                      onClick={() => setIsLightboxOpen(true)}
-                      className="group relative mx-auto cursor-zoom-in overflow-hidden rounded-xl border border-[#D8D4C8] bg-white p-2.5 shadow-[0_6px_16px_rgba(38,37,35,0.06)] transition hover:border-[#C2BDB0]"
-                      title="点击全屏放大查看图表细节"
-                    >
-                      <img
-                        src={displayedChartImage}
-                        alt="Task 1 Chart"
-                        className="h-auto max-h-[520px] w-full rounded-lg bg-white object-contain"
-                      />
-
-                      <span className="pointer-events-none absolute bottom-4 left-4 inline-flex items-center gap-1 rounded-md bg-[#262523]/75 px-2.5 py-1 font-mono text-[10px] text-[#FAF8F2] opacity-0 transition-opacity group-hover:opacity-100">
-                        <ZoomIn className="h-3 w-3" />
-                        <span>点击全屏放大</span>
-                      </span>
-
+                    {displayedChartImage ? (
+                      <button
+                        ref={chartZoomButtonRef}
+                        type="button"
+                        onClick={() => setIsLightboxOpen(true)}
+                        className="writing-chart group relative block cursor-zoom-in overflow-hidden rounded border border-[#DFDBD0] bg-white hover:border-[#C2BDB0]"
+                        aria-label="放大图表"
+                      >
+                        <img src={displayedChartImage} alt="Task 1 Chart" />
+                        <ZoomIn
+                          aria-hidden="true"
+                          className="pointer-events-none absolute bottom-2 right-2 size-6 rounded bg-[#FAF8F5]/90 p-1 text-[#5C5852] opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                        />
+                      </button>
+                    ) : (
                       <button
                         type="button"
-                        onClick={handleRemoveChartImage}
-                        className="skeuo-btn-light absolute right-3.5 top-3.5 flex h-6 w-6 items-center justify-center rounded-md text-[#7A7873] hover:text-[#EA5B25]"
-                        title="移除图表"
-                        aria-label="移除图表"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex min-h-36 w-full flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-[#CFCBC0] bg-[#F3F0E6]/65 px-5 py-8 text-center text-xs text-[#7A7873] transition hover:border-[#B8B3A6] hover:bg-[#EFECE2] hover:text-[#262523]"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <ImagePlus className="h-6 w-6 text-[#EA5B25]" />
+                        <span className="leading-relaxed">
+                          直接按{' '}
+                          <kbd className="font-mono font-semibold text-[#262523]">
+                            Ctrl + V
+                          </kbd>{' '}
+                          粘贴图表截图（自动裁切多余白边）
+                        </span>
+                        <span className="font-mono text-[11px] text-[#9E988E]">
+                          或点击此处上传本地图表图片
+                        </span>
                       </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex min-h-[300px] w-full flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-[#CFCBC0] bg-[#F3F0E6]/65 px-5 py-8 text-center text-xs text-[#7A7873] shadow-[inset_0_1px_3px_rgba(38,37,35,0.04)] transition hover:border-[#B8B3A6] hover:bg-[#EFECE2] hover:text-[#262523]"
-                    >
-                      <ImagePlus className="h-6 w-6 text-[#EA5B25]" />
-                      <span className="leading-relaxed">
-                        直接按{' '}
-                        <kbd className="font-mono font-semibold text-[#262523]">
-                          Ctrl + V
-                        </kbd>{' '}
-                        粘贴图表截图（自动裁切多余白边）
-                      </span>
-                      <span className="font-mono text-[11px] text-[#9E988E]">
-                        或点击此处上传本地图表图片
-                      </span>
-                    </button>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
+          </div>
 
-            {/* ===============================================================
-                RIGHT PAGE (55%): Pure Immersive Essay Writing Area
-               =============================================================== */}
-            <div className="flex min-h-[720px] flex-col justify-between">
-              {/* Right Page Top Header: Subtle Manuscript Stamp + Right Tactile Countdown Timer */}
-              <div className="flex min-h-[54px] items-center justify-between gap-3 border-b border-[#ECE8DF] px-8 py-3.5 select-none">
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E] leading-none translate-y-[1px]">
-                  ESSAY MANUSCRIPT · 正文书写区
-                </span>
-
+          <div className="workspace-pane">
+            <div className="pane-toolbar writing-timer-toolbar select-none">
+              <div className="writing-timer skeuo-switch-thumb" role="group" aria-label="作文计时器">
                 <button
+                  ref={timerButtonRef}
                   type="button"
                   onClick={handleToggleTimer}
                   title={isTimerRunning ? '点击暂停倒计时' : '点击开始倒计时'}
-                  className="skeuo-switch-thumb inline-flex h-7 items-center gap-2 rounded-lg px-3 font-mono text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
+                  aria-label={`${isTimerRunning ? '暂停' : '开始或继续'}倒计时，剩余 ${formatTimerDisplay(secondsLeft)}`}
+                  className="inline-flex items-center gap-2 rounded-md px-2.5 font-mono text-xs font-semibold leading-none text-[#262523]"
                 >
                   <span
+                    aria-hidden="true"
                     className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${
                       isTimerRunning
                         ? 'bg-[#EA5B25] animate-pulse shadow-[0_0_4px_rgba(234,91,37,0.65)]'
@@ -2272,165 +2181,129 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   >
                     {formatTimerDisplay(secondsLeft)}
                   </span>
-
-                  {!isTimerRunning && secondsLeft < defaultSecondsForTask && (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleResetTimer();
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleResetTimer();
-                        }
-                      }}
-                      title="重置回初始时间"
-                      aria-label="重置回初始时间"
-                      className="ml-0.5 inline-flex items-center justify-center text-[#7A7873] transition-colors hover:text-[#EA5B25]"
-                    >
-                      <RotateCcw className="h-3 w-3" />
-                    </span>
-                  )}
                 </button>
-              </div>
-
-              {/* Time-Up Exam Lock Notice Banner */}
-              {isTimeUpLocked && (
-                <div className="mx-8 mt-4 flex items-center justify-between gap-3 rounded-xl border border-[#EA5B25]/40 bg-[#F9EFEA] px-4 py-2 text-xs text-[#262523]">
-                  <div className="flex items-center gap-2">
-                    <Lock className="h-3.5 w-3.5 text-[#EA5B25]" />
-                    <span>
-                      考场计时结束（00:00），正文已锁定，请点击右下角「交卷批改」。
-                    </span>
-                  </div>
+                {!isTimerRunning && secondsLeft < defaultSecondsForTask && (
                   <button
                     type="button"
-                    onClick={() => setIsTimeUpLocked(false)}
-                    className="skeuo-btn-light shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-medium text-[#7A7873] hover:text-[#262523]"
+                    onClick={handleResetTimer}
+                    title="重置回初始时间"
+                    aria-label="重置回初始时间"
+                    className="grid min-w-8 place-items-center rounded-md text-[#6E675E] hover:text-[#2C2A29]"
                   >
-                    解锁继续写
+                    <RotateCcw className="size-3.5" />
                   </button>
-                </div>
-              )}
+                )}
+              </div>
+            </div>
 
-              {/* Right Page Center: Tall Unobstructed Pure Essay Writing Area (min-h-[600px]) */}
-              <div className="flex flex-1 flex-col px-8 pt-6 pb-5">
+            {/* Time-Up Exam Lock Notice Banner */}
+            {isTimeUpLocked && (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#EA5B25]/40 bg-[#F9EFEA] px-4 py-2 text-xs text-[#262523]">
+                <div className="flex items-center gap-2">
+                  <Lock className="h-3.5 w-3.5 text-[#EA5B25]" />
+                  <span>
+                    考场计时结束（00:00），正文已锁定，请点击右下角「交卷批改」。
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsTimeUpLocked(false)}
+                  className="skeuo-btn-light shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-medium text-[#7A7873] hover:text-[#262523]"
+                >
+                  解锁继续写
+                </button>
+              </div>
+            )}
+
+            <div className="pane-scroll writing-manuscript" role="region" aria-label="作文编辑区">
+              <div className="pane-content">
                 <textarea
+                  ref={essayTextareaRef}
+                  id="writing-essay"
                   readOnly={isTimeUpLocked}
                   value={displayedEssay}
                   onChange={(e) => handleEssayChange(e.target.value)}
-                  placeholder="在此开始沉浸式书写正文..."
+                  onPointerDown={(e) => e.currentTarget.setAttribute('data-pointer-focus', '')}
+                  onBlur={(e) => e.currentTarget.removeAttribute('data-pointer-focus')}
+                  placeholder="开始写作…"
                   aria-label="作文正文"
-                  className={`min-h-[600px] w-full flex-1 resize-none bg-transparent font-serif text-[16px] leading-[1.9] text-[#262523] placeholder-[#B5B1A6] focus:outline-none ${
+                  className={`block w-full resize-none overflow-hidden border-none bg-transparent font-serif text-[18px] leading-[1.7] text-[#2C2A29] placeholder:text-[16px] placeholder:text-[#B5B1A6] ${
                     isTimeUpLocked
                       ? 'cursor-default select-text opacity-85'
                       : ''
                   }`}
                 />
               </div>
+            </div>
 
-              {/* Right Page Bottom Bar */}
-              <div className="flex items-center justify-between gap-4 border-t border-[#ECE9E0] bg-[#F6F3EB]/60 px-8 py-4">
-                <div className="flex items-center gap-3">
-                  {errorMsg ? (
-                    <span className="font-sans text-xs text-[#EA5B25]">
-                      {errorMsg}
-                    </span>
+            {/* Right Page Bottom Bar */}
+            <div className="pane-toolbar pane-footer">
+              {errorMsg && (
+                <p role="alert" className="w-full text-xs text-[#A93812]">{errorMsg}</p>
+              )}
+              <button
+                type="button"
+                onClick={handleEnterHistoryMode}
+                className="skeuo-btn-light px-3.5 font-sans text-xs font-medium"
+              >
+                历史批改
+                {activeTaskReports.length > 0 && (
+                  <span className="ml-1 font-mono">({activeTaskReports.length})</span>
+                )}
+              </button>
+
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                {timedCompletedWords !== null ? (
+                  <span className="rounded-md border border-[#DFC5B8] bg-[#F9EFEA] px-2.5 py-1 font-mono text-xs font-semibold text-[#EA5B25]">
+                    考场限时完成：{timedCompletedWords} words
+                  </span>
+                ) : (
+                  <span className="font-mono text-xs tracking-wide text-[#7A7873]">
+                    {displayedWordCount} words
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  disabled={isEvaluating}
+                  onClick={handleEvaluateDraft}
+                  className="skeuo-btn-orange inline-flex items-center gap-2 rounded-xl px-5 py-2.5 font-sans text-xs font-semibold tracking-wide text-white disabled:opacity-60"
+                >
+                  {isEvaluating ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>批改中</span>
+                    </>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={handleEnterHistoryMode}
-                      className="skeuo-btn-light rounded-lg px-3.5 py-1.5 font-sans text-xs font-medium text-[#262523]"
-                    >
-                      <span>历史批改</span>
-                      {activeTaskReports.length > 0 && (
-                        <span className="ml-1 font-mono">
-                          ({activeTaskReports.length})
-                        </span>
-                      )}
-                    </button>
+                    <span>交卷批改</span>
                   )}
-                </div>
-
-                <div className="flex items-center gap-3">
-                  {timedCompletedWords !== null ? (
-                    <span className="rounded-md border border-[#DFC5B8] bg-[#F9EFEA] px-2.5 py-1 font-mono text-xs font-semibold text-[#EA5B25]">
-                      考场限时完成：{timedCompletedWords} words
-                    </span>
-                  ) : (
-                    <span className="font-mono text-xs tracking-wide text-[#7A7873]">
-                      {displayedWordCount} words
-                    </span>
-                  )}
-
-                  {errorMsg && (
-                    <button
-                      type="button"
-                      onClick={handleEnterHistoryMode}
-                      className="skeuo-btn-light rounded-lg px-3.5 py-1.5 font-sans text-xs font-medium text-[#262523]"
-                    >
-                      <span>历史批改</span>
-                      {activeTaskReports.length > 0 && (
-                        <span className="ml-1 font-mono">
-                          ({activeTaskReports.length})
-                        </span>
-                      )}
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    disabled={isEvaluating}
-                    onClick={handleEvaluateDraft}
-                    className="skeuo-btn-orange inline-flex items-center gap-2 rounded-xl px-5 py-2.5 font-sans text-xs font-semibold tracking-wide text-white disabled:opacity-60"
-                  >
-                    {isEvaluating ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        <span>批改中</span>
-                      </>
-                    ) : (
-                      <span>交卷批改</span>
-                    )}
-                  </button>
-                </div>
+                </button>
               </div>
             </div>
           </div>
-        </section>
+        </WritingWorkspace>
       ) : (
         /* =====================================================================
             STEP 2B: POST-SUBMISSION / HISTORY OPEN-SPREAD DUAL-PAGE VIEW
             - Left Page (45%): Prompt + Chart Thumbnail + Candidate Essay Manuscript
             - Right Page (55%): Examiner 4-Dimension Diagnostic Score Sheet
            ===================================================================== */
-        <section className="skeuo-paper relative overflow-hidden rounded-2xl">
-          {/* Smartisan Vintage Double Crimson Header Rule Across Open Spread */}
-          <div className="pt-4">
-            <div className="h-[2px] w-full bg-[#C97A63]/35" />
-            <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-[45%_55%]">
+        <section className="workspace-split" aria-label="作文批改报告">
             {/* ===============================================================
                 LEFT PAGE (45%): Compact Prompt + Chart Thumbnail + Essay Manuscript
                =============================================================== */}
-            <div className="flex flex-col justify-between border-b border-[#E6E1D8] lg:border-b-0 lg:border-r lg:border-[#E6E1D8]">
+            <div className="workspace-pane workspace-pane--reference justify-between">
               <div>
                 {/* Left Page Top Bar */}
-                <div className="flex min-h-[52px] items-center justify-between gap-2 border-b border-[#ECE8DF] px-7 py-3 select-none">
+                <div className="pane-toolbar select-none">
                   <div className="flex items-center gap-2.5">
                     {!isHistoryMode && (
                       <button
                         type="button"
-                        onClick={handleRequestBackToCatalog}
+                        onClick={handleReturnToCatalog}
                         className="skeuo-switch-thumb inline-flex h-7 items-center gap-1 rounded-lg px-3 text-xs font-semibold leading-none text-[#262523] transition-all hover:brightness-[1.01] active:translate-y-[1px]"
                       >
-                        <span className="leading-none">← 重选题目</span>
+                        <span className="leading-none">← 返回</span>
                       </button>
                     )}
                     <span className="truncate font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#7A7873] leading-none translate-y-[1px]">
@@ -2446,45 +2319,61 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 </div>
 
                 {/* Compact Prompt Section */}
-                <div className="border-b border-dashed border-[#DFDBD0] px-7 py-4">
+                <div className="pane-content border-b border-[#DCD6CC]">
                   <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
                     PROMPT · 题目
                   </div>
-                  <p className="font-serif text-[14px] leading-relaxed text-[#262523] select-text">
+                  <p
+                    style={{
+                      fontSize: '19px',
+                      lineHeight: '1.8',
+                      color: '#2C2A29',
+                    }}
+                    className="font-serif text-[19px] leading-[1.8] tracking-[0.01em] text-[#2C2A29] select-text"
+                  >
                     {displayedPrompt}
                   </p>
 
                   {/* Task 1 Chart Thumbnail in Graded/History View */}
                   {displayedTaskType === 'task1' && displayedChartImage && (
-                    <div
+                    <button
+                      ref={chartZoomButtonRef}
+                      type="button"
                       onClick={() => setIsLightboxOpen(true)}
-                      className="group relative mt-3 cursor-zoom-in overflow-hidden rounded-xl border border-[#D8D4C8] bg-white p-2 shadow-sm transition hover:border-[#C2BDB0]"
-                      title="点击全屏放大查看图表"
+                      className="group relative mt-3 block w-full max-w-[32.5rem] cursor-zoom-in overflow-hidden rounded-xl border border-[#D8D4C8] bg-white p-2 shadow-sm transition hover:border-[#C2BDB0]"
+                      aria-label="放大图表"
                     >
                       <img
                         src={displayedChartImage}
                         alt="Task 1 Chart"
                         className="max-h-[260px] w-full rounded-lg bg-white object-contain"
                       />
-                      <span className="pointer-events-none absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-md bg-[#262523]/75 px-2 py-0.5 font-mono text-[10px] text-[#FAF8F2] opacity-0 transition-opacity group-hover:opacity-100">
-                        <ZoomIn className="h-3 w-3" />
-                        <span>点击放大</span>
-                      </span>
-                    </div>
+                      <ZoomIn
+                        aria-hidden="true"
+                        className="pointer-events-none absolute bottom-2 right-2 size-6 rounded bg-[#FAF8F5]/90 p-1 text-[#5C5852] opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                      />
+                    </button>
                   )}
                 </div>
 
                 {/* Candidate Essay Manuscript */}
-                <div className="px-7 py-5">
+                <div className="pane-content">
                   <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#9E988E]">
                     CANDIDATE ESSAY · 作文原稿
                   </div>
                   <textarea
+                    ref={gradedEssayTextareaRef}
                     readOnly={isHistoryMode}
                     value={displayedEssay}
                     onChange={(e) => handleEssayChange(e.target.value)}
+                    placeholder="在此开始沉浸式书写正文..."
                     aria-label="作文原稿"
-                    className={`min-h-[420px] w-full resize-none bg-transparent font-serif text-[15px] leading-[1.85] text-[#262523] focus:outline-none ${
+                    style={{
+                      fontSize: '20px',
+                      lineHeight: '1.85',
+                      color: '#2C2A29',
+                    }}
+                    className={`min-h-48 w-full resize-none overflow-hidden border-none bg-transparent font-serif text-[20px] leading-[1.85] text-[#2C2A29] placeholder:font-sans placeholder:text-[18px] placeholder:text-[#8C867E]/60 outline-none focus:outline-none focus:ring-0 ${
                       isHistoryMode ? 'cursor-default select-text' : ''
                     }`}
                   />
@@ -2493,7 +2382,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
 
               {/* Left Page Footer (Draft mode allows re-submitting after edits) */}
               {!isHistoryMode && (
-                <div className="flex items-center justify-between gap-3 border-t border-[#ECE9E0] bg-[#F6F3EB]/60 px-7 py-3.5">
+                <div className="pane-toolbar pane-footer">
                   <span className="font-mono text-[11px] text-[#7A7873]">
                     可直接修改上方原稿并再次交卷
                   </span>
@@ -2519,10 +2408,10 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             {/* ===============================================================
                 RIGHT PAGE (55%): Examiner 4-Dimension Diagnostic Score Sheet
                =============================================================== */}
-            <div className="flex min-h-[700px] flex-col justify-between">
+            <div ref={reportPaneRef} className="workspace-pane" tabIndex={-1}>
               {/* History Mode Top Bar OR Draft Graded Top Bar */}
               {isHistoryMode ? (
-                <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-2 border-b border-[#E2DFD5] bg-[#EFECE3] px-7 py-3">
+                <div className="pane-toolbar">
                   <div className="flex items-center gap-2 font-mono text-xs text-[#262523]">
                     <span className="hidden sm:inline-block font-mono text-[11px] font-semibold tracking-wider text-[#7A7873]">
                       {activeTaskType === 'task1'
@@ -2595,7 +2484,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="flex min-h-[52px] items-center justify-between border-b border-[#E2DFD5] bg-[#EFECE3]/60 px-8 py-2.5">
+                <div className="pane-toolbar">
                   <span className="font-mono text-[11px] text-[#7A7873]">
                     当前批改成绩单 ·{' '}
                     {new Date(activeRightReport.createdAt).toLocaleTimeString(
@@ -2634,8 +2523,8 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               )}
 
               {/* Top Printed Mechanical Score Header */}
-              <div className="border-b border-[#E6E1D8] bg-[#F5F2EA]/75 px-8 py-5">
-                <div className="flex items-baseline justify-between">
+              <div className="pane-toolbar">
+                <div className="flex w-full flex-wrap items-baseline justify-between gap-4">
                   <div>
                     <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#7A7873]">
                       IELTS OFFICIAL DIAGNOSTIC SHEET
@@ -2655,7 +2544,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                     style={{
                       fontVariantNumeric: 'lining-nums tabular-nums',
                     }}
-                    className="flex items-center gap-4 font-mono"
+                    className="flex flex-wrap items-center gap-2 font-mono sm:gap-4"
                   >
                     <div className="text-right">
                       <div className="text-[10px] text-[#7A7873]">
@@ -2708,7 +2597,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
               {/* Four-Module Examiner Report Body on Cream Paper */}
               <div
                 ref={reportSheetBodyRef}
-                className="relative max-h-[680px] flex-1 divide-y divide-[#E6E1D8] overflow-y-auto px-8 py-6 text-xs leading-relaxed text-[#262523]"
+                className="pane-content relative divide-y divide-[#E6E1D8] text-xs leading-relaxed text-[#262523]"
               >
                 <SelectionHighlightPopover
                   containerRef={reportSheetBodyRef}
@@ -3486,7 +3375,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 )}
               </div>
             </div>
-          </div>
         </section>
       )}
 
@@ -3503,7 +3391,6 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             onClick={(e) => e.stopPropagation()}
             className="skeuo-paper flex h-full w-full max-w-xl flex-col overflow-hidden border-l border-[#DCD8CE]"
           >
-            {/* Smartisan Vintage Double Crimson Header Rule */}
             <div className="pt-3">
               <div className="h-[2px] w-full bg-[#C97A63]/35" />
               <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
@@ -3543,14 +3430,23 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
                 </div>
               ) : (
                 activeTaskReports.map((item, idx) => {
-                  const itemImage =
-                    item.image || item.chartImageDataUrl || null;
+                  const itemImage = resolveTask1ChartImage(
+                    item.image || item.chartImageDataUrl
+                  );
                   const isCurrentlySelected =
                     isHistoryMode && activeHistoryReport?.id === item.id;
 
                   return (
                     <div
                       key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                          e.preventDefault();
+                          handleSelectHistoryRecord(idx);
+                        }
+                      }}
                       onClick={() => handleSelectHistoryRecord(idx)}
                       className={`group relative cursor-pointer rounded-xl border p-4 transition-all ${
                         isCurrentlySelected
@@ -3640,7 +3536,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="skeuo-paper w-full max-w-md rounded-2xl p-6"
+            className="skeuo-paper workspace-dialog w-full max-w-md rounded-xl p-5 sm:p-6"
           >
             <div className="flex items-center justify-between border-b border-[#E2DFD5] pb-3">
               <div className="flex items-center gap-2">
@@ -3694,7 +3590,7 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
       {/* Lightbox Zoom Modal for Task 1 Chart Image */}
       {isLightboxOpen && displayedChartImage && (
         <div
-          onClick={() => setIsLightboxOpen(false)}
+          onClick={closeChartPreview}
           className="fixed inset-0 z-50 flex items-center justify-center bg-[#262523]/70 p-6 backdrop-blur-[2px] cursor-zoom-out"
           role="dialog"
           aria-modal="true"
@@ -3702,20 +3598,37 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="skeuo-paper relative max-h-[90vh] max-w-5xl overflow-auto rounded-2xl p-4 cursor-default"
+            className={`skeuo-paper workspace-dialog relative max-w-5xl cursor-default rounded-xl p-4 ${
+              isWritingDraft && displayedTaskType === 'task1' ? 'writing-chart-preview' : ''
+            }`}
           >
-            <button
-              type="button"
-              onClick={() => setIsLightboxOpen(false)}
-              className="skeuo-btn-light absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-[#262523] hover:text-[#EA5B25]"
-              title="关闭放大视图 (Esc)"
-              aria-label="关闭放大视图"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="mb-2 flex items-center justify-end gap-3">
+              {!isHistoryMode && !activeRightReport && (
+                <button
+                  type="button"
+                  onClick={handleRemoveChartImage}
+                  className="mr-auto rounded-md px-2 py-1.5 text-xs text-[#6E675E] hover:bg-[#F2EFE7] hover:text-[#A93812]"
+                >
+                  移除图表
+                </button>
+              )}
+              <button
+                autoFocus
+                type="button"
+                onClick={closeChartPreview}
+                className="skeuo-btn-light flex h-8 w-8 items-center justify-center rounded-lg text-[#262523]"
+                title="关闭放大视图 (Esc)"
+                aria-label="关闭放大视图"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
             <img
               src={displayedChartImage}
               alt="Task 1 Chart Enlarged"
+              onLoad={({ currentTarget: image }) => {
+                image.style.setProperty('--chart-aspect', String(image.naturalWidth / image.naturalHeight));
+              }}
               className="mx-auto max-h-[82vh] w-auto rounded-lg object-contain bg-white"
             />
           </div>

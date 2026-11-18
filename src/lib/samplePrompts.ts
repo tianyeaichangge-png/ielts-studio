@@ -349,6 +349,70 @@ const SVG_PROCESS_DIAGRAM = svgToDataUrl(`
 </svg>
 `);
 
+const SVG_SYDNEY_WATER_PIE_CHART = svgToDataUrl(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360">
+  <rect width="640" height="360" fill="#FAF8F5"/>
+  <text x="320" y="30" text-anchor="middle" font-family="Georgia, serif" font-size="14" font-weight="bold" fill="#262523">Water Use by Different Sectors in Sydney, Australia (1997 vs 2007)</text>
+  <g transform="translate(185, 172)">
+    <circle r="86" fill="#EA5B25"/>
+    <path d="M0,0 L0,-86 A86,86 0 0,1 10.8,85.3 Z" fill="#EA5B25"/>
+    <path d="M0,0 L10.8,85.3 A86,86 0 0,1 -74.5,43.0 Z" fill="#2E7D5B"/>
+    <path d="M0,0 L-74.5,43.0 A86,86 0 0,1 -69.6,-50.5 Z" fill="#262523"/>
+    <path d="M0,0 L-69.6,-50.5 A86,86 0 0,1 -26.6,-81.8 Z" fill="#8C7A5B"/>
+    <path d="M0,0 L-26.6,-81.8 A86,86 0 0,1 0,-86 Z" fill="#B5B0A4"/>
+    <circle r="28" fill="#FAF8F5"/>
+    <text x="0" y="4" text-anchor="middle" font-family="monospace" font-size="12" font-weight="bold" fill="#262523">1997</text>
+  </g>
+  <g font-family="monospace" font-size="10" fill="#262523">
+    <text x="242" y="138">Food industry 48%</text>
+    <text x="155" y="276">Household use 19%</text>
+    <text x="40" y="185">Manufacturing 15%</text>
+    <text x="50" y="102">Service 13%</text>
+    <text x="135" y="75">Building 5%</text>
+  </g>
+  <g transform="translate(465, 172)">
+    <circle r="86" fill="#EA5B25"/>
+    <path d="M0,0 L0,-86 A86,86 0 0,1 46.1,72.6 Z" fill="#EA5B25"/>
+    <path d="M0,0 L46.1,72.6 A86,86 0 0,1 -62.7,58.8 Z" fill="#2E7D5B"/>
+    <path d="M0,0 L-62.7,58.8 A86,86 0 0,1 -85.3,10.8 Z" fill="#262523"/>
+    <path d="M0,0 L-85.3,10.8 A86,86 0 0,1 -10.8,-85.3 Z" fill="#8C7A5B"/>
+    <path d="M0,0 L-10.8,-85.3 A86,86 0 0,1 0,-86 Z" fill="#B5B0A4"/>
+    <circle r="28" fill="#FAF8F5"/>
+    <text x="0" y="4" text-anchor="middle" font-family="monospace" font-size="12" font-weight="bold" fill="#262523">2007</text>
+  </g>
+  <g font-family="monospace" font-size="10" fill="#262523">
+    <text x="520" y="130">Food 41%</text>
+    <text x="450" y="276">Household 21%</text>
+    <text x="330" y="218">Manufacturing 11%</text>
+    <text x="345" y="112">Service 25%</text>
+    <text x="435" y="75">Building 2%</text>
+  </g>
+  <g font-family="sans-serif" font-size="10.5" fill="#262523">
+    <rect x="65" y="324" width="11" height="11" fill="#EA5B25" rx="2"/><text x="80" y="334">Food industry</text>
+    <rect x="175" y="324" width="11" height="11" fill="#2E7D5B" rx="2"/><text x="190" y="334">Household use</text>
+    <rect x="285" y="324" width="11" height="11" fill="#262523" rx="2"/><text x="300" y="334">Manufacturing</text>
+    <rect x="395" y="324" width="11" height="11" fill="#8C7A5B" rx="2"/><text x="410" y="334">Service industry</text>
+    <rect x="505" y="324" width="11" height="11" fill="#B5B0A4" rx="2"/><text x="520" y="334">Building industry</text>
+  </g>
+</svg>
+`);
+
+const TASK1_ORIGINAL_CHARTS = {
+  sydneyWater: './task1-charts/sydney-water.jpg',
+  undergroundRailways: './task1-charts/underground-railways.jpg',
+};
+
+// Older drafts and reports contain the in-app SVGs. Match the exact image
+// so a user's picture of the same question is preserved.
+const TASK1_CHART_REPLACEMENTS = new Map([
+  [SVG_SYDNEY_WATER_PIE_CHART, TASK1_ORIGINAL_CHARTS.sydneyWater],
+  [SVG_TABLE_CHART, TASK1_ORIGINAL_CHARTS.undergroundRailways],
+]);
+
+export function resolveTask1ChartImage(image: string | null | undefined): string | null {
+  return image ? TASK1_CHART_REPLACEMENTS.get(image) ?? image : null;
+}
+
 export const BUILTIN_TASK1_TOPIC_BANK: Task1TopicBankItem[] = [
   {
     id: 't1-chart-1',

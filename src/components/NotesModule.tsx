@@ -1,3 +1,4 @@
+import { useAutosizeTextarea } from '../hooks/useAutosizeTextarea';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   ChevronDown,
@@ -338,6 +339,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
   const categoryDropdownRef = useRef<HTMLDivElement | null>(null);
   const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const noteScrollRef = useRef<HTMLDivElement | null>(null);
   const noteBodyContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Close custom classification popover when clicking outside
@@ -403,14 +405,10 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
     }
   }, [activeNote, activeNoteId]);
 
-  // Auto-resize textarea in Edit mode
   useEffect(() => {
-    if (editorMode !== 'edit') return;
-    const el = editorTextareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.max(420, el.scrollHeight)}px`;
-  }, [editorMode, activeNote?.content, activeNote?.id]);
+    noteScrollRef.current?.scrollTo(0, 0);
+  }, [activeNote?.id]);
+  useAutosizeTextarea(editorTextareaRef, editorMode === 'edit' ? activeNote?.content : undefined);
 
   // Create a new note [ + 新建笔记 ] — inherits the active top category filter if selected
   const handleCreateNewNote = () => {
@@ -603,18 +601,12 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
   };
 
   return (
-    <div className="mx-auto w-[92vw] max-w-[1280px] pb-14 pt-1">
-      <section className="skeuo-paper overflow-hidden rounded-2xl">
-        {/* Smartisan Vintage Double Crimson Header Rule */}
-        <div className="pt-4">
-          <div className="h-[2px] w-full bg-[#C97A63]/35" />
-          <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
-        </div>
+    <section className="notes-workspace" aria-label="笔记工作台">
 
         {/* ===================================================================
             1. 纸面顶部筛选栏（仅固定 4 个大类：全部 | Task 1 | Task 2 | 摘录复盘）
            =================================================================== */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E3DA] px-6 py-4 font-sans sm:px-8">
+        <div className="workspace-toolbar">
           {/* Left 4 Top-Level Category Pills */}
           <div className="flex flex-wrap items-center gap-1.5">
             {NOTE_FILTER_TABS.map((tab) => {
@@ -624,6 +616,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                   key={tab.key}
                   type="button"
                   onClick={() => setSelectedFilter(tab.key)}
+                  aria-pressed={isSelected}
                   className={`rounded-lg px-3.5 py-1.5 text-xs transition-all ${
                     isSelected
                       ? 'skeuo-switch-thumb font-semibold text-[#262523]'
@@ -637,15 +630,16 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
           </div>
 
           {/* Right Symmetrical Search Filter + [ + 新建笔记 ] */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="skeuo-input-slot flex h-8 w-56 items-center gap-2 rounded-lg px-3 sm:w-64">
+          <div className="flex min-w-0 max-w-full items-center gap-2">
+            <div className="workspace-search flex w-56 min-w-0 items-center gap-2 px-3 sm:w-64">
               <Search className="h-3.5 w-3.5 shrink-0 text-[#9E988E]" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="搜索笔记标题或正文..."
-                className="w-full bg-transparent font-sans text-xs text-[#262523] placeholder:text-[#ACA79C] focus:outline-none"
+                aria-label="搜索笔记"
+                className="w-full min-w-0 bg-transparent font-sans text-xs text-[#262523] placeholder:text-[#ACA79C] focus:outline-none"
               />
               {searchQuery && (
                 <button
@@ -662,7 +656,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
             <button
               type="button"
               onClick={handleCreateNewNote}
-              className="skeuo-btn-orange inline-flex h-8 items-center gap-1.5 rounded-lg px-3.5 font-sans text-xs font-semibold text-white"
+              className="skeuo-btn-orange inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3.5 font-sans text-xs font-semibold text-white"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>新建笔记</span>
@@ -674,17 +668,18 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
             2. 空状态 vs 双栏对开工作台（左栏目录 30% · 右栏沉浸式道林纸信纸 70%）
            =================================================================== */}
         {notes.length === 0 ? (
-          <div className="flex min-h-[540px] items-center justify-center px-8 py-24 text-center">
+          <div className="flex flex-1 items-center justify-center px-4 py-16 text-center">
             <p className="font-sans text-sm text-[#8C867E]">
               暂无笔记，点击右上角「+ 新建笔记」或从写作批改/小练习中一键摘录
             </p>
           </div>
         ) : (
-          <div className="grid min-h-[680px] grid-cols-1 lg:grid-cols-[30%_70%]">
+          <div className="workspace-split workspace-viewport notes-split">
             {/* LEFT COLUMN (30% width): Minimalist Stationery Directory List */}
-            <aside className="border-b border-[#E6E3DA] bg-[#F7F4EC]/60 lg:border-b-0 lg:border-r">
+            <aside className="workspace-pane workspace-pane--reference">
+              <div className="pane-scroll notes-list" role="region" aria-label="笔记列表">
               {filteredNotes.length === 0 ? (
-                <div className="px-6 py-20 text-center">
+                <div className="px-4 py-10 text-center">
                   <p className="font-sans text-xs text-[#8C867E]">
                     暂无笔记，点击右上角「+ 新建笔记」或从写作批改/小练习中一键摘录
                   </p>
@@ -709,14 +704,14 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                           setEditorMode('read');
                         }}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
+                          if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
                             e.preventDefault();
                             setAiErrorMsg(null);
                             setActiveNoteId(item.id);
                             setEditorMode('read');
                           }
                         }}
-                        className={`group relative cursor-pointer px-5 py-4 transition-colors ${
+                        className={`note-row group relative cursor-pointer px-4 py-3 transition-colors ${
                           isSelected
                             ? 'border-l-[3px] border-l-[#EA5B25] bg-[#EFECE6]'
                             : 'border-l-[3px] border-l-transparent hover:bg-[#F3F0E7]'
@@ -738,21 +733,21 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
 
                           <div className="relative flex shrink-0 items-center justify-end">
                             {/* Gentle Date MM/DD (fades out on row hover to make room for Pin/Delete) */}
-                            <span className="whitespace-nowrap font-sans text-[12px] text-[#ACA79C] transition-opacity duration-150 group-hover:opacity-0 select-none">
+                            <span className="note-row-date whitespace-nowrap font-sans text-[12px] text-[#6E675E] select-none">
                               {compactDate}
                             </span>
 
                             {/* Hover Action Triggers: [ 置顶 ] / [ 取消 ] & Delete (strictly single-line, zero vertical wrap) */}
                             <div
                               onClick={(e) => e.stopPropagation()}
-                              className="absolute right-0 flex shrink-0 items-center gap-1 whitespace-nowrap opacity-0 pointer-events-none transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto"
+                              className="note-row-actions flex shrink-0 items-center gap-1 whitespace-nowrap"
                             >
                               <button
                                 type="button"
                                 onClick={(e) => handleTogglePinNote(item.id, e)}
                                 className="shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 font-sans text-[11px] font-medium text-[#5C5852] transition-colors hover:bg-[#E5E1D7] hover:text-[#EA5B25]"
                               >
-                                {item.isPinned ? '[ 取消 ]' : '[ 置顶 ]'}
+                                {item.isPinned ? '取消置顶' : '置顶'}
                               </button>
 
                               <button
@@ -782,14 +777,15 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                   })}
                 </div>
               )}
+              </div>
             </aside>
 
             {/* RIGHT COLUMN (70% width): Immersive Stationery Reading / Writing Sheet */}
-            <div className="flex flex-col justify-between bg-[#FAF8F3]/75">
+            <div className="workspace-pane notes-document">
               {activeNote ? (
-                <div>
+                <>
                   {/* Right Column Top Toolbar (Single-line justified) */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EBE6DF] px-8 py-3.5">
+                  <div className="pane-toolbar">
                     {/* Left: Custom Ivory Rounded SubType Switcher (Sentence case, e.g. Task 1 · Line graph) */}
                     <div className="flex flex-wrap items-center gap-3">
                       <div ref={categoryDropdownRef} className="relative">
@@ -868,6 +864,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                         <button
                           type="button"
                           onClick={() => setEditorMode('read')}
+                          aria-pressed={editorMode === 'read'}
                           className={`rounded-md px-3 py-1 text-xs transition-all ${
                             editorMode === 'read'
                               ? 'skeuo-switch-thumb font-semibold text-[#262523]'
@@ -879,6 +876,7 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
                         <button
                           type="button"
                           onClick={() => setEditorMode('edit')}
+                          aria-pressed={editorMode === 'edit'}
                           className={`rounded-md px-3 py-1 text-xs transition-all ${
                             editorMode === 'edit'
                               ? 'skeuo-switch-thumb font-semibold text-[#262523]'
@@ -893,66 +891,76 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
 
                   {/* Error Alert if AI Expand fails */}
                   {aiErrorMsg && (
-                    <div className="border-b border-[#E5C5B8] bg-[#FAF0EC] px-8 py-2.5 font-sans text-xs text-[#EA5B25]">
+                    <div className="pane-toolbar workspace-alert font-sans text-xs text-[#EA5B25]">
                       {aiErrorMsg}
                     </div>
                   )}
 
                   {/* Main Sheet Content Area: Large Borderless Title Input + Reading/Editing Body */}
                   <div
-                    ref={noteBodyContainerRef}
-                    className="relative px-8 py-7 sm:px-12"
+                    ref={noteScrollRef}
+                    className="pane-scroll"
+                    role="region"
+                    aria-label="笔记阅读和编辑区"
+                    tabIndex={0}
                   >
-                    <SelectionHighlightPopover
-                      containerRef={noteBodyContainerRef}
-                      aiConfig={aiConfig}
-                      sourceLabel={activeNote.title || activeClassificationLabel}
-                      isTextHighlighted={isNoteTextAlreadyHighlighted}
-                      onApplyHighlight={handleApplyNoteHighlight}
-                      onEraseHighlight={handleEraseNoteHighlight}
-                      onIngestVocab={onIngestVocab}
-                      onExcerptToNotes={onExcerptToNotes}
-                      onOpenApiKeyModal={onOpenApiKeyModal}
-                    />
+                    <div
+                      ref={noteBodyContainerRef}
+                      className="pane-content relative"
+                    >
+                      <SelectionHighlightPopover
+                        containerRef={noteBodyContainerRef}
+                        aiConfig={aiConfig}
+                        sourceLabel={activeNote.title || activeClassificationLabel}
+                        isTextHighlighted={isNoteTextAlreadyHighlighted}
+                        onApplyHighlight={handleApplyNoteHighlight}
+                        onEraseHighlight={handleEraseNoteHighlight}
+                        onIngestVocab={onIngestVocab}
+                        onExcerptToNotes={onExcerptToNotes}
+                        onOpenApiKeyModal={onOpenApiKeyModal}
+                      />
 
-                    {/* Large Borderless Title Input */}
-                    <input
-                      ref={titleInputRef}
-                      type="text"
-                      value={activeNote.title}
-                      onChange={(e) =>
-                        handleUpdateActiveNote({ title: e.target.value })
-                      }
-                      placeholder="输入笔记标题..."
-                      className="w-full border-0 border-b border-[#EBE6DF] bg-transparent pb-3.5 font-sans text-[22px] font-semibold tracking-tight text-[#2C2A29] placeholder:text-[#C2BDB2] focus:border-[#EA5B25] focus:outline-none transition-colors"
-                    />
+                      {/* Large Borderless Title Input */}
+                      <input
+                        ref={titleInputRef}
+                        type="text"
+                        value={activeNote.title}
+                        onChange={(e) =>
+                          handleUpdateActiveNote({ title: e.target.value })
+                        }
+                        placeholder="输入笔记标题..."
+                        aria-label="笔记标题"
+                        className="w-full border-0 border-b border-[#EBE6DF] bg-transparent pb-3.5 font-sans text-[22px] font-semibold tracking-tight text-[#2C2A29] placeholder:text-[#C2BDB2] focus:border-[#EA5B25] focus:outline-none transition-colors"
+                      />
 
-                    {/* Body: Reading Mode vs Ruled-Line Textarea Editing Mode */}
-                    {editorMode === 'read' ? (
-                      <div
-                        onDoubleClick={() => setEditorMode('edit')}
-                        title="双击正文可直接进入编辑模式"
-                        className="mt-6 min-h-[460px] cursor-text pb-8"
-                      >
-                        {renderNoteReadingBody(activeNote.content)}
-                      </div>
-                    ) : (
-                      <div className="mt-4">
-                        <textarea
-                          ref={editorTextareaRef}
-                          value={activeNote.content}
-                          onChange={(e) =>
-                            handleUpdateActiveNote({ content: e.target.value })
-                          }
-                          placeholder="在此输入笔记正文，或写下简短指令（如：帮我总结 Task 1 地图题表示拆除、扩建、原址替换的高分句型）后点击右上角「AI 提炼扩写」..."
-                          className="lined-textarea min-h-[460px] w-full resize-none border-0 bg-transparent font-sans text-[14.5px] text-[#2C2A29] placeholder:text-[#B8B2A6] focus:outline-none"
-                        />
-                      </div>
-                    )}
+                      {/* Body: Reading Mode vs Ruled-Line Textarea Editing Mode */}
+                      {editorMode === 'read' ? (
+                        <div
+                          onDoubleClick={() => setEditorMode('edit')}
+                          title="双击正文可直接进入编辑模式"
+                          className="mt-6 min-h-48 cursor-text pb-8"
+                        >
+                          {renderNoteReadingBody(activeNote.content)}
+                        </div>
+                      ) : (
+                        <div className="mt-4">
+                          <textarea
+                            ref={editorTextareaRef}
+                            aria-label="笔记正文"
+                            value={activeNote.content}
+                            onChange={(e) =>
+                              handleUpdateActiveNote({ content: e.target.value })
+                            }
+                            placeholder="在此输入笔记正文，或写下简短指令（如：帮我总结 Task 1 地图题表示拆除、扩建、原址替换的高分句型）后点击右上角「AI 提炼扩写」..."
+                            className="lined-textarea block w-full resize-none overflow-hidden border-0 bg-transparent font-sans text-[14.5px] text-[#2C2A29] placeholder:text-[#B8B2A6] focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </>
               ) : (
-                <div className="flex h-full min-h-[540px] flex-col items-center justify-center px-8 py-24 text-center">
+                <div className="flex flex-1 flex-col items-center justify-center px-4 py-16 text-center">
                   <p className="font-sans text-sm text-[#8C867E]">
                     暂无笔记，点击右上角「+ 新建笔记」或从写作批改/小练习中一键摘录
                   </p>
@@ -961,7 +969,6 @@ export const NotesModule: React.FC<NotesModuleProps> = ({
             </div>
           </div>
         )}
-      </section>
-    </div>
+    </section>
   );
 };

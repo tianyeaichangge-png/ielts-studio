@@ -611,6 +611,10 @@ export function App() {
       ? 'notes'
       : 'vocabulary';
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [currentTab]);
+
   // Knowledge Studio / Notes ('ielts_studio_notes') — purely user-created or excerpted notes (empty array by default)
   const [notes, setNotes] = useLocalStorage<NoteItem[]>(
     'ielts_studio_notes',
@@ -706,7 +710,7 @@ export function App() {
   );
 
   return (
-    <div className="desk-surface min-h-screen text-[#262523]">
+    <div className="app-shell">
       <Navbar
         activeTab={currentTab}
         onSelectTab={setActiveTab}
@@ -714,7 +718,7 @@ export function App() {
         hasApiKey={Boolean(aiConfig.apiKey.trim())}
       />
 
-      <main>
+      <main className="app-workspace">
         {currentTab === 'vocabulary' ? (
           <VocabularyModule
             cards={vocabCards}
