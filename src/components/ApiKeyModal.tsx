@@ -59,7 +59,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
       aria-modal="true"
       aria-labelledby="api-key-modal-title"
     >
-      <div className="skeuo-paper w-full max-w-md rounded-2xl p-6">
+      <div className="skeuo-paper workspace-dialog w-full max-w-md rounded-xl p-5 sm:p-6">
         <div className="flex items-center justify-between border-b border-[#E2DFD5] pb-3.5">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-[#EA5B25]" />

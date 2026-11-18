@@ -769,6 +769,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
         return;
       }
       if (e.code === 'Space') {
+        if (document.activeElement?.closest('button, a, [role="button"]')) return;
         e.preventDefault();
         handleToggleFlip();
       } else if (e.key === '1') {
@@ -865,12 +866,12 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
     : '';
 
   return (
-    <div className="mx-auto w-[92vw] max-w-[1000px] pb-16 pt-1 select-none">
+    <div className="workspace-module select-none">
       {/* =====================================================================
           TOP WORD-BOX CATEGORY FILTER BAR (Automatically Hidden in Deck View!)
          ===================================================================== */}
       {viewStep === 'list' && (
-        <div className="mb-5 flex flex-wrap items-center justify-center gap-1.5 font-sans">
+        <div className="workspace-toolbar workspace-toolbar--inset !justify-start font-sans">
           {WORD_BOX_TABS.map((tab) => {
             const isActive = selectedCategory === tab.id;
             const count = categoryCounts[tab.id];
@@ -917,23 +918,16 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
           LEVEL 1 (DEFAULT VIEW): 道林纸「词书手账列表页」（自然学词与管理态）
          ===================================================================== */}
       {viewStep === 'list' ? (
-        <div className="mx-auto max-w-[900px]">
-          <section className="skeuo-paper rounded-2xl">
-            {/* Smartisan Vintage Double Crimson Header Rule */}
-            <div className="overflow-hidden rounded-t-2xl pt-4">
-              <div className="h-[2px] w-full bg-[#C97A63]/35" />
-              <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
-            </div>
-
+        <section aria-label="词汇列表">
             {/* Pure Single-Row Top Toolbar: Unified Search/AI Slot + Custom Dropdown + [ + AI 入库 ] + [ 开始背词 (x) → ] */}
-            <div className="border-b border-[#E6E3DA] px-6 py-4 sm:px-8">
-              <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="workspace-toolbar workspace-toolbar--inset">
+              <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2.5">
                 <form
                   onSubmit={handleAiIngestWords}
-                  className="flex min-w-[260px] flex-1 items-center gap-2"
+                  className="vocab-tools flex flex-wrap items-center gap-2"
                 >
                   {/* Unified Search + Embedded Custom Dropdown Input Slot */}
-                  <div className="relative flex flex-1 items-center rounded-xl border border-[#DCD7CA] bg-[#F5F2EA] pl-3.5 pr-1.5 py-1 transition-colors focus-within:border-[#B5B0A4] focus-within:bg-[#FAF8F3]">
+                  <div className="workspace-search relative flex min-w-0 flex-[1_1_14rem] items-center px-3">
                     <Search className="h-3.5 w-3.5 shrink-0 text-[#A8A49B]" />
 
                     <input
@@ -943,7 +937,9 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                         setUnifiedInput(e.target.value);
                         if (aiFeedbackMsg) setAiFeedbackMsg(null);
                       }}
-                      placeholder="搜索当前词盒，或输入英文生词（支持“address 解决”）由 AI 自动入库..."
+                      placeholder="搜索或输入生词"
+                      aria-label="搜索词汇或输入要入库的生词"
+                      title="搜索当前词盒，或输入英文生词。AI 入库支持附上中文释义，例如 address 解决。"
                       className="w-full min-w-0 bg-transparent px-2.5 py-1 font-sans text-xs text-[#262523] placeholder-[#9E998E] focus:outline-none"
                     />
 
@@ -1054,7 +1050,14 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
             </div>
 
             {/* Paper Body: Swiss 12-Column Grid Dictionary List */}
-            <div className="max-h-[66vh] overflow-y-auto px-6 py-2 sm:px-8">
+            <div className="workspace-inset vocab-list">
+              {listFilteredCards.length > 0 && (
+                <div className="vocab-table-labels workspace-label border-b border-[#DCD6CC]">
+                  <span>单词</span>
+                  <span>中文释义</span>
+                  <span>同义表达</span>
+                </div>
+              )}
               {listFilteredCards.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <p className="font-sans text-sm font-semibold text-[#262523]">
@@ -1073,7 +1076,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                   </p>
                 </div>
               ) : (
-                <div className="divide-y divide-[#EBE6DF]">
+                <div className="divide-y divide-[#DCD6CC]/70">
                   {listFilteredCards.map((item, idx) => {
                     const itemPhonetic = getValidPhonetic(item);
                     const itemPos = getValidPos(item);
@@ -1090,10 +1093,10 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                         key={item.id}
                         onClick={(e) => handleSpeak(item.word, e)}
                         title="点击朗读英式发音 (en-GB)"
-                        className="group relative flex flex-col sm:flex-row sm:items-baseline gap-y-1 py-3 px-2 -mx-2 rounded-lg cursor-pointer transition-colors hover:bg-[#F4F1E8]/70"
+                        className="vocab-row group -mx-2 cursor-pointer transition-colors"
                       >
                         {/* Left Column: Fixed w-[260px] shrink-0 (Index + Bold Serif Headword + POS + IPA Phonetic) */}
-                        <div className="w-full sm:w-[260px] shrink-0 pr-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                           <span className="w-5 shrink-0 font-mono text-[11px] text-[#ACA79C]">
                             {String(idx + 1).padStart(2, '0')}
                           </span>
@@ -1130,7 +1133,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                         </div>
 
                         {/* Middle Column: flex-1 min-w-0 pr-4 (Pure Black Concise Meaning — Click Directly to Expand/Collapse Full Meaning) */}
-                        <div className="flex-1 min-w-0 pr-4 pl-7 sm:pl-0">
+                        <div className="min-w-0 pl-7 sm:pl-0">
                           <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
                             <span
                               role="button"
@@ -1150,7 +1153,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                                   ? '点击收起全义项词典释义'
                                   : '点击展开全词性义项、熟词僻义与固定搭配'
                               }
-                              className="group/meaning inline-flex items-baseline gap-1 font-sans text-[13px] font-medium leading-snug break-words text-[#262523] transition-colors hover:text-[#EA5B25]"
+                              className="group/meaning inline-flex max-w-full items-baseline gap-1 font-sans text-[13px] font-medium leading-snug break-words text-[#262523] transition-colors hover:text-[#EA5B25]"
                             >
                               <span>{conciseMeaning}</span>
                               <span
@@ -1181,29 +1184,20 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           )}
                         </div>
 
-                        {/* Right Column: Fixed w-[200px] shrink-0 text-right (In-place Smooth Opacity Swap between Synonyms and Hover Action Buttons) */}
-                        <div className="relative w-full sm:w-[200px] shrink-0 text-left sm:text-right pl-7 sm:pl-0 min-w-0">
+                        {/* Synonyms and quick actions */}
+                        <div className="vocab-meta min-w-0 pl-7 sm:col-start-2 sm:pl-0 lg:col-start-auto">
                           {itemSyns.length > 0 && (
                             <div
-                              className={`truncate font-serif text-xs italic text-[#8A857C] select-none transition-opacity duration-150 ${
-                                isRowRefreshing
-                                  ? 'opacity-0'
-                                  : 'group-hover:opacity-0'
-                              }`}
+                              className="font-serif text-sm italic text-[#6E675E]"
                               title={`同义替换: ${itemSyns.join(' / ')}`}
                             >
                               ≈ {itemSyns.slice(0, 2).join(' / ')}
                             </div>
                           )}
 
-                          {/* In-place Right-Aligned Hover Action Buttons (100% replaces synonyms on hover with zero peeking text) */}
                           <div
                             onClick={(e) => e.stopPropagation()}
-                            className={`flex items-center justify-end gap-1 sm:absolute sm:right-0 sm:top-1/2 sm:-translate-y-1/2 transition-opacity duration-150 ${
-                              isRowRefreshing
-                                ? 'opacity-100'
-                                : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
-                            }`}
+                            className="vocab-row-actions flex items-center gap-1"
                           >
                             {itemIsMastered ? (
                               <button
@@ -1246,16 +1240,15 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                 </div>
               )}
             </div>
-          </section>
-        </div>
+        </section>
       ) : (
         /* =====================================================================
             LEVEL 2 (FOCUSED QUIZ VIEW): 纯粹的「3D 叠纸抽认卡页」
             (Top Category Bar Automatically Hidden; Symmetrical Left/Right Header)
            ===================================================================== */
-        <div className="flex flex-col items-center justify-center pt-2">
+        <div className="vocab-study">
           {/* Symmetrical Card Top Header Bar: Left [ ← 返回词表 ] | Right Progress ● 01 / 45 */}
-          <div className="mb-4 flex w-full max-w-[540px] items-center justify-between">
+          <div className="mb-4 flex study-width items-center justify-between">
             <button
               type="button"
               onClick={() => setViewStep('list')}
@@ -1278,7 +1271,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
 
           {!activeCard ? (
             /* Round Completed State (All cards in current queue have been mastered!) */
-            <div className="relative mb-4 w-full max-w-[540px]">
+            <div className="relative mb-4 study-width">
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 z-[1]"
@@ -1344,7 +1337,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
               {/* =================================================================
                   STACKED CARD DECK (2D Layer z-1) + ISOLATED 3D FLIPPER (Layer z-10)
                  ================================================================= */}
-              <div className="relative mb-4 w-full max-w-[540px]">
+              <div className="relative mb-4 study-width">
                 {/* 1. Independent 2D Background Layer: Two Full-Size Deck Cards (z-index: 1) */}
                 <div
                   aria-hidden="true"
@@ -1372,6 +1365,9 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                 >
                   <div className="w-full" style={{ perspective: '1200px' }}>
                     <div
+                      role="group"
+                      tabIndex={studyMode === 'recognize' ? 0 : undefined}
+                      aria-label={studyMode === 'recognize' ? '认读卡片，按空格翻面' : '拼写卡片'}
                       onClick={() => {
                         if (studyMode === 'recognize') {
                           handleToggleFlip();
@@ -1379,7 +1375,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           spellInputRef.current?.focus();
                         }
                       }}
-                      className={`relative h-[430px] sm:h-[440px] w-full ${
+                      className={`study-card-grid relative ${
                         studyMode === 'recognize'
                           ? 'cursor-pointer'
                           : 'cursor-text'
@@ -1399,7 +1395,9 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           FRONT FACE (rotateY(0deg)) — Recognize Front OR Spelling Mode
                          ============================================================= */}
                       <div
-                        className="skeuo-paper absolute inset-0 flex flex-col justify-between rounded-2xl px-8 py-8 text-center sm:px-10"
+                        className="skeuo-paper study-card-face flex min-w-0 flex-col justify-between gap-3 rounded-2xl px-4 py-5 text-center sm:px-8"
+                        aria-hidden={studyMode === 'recognize' && isFlipped}
+                        {...(studyMode === 'recognize' && isFlipped ? { inert: '' } : {})}
                         style={{
                           backfaceVisibility: 'hidden',
                           WebkitBackfaceVisibility: 'hidden',
@@ -1587,7 +1585,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                                     e.preventDefault();
                                     e.stopPropagation();
                                     handleVerifySpelling();
-                                  } else if (e.key === 'Tab') {
+                                  } else if (e.key === 'Tab' && !e.shiftKey) {
                                     e.preventDefault();
                                     e.stopPropagation();
                                     handleTabHintAndReplay();
@@ -1676,7 +1674,9 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           BACK FACE (rotateY(180deg)) — Always Mounted in DOM for True 3D Flip
                          ============================================================= */}
                       <div
-                        className="skeuo-paper absolute inset-0 flex flex-col justify-between rounded-2xl px-8 py-8 text-center sm:px-10"
+                        className="skeuo-paper study-card-face flex min-w-0 flex-col justify-between gap-3 rounded-2xl px-4 py-5 text-center sm:px-8"
+                        aria-hidden={studyMode !== 'recognize' || !isFlipped}
+                        {...(studyMode === 'recognize' && isFlipped ? {} : { inert: '' })}
                         style={{
                           backfaceVisibility: 'hidden',
                           WebkitBackfaceVisibility: 'hidden',
@@ -1736,7 +1736,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           </div>
                         </div>
 
-                        {/* BACK CENTER: Word Echo + Concise Meaning + [ + 展开全义项 ] Toggle + Synonyms + Original Error */}
+                        {/* BACK CENTER: Word Echo + Concise Meaning + 展开全义项 Toggle + Synonyms + Original Error */}
                         <div className="my-auto flex w-full flex-col items-center py-2">
                           {/* 1. 顶部小字回显英文单词与音标 */}
                           <div className="inline-flex items-center gap-2 text-[#7A7873]">
@@ -1764,7 +1764,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                             {activeCard.meaning || activeCard.chineseMeaning}
                           </h2>
 
-                          {/* 2b. 中文释义正下方：极简轻拟物微凸小按钮 [ + 展开全义项 ]（支持快捷键 E） */}
+                          {/* 2b. 中文释义正下方：极简轻拟物微凸小按钮 展开全义项（支持快捷键 E） */}
                           <button
                             type="button"
                             onClick={(e) =>
@@ -1775,7 +1775,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                           >
                             {isDeckFullMeaningOpen
                               ? '[ - 收起全义项 ]'
-                              : '[ + 展开全义项 ]'}
+                              : '展开全义项'}
                           </button>
 
                           {/* 2c. 按需平滑展开的 fullMeaning 完整多词性释义与熟词僻义区 */}
@@ -1825,7 +1825,7 @@ export const VocabularyModule: React.FC<VocabularyModuleProps> = ({
                   - Zero extra numbers or arrows!
                  ================================================================= */}
               {studyMode === 'recognize' && (
-                <div className="mt-6 flex w-full max-w-[540px] items-center justify-center gap-4 font-sans">
+                <div className="mt-2 flex study-width items-center justify-center gap-3 font-sans">
                   <button
                     type="button"
                     onClick={() => handleDecision('learning')}

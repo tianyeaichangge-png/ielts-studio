@@ -1,3 +1,4 @@
+import { useAutosizeTextarea } from '../hooks/useAutosizeTextarea';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Loader2, Trash2 } from 'lucide-react';
 import {
@@ -44,7 +45,7 @@ interface MicroPracticeViewProps {
 type HistoryFilterType = 'ALL' | 'T1' | 'T2' | 'VOCAB';
 
 const toolbarClass =
-  'flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E3DA] px-4 py-4 font-sans sm:px-8';
+  'workspace-toolbar font-sans';
 const keyboardFocusClass =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA5B25]';
 
@@ -247,13 +248,11 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeQuestionKey]);
 
-  // Auto-resize typewriter textarea height
   useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.max(64, el.scrollHeight)}px`;
-  }, [userSentence, activeQuestionKey, viewMode]);
+    window.scrollTo(0, 0);
+  }, [viewMode]);
+
+  useAutosizeTextarea(textareaRef, viewMode === 'practice' ? userSentence : undefined);
 
   // Check if a lexicon word is already in the user's vocabulary bank
   const isWordInVocabBank = (word: string): boolean => {
@@ -658,13 +657,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
   };
 
   return (
-    <div className="w-full">
-      <section className="skeuo-paper overflow-hidden rounded-2xl">
-        {/* Smartisan Vintage Double Crimson Header Rule */}
-        <div className="pt-4">
-          <div className="h-[2px] w-full bg-[#C97A63]/35" />
-          <div className="mt-[2px] h-[1px] w-full bg-[#C97A63]/25" />
-        </div>
+    <section className="workspace-module" aria-label="小练习工作台">
 
         {viewMode === 'history' ? (
           /* =================================================================
@@ -711,7 +704,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
             {/* History List Body (Separated by thin stationery horizontal lines, zero nested card boxes) */}
             <div
               ref={historyContainerRef}
-              className="relative px-4 py-4 sm:px-8"
+              className="workspace-inset micro-history relative py-4"
             >
               <SelectionHighlightPopover
                 containerRef={historyContainerRef}
@@ -954,7 +947,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
           /* =================================================================
               MAIN PRACTICE WORKBENCH VIEW: 纸面题型分类栏 + 打字机核心练习区
              ================================================================= */
-          <div>
+          <div className="micro-session">
             <div className={toolbarClass}>
               <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
                 <div className="skeuo-groove inline-flex items-center rounded-xl p-1" role="group" aria-label="练习任务">
@@ -1015,14 +1008,14 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-[45%_55%]">
-              <section className="flex min-w-0 flex-col border-b border-[#E6E1D8] lg:border-b-0 lg:border-r">
-                <div className="flex min-h-[54px] flex-wrap items-center justify-between gap-2 border-b border-[#ECE8DF] px-4 py-3 sm:px-7">
+            <div className="workspace-split micro-split">
+              <section className="workspace-pane workspace-pane--reference">
+                <div className="pane-toolbar">
                   <h2 className="font-sans text-xs font-semibold text-[#2C2A29]">练习题目</h2>
                   <span className="font-mono text-[11px] tabular-nums text-[#8C867E]">{nameplateText}</span>
                 </div>
 
-                <div className="flex-1 px-4 py-5 sm:px-7 sm:py-6">
+                <div className="pane-content flex-1">
                   {latestRecordForCurrentQuestion && (
                     <p className="mb-3 inline-flex items-center gap-1.5 font-mono text-xs tabular-nums text-[#8C867E]">
                       <span className="h-1.5 w-1.5 rounded-full bg-[#EA5B25]" />
@@ -1054,7 +1047,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                   )}
                 </div>
 
-                <div className="flex min-h-[68px] flex-wrap items-center gap-2 border-t border-[#ECE8DF] px-4 py-3 sm:px-7">
+                <div className="pane-toolbar pane-footer !justify-start">
                   <button
                     type="button"
                     disabled={isGeneratingQuestion}
@@ -1081,13 +1074,13 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                 </div>
               </section>
 
-              <section className="flex min-w-0 flex-col">
-                <div className="flex min-h-[54px] items-center border-b border-[#ECE8DF] px-4 py-3 sm:px-7">
+              <section className="workspace-pane">
+                <div className="pane-toolbar">
                   <label htmlFor="micro-practice-sentence" className="font-sans text-xs font-semibold text-[#2C2A29]">
                     {isFreeRewrite ? '英文原句' : '改写书写区'}
                   </label>
                 </div>
-                <div className="flex-1 px-4 py-5 sm:px-7 sm:py-6">
+                <div className="pane-content flex-1">
                   <textarea
                     id="micro-practice-sentence"
                     ref={textareaRef}
@@ -1096,11 +1089,6 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                     onChange={(e) => {
                       setUserSentence(e.target.value);
                       if (errorMsg) setErrorMsg(null);
-                    }}
-                    onInput={(e) => {
-                      const el = e.currentTarget;
-                      el.style.height = 'auto';
-                      el.style.height = `${Math.max(64, el.scrollHeight)}px`;
                     }}
                     onKeyDown={(e) => {
                       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -1118,7 +1106,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
                     </p>
                   )}
                 </div>
-                <div className="flex min-h-[68px] items-center justify-end border-t border-[#ECE8DF] px-4 py-3 sm:px-7">
+                <div className="pane-toolbar pane-footer !justify-end">
                   <button
                     type="button"
                     disabled={isEvaluating}
@@ -1142,7 +1130,7 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
             {activeEvaluation && (
               <div
                 ref={feedbackContainerRef}
-                className="relative border-t border-[#E6E1D8] px-4 py-6 sm:px-8"
+                className="workspace-inset micro-feedback relative border-t border-[#DCD6CC] py-6"
               >
                 <SelectionHighlightPopover
                   containerRef={feedbackContainerRef}
@@ -1344,7 +1332,6 @@ export const MicroPracticeView: React.FC<MicroPracticeViewProps> = ({
             )}
           </div>
         )}
-      </section>
-    </div>
+    </section>
   );
 };
