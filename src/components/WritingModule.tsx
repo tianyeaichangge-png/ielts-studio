@@ -557,8 +557,14 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
   const draftReport = activeTaskType === 'task1' ? task1Report : task2Report;
   const activeRightReport = isHistoryMode ? activeHistoryReport : draftReport;
 
+  const reportReferencePaneRef = useRef<HTMLDivElement>(null);
   const reportPaneRef = useRef<HTMLDivElement>(null);
   const hasReport = Boolean(activeRightReport);
+
+  useEffect(() => {
+    reportReferencePaneRef.current?.scrollTo(0, 0);
+    reportPaneRef.current?.scrollTo(0, 0);
+  }, [activeRightReport?.id, isHistoryMode, isMicroPracticeMode]);
 
   useEffect(() => {
     if (hasReport && window.matchMedia('(max-width: 899px)').matches) {
@@ -2288,11 +2294,17 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             - Left Page (45%): Prompt + Chart Thumbnail + Candidate Essay Manuscript
             - Right Page (55%): Examiner 4-Dimension Diagnostic Score Sheet
            ===================================================================== */
-        <section className="workspace-split" aria-label="作文批改报告">
+        <section className="writing-report workspace-split workspace-viewport" aria-label="作文批改报告">
             {/* ===============================================================
                 LEFT PAGE (45%): Compact Prompt + Chart Thumbnail + Essay Manuscript
                =============================================================== */}
-            <div className="workspace-pane workspace-pane--reference justify-between">
+            <div
+              ref={reportReferencePaneRef}
+              className="workspace-pane workspace-pane--reference pane-scroll justify-between"
+              role="region"
+              aria-label="题目和作文原稿"
+              tabIndex={0}
+            >
               <div>
                 {/* Left Page Top Bar */}
                 <div className="pane-toolbar select-none">
@@ -2408,7 +2420,13 @@ export const WritingModule: React.FC<WritingModuleProps> = ({
             {/* ===============================================================
                 RIGHT PAGE (55%): Examiner 4-Dimension Diagnostic Score Sheet
                =============================================================== */}
-            <div ref={reportPaneRef} className="workspace-pane" tabIndex={-1}>
+            <div
+              ref={reportPaneRef}
+              className="workspace-pane pane-scroll"
+              role="region"
+              aria-label="批改详情"
+              tabIndex={0}
+            >
               {/* History Mode Top Bar OR Draft Graded Top Bar */}
               {isHistoryMode ? (
                 <div className="pane-toolbar">
